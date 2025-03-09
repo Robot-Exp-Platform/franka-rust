@@ -1,6 +1,8 @@
+use nalgebra as na;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::time::Duration;
 
 #[derive(Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
 #[repr(u8)]
@@ -37,60 +39,6 @@ pub enum RobotMode {
     AutomaticErrorRecovery,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
-#[allow(non_snake_case)]
-#[repr(C, packed)]
-pub struct RobotStateInter {
-    pub message_id: u64,
-    pub O_T_EE: [f64; 16],
-    pub O_T_EE_d: [f64; 16],
-    pub F_T_EE: [f64; 16],
-    pub EE_T_K: [f64; 16],
-    pub F_T_NE: [f64; 16],
-    pub NE_T_EE: [f64; 16],
-    pub m_ee: f64,
-    pub I_ee: [f64; 9],
-    pub F_x_Cee: [f64; 3],
-    pub m_load: f64,
-    pub I_load: [f64; 9],
-    pub F_x_Cload: [f64; 3],
-    pub elbow: [f64; 2],
-    pub elbow_d: [f64; 2],
-    pub tau_J: [f64; 7],
-    pub tau_J_d: [f64; 7],
-    pub dtau_J: [f64; 7],
-    pub q: [f64; 7],
-    pub q_d: [f64; 7],
-    pub dq: [f64; 7],
-    pub dq_d: [f64; 7],
-    pub ddq_d: [f64; 7],
-    pub joint_contact: [f64; 7],
-    pub cartesian_contact: [f64; 6],
-    pub joint_collision: [f64; 7],
-    pub cartesian_collision: [f64; 6],
-    pub tau_ext_hat_filtered: [f64; 7],
-    pub O_F_ext_hat_K: [f64; 6],
-    pub K_F_ext_hat_K: [f64; 6],
-    pub O_dP_EE_d: [f64; 6],
-    pub O_ddP_O: [f64; 3],
-    pub elbow_c: [f64; 2],
-    pub delbow_c: [f64; 2],
-    pub ddelbow_c: [f64; 2],
-    pub O_T_EE_c: [f64; 16],
-    pub O_dP_EE_c: [f64; 6],
-    pub O_ddP_EE_c: [f64; 6],
-    pub theta: [f64; 7],
-    pub dtheta: [f64; 7],
-    pub motion_generator_mode: MotionGeneratorMode,
-    pub controller_mode: ControllerMode,
-    #[serde(with = "BigArray")]
-    pub errors: [bool; 41],
-    #[serde(with = "BigArray")]
-    pub reflex_reason: [bool; 41],
-    pub robot_mode: RobotMode,
-    pub control_command_success_rate: f64,
-}
-
 /// # RobotState
 /// 机器人状态结构体
 pub struct RobotState {
@@ -121,30 +69,30 @@ pub struct RobotState {
     /// Configured mass of the end effector.  
     /// 末端执行器的质量
     pub m_ee: f64,
+    /// Configured center of mass of the end effector load with respect to the flange frame.  
+    /// 末端执行器负载相对于法兰坐标系的质心
+    pub x_ee: [f64; 3],
     /// Configured inertia of the end effector.  
     /// 末端执行器的惯量
     pub i_ee: [f64; 9],
-    /// Configured center of mass of the end effector load with respect to the flange frame.  
-    /// 末端执行器负载相对于法兰坐标系的质心
-    pub x_f_to_cee: [f64; 3],
     /// Configured mass of the External load.  
     /// 外部负载的质量
     pub m_load: f64,
+    /// Configured center of mass of the External load with respect to the flange frame.  
+    /// 外部负载相对于法兰坐标系的质心
+    pub x_load: [f64; 3],
     /// Configured inertia matrix of the External load with respect to the flange frame.  
     /// 外部负载相对于法兰坐标系的惯量矩阵
     pub i_load: [f64; 9],
-    /// Configured center of mass of the External load with respect to the flange frame.  
-    /// 外部负载相对于法兰坐标系的质心
-    pub x_f_to_cload: [f64; 3],
     /// Sum of the mass of the end effector and the external load.  
     /// 末端执行器和外部负载的质量之和
     pub m_total: f64,
+    /// Combined center of mass of the end effector and the external load with respect to the flange frame.  
+    /// 末端执行器和外部负载相对于法兰坐标系的组合质心
+    pub x_total: [f64; 3],
     /// Combined rotational inertia matrix of the end effector and the external load with respect to the flange frame.  
     /// 末端执行器和外部负载相对于法兰坐标系的组合旋转惯量矩阵
     pub i_total: [f64; 9],
-    /// Combined center of mass of the end effector and the external load with respect to the flange frame.  
-    /// 末端执行器和外部负载相对于法兰坐标系的组合质心
-    pub x_f_to_ctotal: [f64; 3],
     /// Elbow configuration.  
     /// 肘部配置
     ///
@@ -299,5 +247,172 @@ pub struct RobotState {
     /// 机器人启动以来严格单调递增的时间戳
     ///
     /// Inside of control loops [time_step] parameter of [Robot::control] can be used instead.
-    pub duration: f64,
+    pub duration: Duration,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy)]
+#[allow(non_snake_case)]
+#[repr(C, packed)]
+pub struct RobotStateInter {
+    pub message_id: u64,
+    pub O_T_EE: [f64; 16],
+    pub O_T_EE_d: [f64; 16],
+    pub F_T_EE: [f64; 16],
+    pub EE_T_K: [f64; 16],
+    pub F_T_NE: [f64; 16],
+    pub NE_T_EE: [f64; 16],
+    pub m_ee: f64,
+    pub I_ee: [f64; 9],
+    pub F_x_Cee: [f64; 3],
+    pub m_load: f64,
+    pub I_load: [f64; 9],
+    pub F_x_Cload: [f64; 3],
+    pub elbow: [f64; 2],
+    pub elbow_d: [f64; 2],
+    pub tau_J: [f64; 7],
+    pub tau_J_d: [f64; 7],
+    pub dtau_J: [f64; 7],
+    pub q: [f64; 7],
+    pub q_d: [f64; 7],
+    pub dq: [f64; 7],
+    pub dq_d: [f64; 7],
+    pub ddq_d: [f64; 7],
+    pub joint_contact: [f64; 7],
+    pub cartesian_contact: [f64; 6],
+    pub joint_collision: [f64; 7],
+    pub cartesian_collision: [f64; 6],
+    pub tau_ext_hat_filtered: [f64; 7],
+    pub O_F_ext_hat_K: [f64; 6],
+    pub K_F_ext_hat_K: [f64; 6],
+    pub O_dP_EE_d: [f64; 6],
+    pub O_ddP_O: [f64; 3],
+    pub elbow_c: [f64; 2],
+    pub delbow_c: [f64; 2],
+    pub ddelbow_c: [f64; 2],
+    pub O_T_EE_c: [f64; 16],
+    pub O_dP_EE_c: [f64; 6],
+    pub O_ddP_EE_c: [f64; 6],
+    pub theta: [f64; 7],
+    pub dtheta: [f64; 7],
+    pub motion_generator_mode: MotionGeneratorMode,
+    pub controller_mode: ControllerMode,
+    #[serde(with = "BigArray")]
+    pub errors: [bool; 41],
+    #[serde(with = "BigArray")]
+    pub reflex_reason: [bool; 41],
+    pub robot_mode: RobotMode,
+    pub control_command_success_rate: f64,
+}
+
+impl Into<RobotState> for RobotStateInter {
+    fn into(self) -> RobotState {
+        let (m_total, x_total, i_total) = combine_ee_load(
+            self.m_ee,
+            self.F_x_Cee,
+            self.I_ee,
+            self.m_load,
+            self.F_x_Cload,
+            self.I_load,
+        );
+        RobotState {
+            pose_o_to_ee: self.O_T_EE,
+            pose_o_to_ee_d: self.O_T_EE_d,
+            pose_f_to_ee: self.F_T_EE,
+            pose_f_to_ne: self.F_T_NE,
+            pose_ne_to_ee: self.NE_T_EE,
+            pose_ee_to_k: self.EE_T_K,
+            m_ee: self.m_ee,
+            x_ee: self.F_x_Cee,
+            i_ee: self.I_ee,
+            m_load: self.m_load,
+            i_load: self.I_load,
+            x_load: self.F_x_Cload,
+            m_total,
+            i_total,
+            x_total,
+            elbow: self.elbow,
+            elbow_d: self.elbow_d,
+            tau_j: self.tau_J,
+            tau_j_d: self.tau_J_d,
+            dtau_j: self.dtau_J,
+            q: self.q,
+            q_d: self.q_d,
+            dq: self.dq,
+            dq_d: self.dq_d,
+            ddq_d: self.ddq_d,
+            joint_contact: self.joint_contact,
+            cartesian_contact: self.cartesian_contact,
+            joint_collision: self.joint_collision,
+            cartesian_collision: self.cartesian_collision,
+            tau_ext_hat_filtered: self.tau_ext_hat_filtered,
+            force_ext_in_o: self.O_F_ext_hat_K,
+            force_ext_in_k: self.K_F_ext_hat_K,
+            dpose_o_to_ee_d: self.O_dP_EE_d,
+            ddpose_o_to_ee: self.O_ddP_O,
+            elbow_c: self.elbow_c,
+            delbow_c: self.delbow_c,
+            ddelbow_c: self.ddelbow_c,
+            pose_o_to_ee_c: self.O_T_EE_c,
+            dpose_o_to_ee_c: self.O_dP_EE_c,
+            ddpose_o_to_ee_c: self.O_ddP_EE_c,
+            theta: self.theta,
+            dtheta: self.dtheta,
+            currect_errors: self.errors,
+            last_motion_errors: self.reflex_reason,
+            control_command_success_rate: self.control_command_success_rate,
+            robot_mode: self.robot_mode,
+            duration: Duration::from_millis(self.message_id),
+        }
+    }
+}
+
+fn combine_ee_load(
+    m_ee: f64,
+    x_ee: [f64; 3],
+    i_ee: [f64; 9],
+    m_load: f64,
+    x_load: [f64; 3],
+    i_load: [f64; 9],
+) -> (f64, [f64; 3], [f64; 9]) {
+    let x_ee = na::Vector3::from_column_slice(&x_ee);
+    let x_load = na::Vector3::from_column_slice(&x_load);
+    let i_ee = na::Matrix3::from_column_slice(&i_ee);
+    let i_load = na::Matrix3::from_column_slice(&i_load);
+
+    let m_total = m_ee + m_load;
+    let x_total = (m_ee * x_ee + m_load * x_load) / m_total;
+    let i_total = i_ee
+        + i_load
+        + m_ee
+            * (na::Matrix3::from_diagonal_element((x_ee.transpose() * x_ee)[(0, 0)])
+                - x_ee * x_ee.transpose())
+        + m_load
+            * (na::Matrix3::from_diagonal_element((x_load.transpose() * x_load)[(0, 0)])
+                - x_load * x_load.transpose());
+
+    let x_total = x_total.as_slice().try_into().unwrap();
+    let i_total = i_total.as_slice().try_into().unwrap();
+
+    (m_total, x_total, i_total)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_combine_ee_load() {
+        let m_ee = 1.0;
+        let x_ee = [1.0, 2.0, 3.0];
+        let i_ee = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+        let m_load = 2.0;
+        let x_load = [2.0, 3.0, 4.0];
+        let i_load = [2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 2.0];
+
+        let (m_total, x_total, i_total) = combine_ee_load(m_ee, x_ee, i_ee, m_load, x_load, i_load);
+
+        assert_eq!(m_total, 3.0);
+        assert_eq!(x_total, [1.5, 2.5, 3.5]);
+        assert_eq!(i_total, [3.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 3.0]);
+    }
 }

@@ -271,8 +271,8 @@ bitflags! {
 impl From<[bool; 41]> for ErrorFlag {
     fn from(value: [bool; 41]) -> Self {
         let mut flags = Self::empty();
-        for i in 0..41 {
-            if value[i] {
+        for (i, value) in value.iter().enumerate() {
+            if *value {
                 flags.insert(Self::from_bits(1 << i).unwrap());
             }
         }
@@ -283,8 +283,8 @@ impl From<[bool; 41]> for ErrorFlag {
 impl Into<[bool; 41]> for ErrorFlag {
     fn into(self) -> [bool; 41] {
         let mut value = [false; 41];
-        for i in 0..41 {
-            value[i] = self.contains(Self::from_bits(1 << i).unwrap());
+        for (i, value) in value.iter_mut().enumerate() {
+            *value = self.contains(Self::from_bits(1 << i).unwrap());
         }
         value
     }

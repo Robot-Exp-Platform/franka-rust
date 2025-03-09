@@ -1,5 +1,5 @@
 /// Command sent to the robot. Structure used only for logging purposes.
-use crate::robot::control_types::*;
+use crate::types::control_types::*;
 
 #[derive(Debug, Clone)]
 pub struct RobotCommandLog {
