@@ -314,6 +314,18 @@ pub enum LoadModelLibraryStatus {
 pub type GetRobotModelRequest = Request<{ Command::GetRobotModel }, ()>;
 pub type GetRobotModelResponse = Response<{ Command::GetRobotModel }, DefaultStatus>;
 
+impl<const C: Command, D> Request<C, D> {
+    pub fn size() -> usize {
+        std::mem::size_of::<Request<C, D>>() + 2
+    }
+}
+
+impl<const C: Command, S> Response<C, S> {
+    pub fn size() -> usize {
+        std::mem::size_of::<Response<C, S>>() + 2
+    }
+}
+
 impl<const C: Command> Serialize for CommandHeader<C> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -351,7 +363,7 @@ impl<const C: Command, D> From<D> for Request<C, D> {
         Request {
             header: CommandHeader {
                 command_id: 0,
-                size: size_of::<Request<C, D>>() as u32,
+                size: Self::size() as u32,
             },
             data,
         }
@@ -363,7 +375,7 @@ impl<const C: Command, S> From<S> for Response<C, S> {
         Response {
             header: CommandHeader {
                 command_id: 0,
-                size: size_of::<Response<C, S>>() as u32,
+                size: Self::size() as u32,
             },
             status,
         }

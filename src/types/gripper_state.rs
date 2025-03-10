@@ -12,6 +12,7 @@ pub struct GripperStateInter {
     pub temperature: u16,
 }
 
+#[derive(Debug, Clone)]
 pub struct GripperState {
     /// Current gripper opening width. Unit: \[m\].
     pub width: f64,

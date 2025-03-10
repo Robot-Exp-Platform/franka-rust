@@ -27,7 +27,7 @@ macro_rules! cmd_fn {
 impl FrankaRobot {
     pub fn new(ip: &str) -> Self {
         FrankaRobot {
-            network: Network::from_addr(ip, PORT_ROBOT_COMMAND),
+            network: Network::new(ip, PORT_ROBOT_COMMAND),
         }
     }
 

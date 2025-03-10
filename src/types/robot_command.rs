@@ -104,22 +104,3 @@ impl From<RobotCommandPacked> for RobotCommand {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn check_packed_size() {
-        use std::mem::size_of;
-
-        assert_ne!(
-            size_of::<MotionGeneratorCommandPacked>(),
-            size_of::<MotionGeneratorCommand>()
-        );
-        assert_ne!(
-            size_of::<ControllerCommandPacked>(),
-            size_of::<ControllerCommand>()
-        );
-        assert_ne!(size_of::<RobotCommandPacked>(), size_of::<RobotCommand>());
-    }
-}

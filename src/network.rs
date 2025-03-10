@@ -12,23 +12,28 @@ use crate::{exception::FrankaResult, types::robot_types::CommandIDConfig};
 pub struct Network {
     tcp_stream: Option<TcpStream>,
     udp_socket: Option<UdpSocket>,
+    udp_port: u16,
 
     command_counter: Arc<Mutex<u32>>,
 }
 
 impl Network {
-    pub fn new(tcp_ip: &str, tcp_port: u16, udp_ip: &str, udp_port: u16) -> Self {
+    pub fn new(tcp_ip: &str, tcp_port: u16) -> Self {
         let tcp_stream = TcpStream::connect(format!("{}:{}", tcp_ip, tcp_port)).ok();
-        let udp_socket = UdpSocket::bind(format!("{}:{}", udp_ip, udp_port)).ok();
+        let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", 0)).ok();
+
+        let udp_port = udp_socket.as_ref().unwrap().local_addr().unwrap().port();
+
         Network {
             tcp_stream,
             udp_socket,
+            udp_port,
             command_counter: Arc::new(Mutex::new(0)),
         }
     }
 
-    pub fn from_addr(ip: &str, port: u16) -> Self {
-        Network::new(ip, port, "0.0.0.0", 0)
+    pub fn udp_port(&self) -> u16 {
+        self.udp_port
     }
 
     /// 发送并阻塞接收 tcp 指令
@@ -107,6 +112,7 @@ impl Network {
         if let Some(socket) = &mut self.udp_socket {
             let mut buffer = [0; 1024];
             let (size, _) = socket.recv_from(&mut buffer)?;
+            println!("udp recv data: {:?}", &buffer[..size]);
             bincode::deserialize(&buffer[..size])
                 .map_err(|e| RobotException::DeserializeError(e.to_string()))
         } else {

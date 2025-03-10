@@ -30,7 +30,7 @@ macro_rules! cmd_fn {
 impl FrankaGripper {
     pub fn new(ip: &str) -> Self {
         let mut gripper = FrankaGripper {
-            network: Network::from_addr(ip, PORT_GRIPPER_COMMAND),
+            network: Network::new(ip, PORT_GRIPPER_COMMAND),
         };
         gripper.connect().unwrap();
         gripper
@@ -40,8 +40,9 @@ impl FrankaGripper {
     pub fn connect(&mut self) -> FrankaResult<()> {
         let result = self._connect(ConnectData {
             version: FRANKA_GRIPPER_VERSION,
-            udp_port: PORT_GRIPPER_COMMAND,
+            udp_port: self.network.udp_port(),
         })?;
+        println!("udp_port: {}", self.network.udp_port());
         println!("Gripper version: {}", result.version);
         if let Status::Success = result.status {
             Ok(())

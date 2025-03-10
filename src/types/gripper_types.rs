@@ -51,6 +51,7 @@ pub type ConnectRequest = Request<{ Command::Connect }, ConnectData>;
 pub type ConnectResponse = Response<{ Command::Connect }, ConnectStatus>;
 
 #[derive(Serialize, Deserialize)]
+#[repr(packed)]
 pub struct ConnectData {
     pub version: u16,
     pub udp_port: u16,
@@ -72,6 +73,7 @@ pub type GraspResponse = Response<{ Command::Grasp }, GraspStatus>;
 pub type GraspStatus = Status;
 
 #[derive(Serialize, Deserialize)]
+#[repr(packed)]
 pub struct GraspData {
     pub width: f64,
     pub epsilon: (f64, f64),
@@ -85,6 +87,7 @@ pub type MoveResponse = Response<{ Command::Move }, MoveStatus>;
 pub type MoveStatus = Status;
 
 #[derive(Serialize, Deserialize)]
+#[repr(packed)]
 pub struct MoveData {
     pub width: f64,
     pub speed: f64,
@@ -94,6 +97,18 @@ pub struct MoveData {
 pub type StopRequest = Request<{ Command::Stop }, ()>;
 pub type StopResponse = Response<{ Command::Stop }, StopStatus>;
 pub type StopStatus = Status;
+
+impl<const C: Command, D> Request<C, D> {
+    pub fn size() -> usize {
+        std::mem::size_of::<Request<C, D>>() + 2
+    }
+}
+
+impl<const C: Command, S> Response<C, S> {
+    pub fn size() -> usize {
+        std::mem::size_of::<Response<C, S>>() + 2
+    }
+}
 
 impl<const C: Command> Serialize for CommandHeader<C> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -132,7 +147,7 @@ impl<const C: Command, D> From<D> for Request<C, D> {
         Request {
             header: CommandHeader {
                 command_id: 0,
-                size: size_of::<Request<C, D>>() as u32,
+                size: Self::size() as u32,
             },
             data,
         }
@@ -144,7 +159,7 @@ impl<const C: Command, S> From<S> for Response<C, S> {
         Response {
             header: CommandHeader {
                 command_id: 0,
-                size: size_of::<Response<C, S>>() as u32,
+                size: Self::size() as u32,
             },
             status,
         }
