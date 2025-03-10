@@ -2,10 +2,12 @@
 
 mod gripper;
 // mod logger;
+pub mod control;
 mod network;
 mod params;
 mod robot;
 pub mod types;
+mod utils;
 
 pub use gripper::FrankaGripper;
 pub use params::*;

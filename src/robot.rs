@@ -1,10 +1,11 @@
 use robot_behavior::{
-    ArmBehavior, ArmBehaviorExt, ArmState, ArmStateType, ControlType, MotionType, RobotBehavior,
-    RobotResult,
+    ArmBehavior, ArmBehaviorExt, ArmState, ArmStateType, ControlType, MotionType, RealtimeBehavior,
+    RobotBehavior, RobotResult,
 };
 
 use crate::{
     FRANKA_EMIKA_DOF, LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
+    control::control_mode::ControlMode,
     network::Network,
     types::{
         robot_state::{RobotState, RobotStateInter},
@@ -15,6 +16,7 @@ use crate::{
 #[derive(Default)]
 pub struct FrankaRobot {
     network: Network,
+    control_mode: ControlMode,
 }
 
 macro_rules! cmd_fn {
@@ -32,6 +34,7 @@ impl FrankaRobot {
     pub fn new(ip: &str) -> Self {
         FrankaRobot {
             network: Network::new(ip, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP),
+            control_mode: ControlMode::default(),
         }
     }
 
@@ -205,6 +208,20 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
     }
 
     fn move_path_prepare_from_file(&mut self, _path: &str) -> RobotResult<()> {
+        unimplemented!()
+    }
+}
+
+impl<C, H> RealtimeBehavior<C, H> for FrankaRobot {
+    fn enter_realtime(&mut self, _realtime_config: C) -> RobotResult<H> {
+        unimplemented!()
+    }
+
+    fn exit_realtime(&mut self) -> RobotResult<()> {
+        unimplemented!()
+    }
+
+    fn quality_of_service(&self) -> f64 {
         unimplemented!()
     }
 }

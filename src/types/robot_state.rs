@@ -1,4 +1,5 @@
 use nalgebra as na;
+use robot_behavior::ArmState;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -362,6 +363,21 @@ impl Into<RobotState> for RobotStateInter {
             control_command_success_rate: self.control_command_success_rate,
             robot_mode: self.robot_mode,
             duration: Duration::from_millis(self.message_id),
+        }
+    }
+}
+
+impl Into<ArmState<7>> for RobotStateInter {
+    fn into(self) -> ArmState<7> {
+        ArmState {
+            joint: Some(self.q),
+            joint_vel: Some(self.dq),
+            joint_acc: None,
+            tau: Some(self.tau_J),
+            cartisian_euler: None,
+            cartisian_quat: None,
+            cartisian_homo: Some(self.O_T_EE),
+            cartisian_vel: None,
         }
     }
 }
