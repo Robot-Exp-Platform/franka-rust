@@ -1,11 +1,9 @@
 #![allow(dead_code)]
 
-use robot_behavior::RobotException;
+use robot_behavior::{RobotException, RobotResult};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::marker::ConstParamTy;
-
-use crate::exception::FrankaResult;
 
 use super::robot_types::CommandIDConfig;
 
@@ -186,8 +184,8 @@ impl<const C: Command, S> CommandIDConfig for Response<C, S> {
     }
 }
 
-impl Into<FrankaResult<bool>> for Status {
-    fn into(self) -> FrankaResult<bool> {
+impl Into<RobotResult<bool>> for Status {
+    fn into(self) -> RobotResult<bool> {
         match self {
             Status::Success => Ok(true),
             Status::Fail => Err(RobotException::CommandException(

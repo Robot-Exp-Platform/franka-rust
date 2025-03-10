@@ -1,8 +1,7 @@
-use robot_behavior::RobotException;
+use robot_behavior::{RobotException, RobotResult};
 
 use crate::{
-    FRANKA_GRIPPER_VERSION, PORT_GRIPPER_COMMAND,
-    exception::FrankaResult,
+    FRANKA_GRIPPER_VERSION, PORT_GRIPPER_COMMAND, PORT_GRIPPER_UDP,
     network::Network,
     types::{
         gripper_state::{GripperState, GripperStateInter},
@@ -18,7 +17,7 @@ pub struct FrankaGripper {
 
 macro_rules! cmd_fn {
     ($fn_name:ident, $command:expr; $arg_name:ident: $arg_type:ty ; $ret_type:ty) => {
-        fn $fn_name(&mut self, $arg_name: $arg_type) -> FrankaResult<$ret_type> {
+        fn $fn_name(&mut self, $arg_name: $arg_type) -> RobotResult<$ret_type> {
             let response: Response<$command, $ret_type> = self
                 .network
                 .tcp_send_and_recv(&mut Request::<$command, $arg_type>::from($arg_name))?;
@@ -30,20 +29,18 @@ macro_rules! cmd_fn {
 impl FrankaGripper {
     pub fn new(ip: &str) -> Self {
         let mut gripper = FrankaGripper {
-            network: Network::new(ip, PORT_GRIPPER_COMMAND),
+            network: Network::new(ip, PORT_GRIPPER_COMMAND, PORT_GRIPPER_UDP),
         };
         gripper.connect().unwrap();
         gripper
     }
 
     cmd_fn!(_connect, { Command::Connect}; data: ConnectData; ConnectStatus);
-    pub fn connect(&mut self) -> FrankaResult<()> {
+    pub fn connect(&mut self) -> RobotResult<()> {
         let result = self._connect(ConnectData {
             version: FRANKA_GRIPPER_VERSION,
-            udp_port: self.network.udp_port(),
+            udp_port: PORT_GRIPPER_UDP,
         })?;
-        println!("udp_port: {}", self.network.udp_port());
-        println!("Gripper version: {}", result.version);
         if let Status::Success = result.status {
             Ok(())
         } else {
@@ -55,12 +52,12 @@ impl FrankaGripper {
     }
 
     cmd_fn!(_homing, { Command::Homing}; data: (); HomingStatus);
-    pub fn homing(&mut self) -> FrankaResult<bool> {
+    pub fn homing(&mut self) -> RobotResult<bool> {
         self._homing(())?.into()
     }
 
     cmd_fn!(_grasp, { Command::Grasp}; data: GraspData; GraspStatus);
-    pub fn grasp(&mut self, width: f64, speed: f64, force: f64) -> FrankaResult<bool> {
+    pub fn grasp(&mut self, width: f64, speed: f64, force: f64) -> RobotResult<bool> {
         let data = GraspData {
             width,
             epsilon: (0.01, 0.01),
@@ -71,17 +68,17 @@ impl FrankaGripper {
     }
 
     cmd_fn!(_move, { Command::Move}; data: MoveData; MoveStatus);
-    pub fn move_gripper(&mut self, width: f64, speed: f64) -> FrankaResult<bool> {
+    pub fn move_gripper(&mut self, width: f64, speed: f64) -> RobotResult<bool> {
         let data = MoveData { width, speed };
         self._move(data)?.into()
     }
 
     cmd_fn!(_stop, { Command::Stop}; data: (); StopStatus);
-    pub fn stop(&mut self) -> FrankaResult<bool> {
+    pub fn stop(&mut self) -> RobotResult<bool> {
         self._stop(())?.into()
     }
 
-    pub fn read_state(&mut self) -> FrankaResult<GripperState> {
+    pub fn read_state(&mut self) -> RobotResult<GripperState> {
         self.network
             .udp_recv::<GripperStateInter>()
             .map(GripperStateInter::into)

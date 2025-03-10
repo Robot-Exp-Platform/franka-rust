@@ -17,3 +17,6 @@ crossbeam-channel = "*"
 tokio = "*"
 
 robot_behavior = { path = "crates/robot_behavior" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+sys-locale = "*"

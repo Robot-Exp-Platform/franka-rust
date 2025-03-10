@@ -1,6 +1,7 @@
-use franka_rust::{FrankaGripper, FrankaResult};
+use franka_rust::FrankaGripper;
+use robot_behavior::RobotResult;
 
-fn main() -> FrankaResult<()> {
+fn main() -> RobotResult<()> {
     let mut gripper = FrankaGripper::new("172.16.0.3");
 
     gripper.homing()?;

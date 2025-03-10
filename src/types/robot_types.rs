@@ -1,12 +1,10 @@
 #![allow(dead_code)]
 
-use robot_behavior::RobotException;
+use robot_behavior::{RobotException, RobotResult};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::marker::ConstParamTy;
-
-use crate::exception::FrankaResult;
 
 #[derive(ConstParamTy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
@@ -156,7 +154,8 @@ pub enum StopMoveStatus {
 // ! GetCartesianLimit Command
 pub type GetCartesianLimitRequest = Request<{ Command::GetCartesianLimit }, GetCartesianLimitData>;
 pub type GetCartesianLimitResponse =
-    Response<{ Command::GetCartesianLimit }, GetCartesianLimitResponseData>;
+    Response<{ Command::GetCartesianLimit }, GetCartesianLimitStatus>;
+pub type GetCartesianLimitStatus = DefaultStatus;
 
 #[derive(Default, Serialize)]
 pub struct GetCartesianLimitData {
@@ -176,7 +175,7 @@ pub type SetCollisionBehaviorRequest =
 pub type SetCollisionBehaviorResponse =
     Response<{ Command::SetCollisionBehavior }, GetterSetterStatus>;
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 pub struct SetCollisionBehaviorData {
     lower_torque_thresholds_acceleration: [f64; 7],
     upper_torque_thresholds_acceleration: [f64; 7],
@@ -188,13 +187,36 @@ pub struct SetCollisionBehaviorData {
     upper_force_thresholds_nominal: [f64; 6],
 }
 
+impl Default for SetCollisionBehaviorData {
+    fn default() -> Self {
+        SetCollisionBehaviorData {
+            lower_torque_thresholds_acceleration: [20.; 7],
+            upper_torque_thresholds_acceleration: [20.; 7],
+            lower_torque_thresholds_nominal: [10.; 7],
+            upper_torque_thresholds_nominal: [10.; 7],
+            lower_force_thresholds_acceleration: [20.; 6],
+            upper_force_thresholds_acceleration: [20.; 6],
+            lower_force_thresholds_nominal: [10.; 6],
+            upper_force_thresholds_nominal: [10.; 6],
+        }
+    }
+}
+
 // ! SetJointImpedance Command
 pub type SetJointImpedanceRequest = Request<{ Command::SetJointImpedance }, SetJointImpedanceData>;
 pub type SetJointImpedanceResponse = Response<{ Command::SetJointImpedance }, GetterSetterStatus>;
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 pub struct SetJointImpedanceData {
     k_theta: [f64; 7],
+}
+
+impl Default for SetJointImpedanceData {
+    fn default() -> Self {
+        SetJointImpedanceData {
+            k_theta: [3000., 3000., 3000., 2500., 2500., 2000., 2000.],
+        }
+    }
 }
 
 // ! SetCartesianImpedance Command
@@ -203,9 +225,17 @@ pub type SetCartesianImpedanceRequest =
 pub type SetCartesianImpedanceResponse =
     Response<{ Command::SetCartesianImpedance }, GetterSetterStatus>;
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 pub struct SetCartesianImpedanceData {
     k_x: [f64; 6],
+}
+
+impl Default for SetCartesianImpedanceData {
+    fn default() -> Self {
+        SetCartesianImpedanceData {
+            k_x: [3000., 3000., 3000., 300., 300., 300.],
+        }
+    }
 }
 
 // ! SetGuidingMode Command
@@ -402,8 +432,8 @@ impl<const C: Command, S> CommandIDConfig for Response<C, S> {
     }
 }
 
-impl Into<FrankaResult<()>> for GetterSetterStatus {
-    fn into(self) -> FrankaResult<()> {
+impl Into<RobotResult<()>> for GetterSetterStatus {
+    fn into(self) -> RobotResult<()> {
         match self {
             GetterSetterStatus::Success => Ok(()),
             GetterSetterStatus::CommandNotPossibleRejected => {
