@@ -14,7 +14,9 @@ thiserror = "*"
 nalgebra = "*"
 bincode = "*"
 crossbeam-channel = "*"
+crossbeam = "*"
 tokio = "*"
+thread-priority = "*"
 
 robot_behavior = { path = "crates/robot_behavior" }
 

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::robot_types::CommandIDConfig;
 
-#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
+#[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
 #[repr(C, packed)]
 pub struct GripperStateInter {
     pub message_id: u32,

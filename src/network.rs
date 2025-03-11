@@ -1,10 +1,12 @@
-use robot_behavior::{RobotException, RobotResult};
+use crossbeam::queue::ArrayQueue;
+use robot_behavior::{RobotException, RobotResult, is_hardware_realtime, set_realtime_priority};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
     io::{Read, Write},
     net::{TcpStream, UdpSocket},
     process::Command,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
+    thread,
 };
 
 use crate::types::robot_types::CommandIDConfig;
@@ -12,27 +14,15 @@ use crate::types::robot_types::CommandIDConfig;
 #[derive(Default)]
 pub struct Network {
     tcp_stream: Option<TcpStream>,
-    udp_socket: Option<UdpSocket>,
     command_counter: Arc<Mutex<u32>>,
 }
 
 impl Network {
-    pub fn new(tcp_ip: &str, tcp_port: u16, udp_port: u16) -> Self {
-        #[cfg(target_os = "windows")]
-        {
-            if !is_firewall_rule_active(udp_port) {
-                let (title, fix_step, cleanup_info) = get_localized_message(udp_port);
-                eprintln!("\n{}\n\n{}\n\n{}\n", title, fix_step, cleanup_info);
-                std::process::exit(1);
-            }
-        }
-
+    pub fn new(tcp_ip: &str, tcp_port: u16) -> Self {
         let tcp_stream = TcpStream::connect(format!("{}:{}", tcp_ip, tcp_port)).ok();
-        let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", udp_port)).ok();
 
         Network {
             tcp_stream,
-            udp_socket,
             command_counter: Arc::new(Mutex::new(0)),
         }
     }
@@ -83,44 +73,50 @@ impl Network {
         }
     }
 
-    /// 发送 udp 数据
-    pub fn udp_send<R>(&mut self, request: R) -> RobotResult<()>
+    pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
     where
-        R: Serialize,
+        R: Serialize + Send + Sync + 'static,
+        S: DeserializeOwned + Default + Send + Sync + 'static,
     {
-        if let Some(socket) = &mut self.udp_socket {
-            let command_id = {
-                let mut counter = self.command_counter.lock().unwrap();
-                *counter += 1;
-                *counter
-            };
-            let mut data = bincode::serialize(&request).unwrap();
-            data.extend_from_slice(&command_id.to_be_bytes());
-            socket.send(&data)?;
-            Ok(())
-        } else {
-            Err(RobotException::NetworkError(
-                "No active udp connection".to_string(),
-            ))
+        #[cfg(target_os = "windows")]
+        {
+            if !is_firewall_rule_active(port) {
+                let (title, fix_step, cleanup_info) = get_localized_message(port);
+                eprintln!("\n{}\n\n{}\n\n{}\n", title, fix_step, cleanup_info);
+                std::process::exit(1);
+            }
         }
-    }
 
-    /// 阻塞接受 udp 数据
-    pub fn udp_recv<S>(&mut self) -> RobotResult<S>
-    where
-        S: DeserializeOwned,
-    {
-        if let Some(socket) = &mut self.udp_socket {
-            let mut buffer = [0; 1024];
-            let (size, _) = socket.recv_from(&mut buffer)?;
-            println!("udp recv data: {:?}", &buffer[..size]);
-            bincode::deserialize(&buffer[..size])
-                .map_err(|e| RobotException::DeserializeError(e.to_string()))
-        } else {
-            Err(RobotException::NetworkError(
-                "No active udp connection".to_string(),
-            ))
-        }
+        let (request_queue, response_queue) = (
+            Arc::new(ArrayQueue::new(1)),
+            Arc::new(RwLock::new(S::default())),
+        );
+        let req_queue = request_queue.clone();
+        let res_queue = response_queue.clone();
+
+        thread::spawn(move || {
+            if is_hardware_realtime() {
+                set_realtime_priority().unwrap();
+            } else {
+                thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Max)
+                    .unwrap();
+            }
+
+            let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
+            loop {
+                let mut buffer = [0; 1024];
+                let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
+                let data: S = bincode::deserialize(&buffer[..size]).unwrap();
+                *res_queue.write().unwrap() = data;
+
+                if let Some(request) = req_queue.pop() {
+                    let mut data = bincode::serialize(&request).unwrap();
+                    data.extend_from_slice(&addr.ip().to_string().as_bytes());
+                    udp_socket.send_to(&data, addr).unwrap();
+                }
+            }
+        });
+        (request_queue, response_queue)
     }
 }
 

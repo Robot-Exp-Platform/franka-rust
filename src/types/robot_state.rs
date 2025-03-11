@@ -412,6 +412,58 @@ fn combine_ee_load(
     (m_total, x_total, i_total)
 }
 
+impl Default for RobotStateInter {
+    fn default() -> Self {
+        RobotStateInter {
+            message_id: 0,
+            O_T_EE: [0.0; 16],
+            O_T_EE_d: [0.0; 16],
+            F_T_EE: [0.0; 16],
+            EE_T_K: [0.0; 16],
+            F_T_NE: [0.0; 16],
+            NE_T_EE: [0.0; 16],
+            m_ee: 0.0,
+            I_ee: [0.0; 9],
+            F_x_Cee: [0.0; 3],
+            m_load: 0.0,
+            I_load: [0.0; 9],
+            F_x_Cload: [0.0; 3],
+            elbow: [0.0; 2],
+            elbow_d: [0.0; 2],
+            tau_J: [0.0; 7],
+            tau_J_d: [0.0; 7],
+            dtau_J: [0.0; 7],
+            q: [0.0; 7],
+            q_d: [0.0; 7],
+            dq: [0.0; 7],
+            dq_d: [0.0; 7],
+            ddq_d: [0.0; 7],
+            joint_contact: [0.0; 7],
+            cartesian_contact: [0.0; 6],
+            joint_collision: [0.0; 7],
+            cartesian_collision: [0.0; 6],
+            tau_ext_hat_filtered: [0.0; 7],
+            O_F_ext_hat_K: [0.0; 6],
+            K_F_ext_hat_K: [0.0; 6],
+            O_dP_EE_d: [0.0; 6],
+            O_ddP_O: [0.0; 3],
+            elbow_c: [0.0; 2],
+            delbow_c: [0.0; 2],
+            ddelbow_c: [0.0; 2],
+            O_T_EE_c: [0.0; 16],
+            O_dP_EE_c: [0.0; 6],
+            O_ddP_EE_c: [0.0; 6],
+            theta: [0.0; 7],
+            dtheta: [0.0; 7],
+            motion_generator_mode: MotionGeneratorMode::Idle,
+            controller_mode: ControllerMode::JointImpedance,
+            errors: [false; 41],
+            reflex_reason: [false; 41],
+            robot_mode: RobotMode::Idle,
+            control_command_success_rate: 0.0,
+        }
+    }
+}
 #[cfg(test)]
 mod test {
     use super::*;
