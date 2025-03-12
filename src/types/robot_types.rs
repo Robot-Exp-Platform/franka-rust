@@ -7,7 +7,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::marker::ConstParamTy;
 
 #[derive(ConstParamTy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
-#[repr(u8)]
+#[repr(u32)]
 pub enum Command {
     Connect,
     Move,
@@ -352,13 +352,13 @@ pub type GetRobotModelResponse = Response<{ Command::GetRobotModel }, DefaultSta
 
 impl<const C: Command, D> Request<C, D> {
     pub fn size() -> usize {
-        std::mem::size_of::<Request<C, D>>() + 2
+        std::mem::size_of::<Request<C, D>>() + 4
     }
 }
 
 impl<const C: Command, S> Response<C, S> {
     pub fn size() -> usize {
-        std::mem::size_of::<Response<C, S>>() + 2
+        std::mem::size_of::<Response<C, S>>() + 4
     }
 }
 

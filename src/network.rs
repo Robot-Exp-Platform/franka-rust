@@ -4,7 +4,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{
     io::{Read, Write},
     net::{TcpStream, UdpSocket},
-    process::Command,
+    // process::Command,
     sync::{Arc, Mutex, RwLock},
     thread,
 };
@@ -40,9 +40,12 @@ impl Network {
                 *counter
             };
             request.set_command_id(command_id);
-            stream.write_all(&bincode::serialize(&request).unwrap())?;
+            let request = bincode::serialize(&request).unwrap();
+            println!("request: {:?}", request);
+            stream.write_all(&request)?;
             let mut buffer = [0; 1024];
             let size = stream.read(&mut buffer)?;
+            println!("response: {:?}", &buffer[..size]);
             bincode::deserialize(&buffer[..size])
                 .map_err(|e| RobotException::DeserializeError(e.to_string()))
         } else {

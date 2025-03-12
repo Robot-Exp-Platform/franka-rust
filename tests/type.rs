@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod gripper_tests {
     use serde::{Deserialize, Serialize};
     use serde_repr::{Deserialize_repr, Serialize_repr};
     use std::mem::size_of;
@@ -74,6 +74,32 @@ mod tests {
                     size: 8,
                 },
                 data: types::gripper_types::ConnectData {
+                    version: 1,
+                    udp_port: 2,
+                },
+            })
+        );
+    }
+}
+
+#[cfg(test)]
+mod robot_test {
+    use franka_rust::types;
+    #[test]
+    fn type_size_test() {
+        println!(
+            "Self ConnectRequest size: {}",
+            types::robot_types::ConnectRequest::size()
+        );
+
+        println!(
+            "Self ConnectRequest serialize as bytes: {:?}",
+            bincode::serialize(&types::robot_types::ConnectRequest {
+                header: types::robot_types::CommandHeader {
+                    command_id: 0,
+                    size: 8,
+                },
+                data: types::robot_types::ConnectData {
                     version: 1,
                     udp_port: 2,
                 },
