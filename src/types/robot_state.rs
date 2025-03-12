@@ -483,4 +483,18 @@ mod test {
         assert_eq!(x_total, [1.5, 2.5, 3.5]);
         assert_eq!(i_total, [3.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 3.0]);
     }
+
+    #[test]
+    fn state_inter_size() {
+        println!(
+            "RobotStateInter size: {}",
+            std::mem::size_of::<RobotStateInter>()
+        );
+        println!(
+            "bincode RobotStateInter size: {}",
+            bincode::serialize(&RobotStateInter::default())
+                .unwrap()
+                .len()
+        );
+    }
 }

@@ -7,8 +7,8 @@ use super::robot_types::CommandIDConfig;
 /// joint velocity generator, Cartesian space generator, and Cartesian space velocity generator
 ///
 /// 运动生成器指令结构体，包含 关节角度生成器、关节速度生成器、笛卡尔空间生成器、笛卡尔空间速度生成器的指令
-#[derive(Default, Serialize, Deserialize, Clone, Copy)]
-#[repr(C, packed)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
+#[repr(packed)]
 pub struct MotionGeneratorCommand {
     /// joint angle command
     /// 关节角度指令
@@ -29,15 +29,14 @@ pub struct MotionGeneratorCommand {
 }
 /// This struct is a command of the controller, including joint torque command
 /// 控制器指令结构体，包含关节力矩指令
-#[derive(Default, Serialize, Deserialize, Clone, Copy)]
-#[repr(C, packed)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
+#[repr(packed)]
 pub struct ControllerCommand {
     /// joint torque command
     pub tau_j_d: [f64; 7],
-    pub torque_command_finished: bool,
 }
 
-#[derive(Default, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
 #[repr(C, packed)]
 pub struct RobotCommand {
     pub message_id: u64,
@@ -99,5 +98,64 @@ impl From<ControlType<7>> for RobotCommand {
                 _ => ControllerCommand::default(),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
+    #[allow(non_snake_case)]
+    #[repr(packed)]
+    pub struct MotionGeneratorCommandPacked {
+        pub q_c: [f64; 7],
+        pub dq_c: [f64; 7],
+        pub O_T_EE_c: [f64; 16],
+        pub O_dP_EE_c: [f64; 6],
+        pub elbow_c: [f64; 2],
+        pub valid_elbow: bool,
+        pub motion_generation_finished: bool,
+    }
+
+    #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
+    #[allow(non_snake_case)]
+    #[repr(packed)]
+    pub struct ControllerCommandPacked {
+        pub tau_J_d: [f64; 7],
+    }
+
+    #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
+    #[repr(packed)]
+    pub struct RobotCommandPacked {
+        pub message_id: u64,
+        pub motion: MotionGeneratorCommandPacked,
+        pub control: ControllerCommandPacked,
+    }
+
+    #[test]
+    fn test_robot_command() {
+        assert_eq!(
+            bincode::serialize(&RobotCommandPacked::default()).unwrap(),
+            bincode::serialize(&RobotCommand::default()).unwrap()
+        );
+        println!(
+            "size of RobotCommand: {}",
+            std::mem::size_of::<RobotCommand>()
+        );
+        println!(
+            "size of RobotCommandPacked: {}",
+            std::mem::size_of::<RobotCommandPacked>()
+        );
+        println!(
+            "size of bincode RobotCommand: {}",
+            bincode::serialize(&RobotCommand::default()).unwrap().len()
+        );
+        println!(
+            "size of bincode RobotCommandPacked: {}",
+            bincode::serialize(&RobotCommandPacked::default())
+                .unwrap()
+                .len()
+        );
     }
 }

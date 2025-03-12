@@ -39,6 +39,7 @@ pub struct Request<const C: Command, D> {
 }
 
 #[derive(Default, Deserialize)]
+#[repr(packed)]
 pub struct Response<const C: Command, S> {
     pub header: CommandHeader<C>,
     pub status: S,
@@ -71,12 +72,13 @@ pub type ConnectRequest = Request<{ Command::Connect }, ConnectData>;
 pub type ConnectResponse = Response<{ Command::Connect }, ConnectStatus>;
 
 #[derive(Default, Serialize, PartialEq)]
+#[repr(packed)]
 pub struct ConnectData {
     pub version: u16,
     pub udp_port: u16,
 }
 
-#[derive(Deserialize_repr)]
+#[derive(Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum ConnectStatusEnum {
     Success,
@@ -84,9 +86,10 @@ pub enum ConnectStatusEnum {
 }
 
 #[derive(Deserialize)]
+#[repr(packed)]
 pub struct ConnectStatus {
     pub status: ConnectStatusEnum,
-    pub version: u32,
+    pub version: u16,
 }
 
 // ! Move Command
@@ -111,6 +114,7 @@ pub enum MoveMotionGeneratorMode {
 }
 
 #[derive(Default, Serialize)]
+#[repr(packed)]
 pub struct MoveDeviation {
     translation: f64,
     rotation: f64,
@@ -164,11 +168,13 @@ pub type GetCartesianLimitResponse =
 pub type GetCartesianLimitStatus = DefaultStatus;
 
 #[derive(Default, Serialize)]
+#[repr(packed)]
 pub struct GetCartesianLimitData {
     id: i32,
 }
 
 #[derive(Default, Serialize)]
+#[repr(packed)]
 pub struct GetCartesianLimitResponseData {
     object_world_size: [f64; 3],
     object_frame: [f64; 16],
@@ -213,6 +219,7 @@ pub type SetJointImpedanceRequest = Request<{ Command::SetJointImpedance }, SetJ
 pub type SetJointImpedanceResponse = Response<{ Command::SetJointImpedance }, GetterSetterStatus>;
 
 #[derive(Serialize)]
+#[repr(packed)]
 pub struct SetJointImpedanceData {
     k_theta: [f64; 7],
 }
@@ -232,6 +239,7 @@ pub type SetCartesianImpedanceResponse =
     Response<{ Command::SetCartesianImpedance }, GetterSetterStatus>;
 
 #[derive(Serialize)]
+#[repr(packed)]
 pub struct SetCartesianImpedanceData {
     k_x: [f64; 6],
 }
@@ -249,6 +257,7 @@ pub type SetGuidingModeRequest = Request<{ Command::SetGuidingMode }, SetGuiding
 pub type SetGuidingModeResponse = Response<{ Command::SetGuidingMode }, GetterSetterStatus>;
 
 #[derive(Default, Serialize)]
+#[repr(packed)]
 pub struct SetGuidingModeData {
     guiding_mode: [bool; 6],
     nullspace: bool,
@@ -259,6 +268,7 @@ pub type SetEEToKRequest = Request<{ Command::SetEEToK }, SetEEToKData>;
 pub type SetEEToKResponse = Response<{ Command::SetEEToK }, GetterSetterStatus>;
 
 #[derive(Default, Serialize)]
+#[repr(packed)]
 pub struct SetEEToKData {
     pose_ee_to_k: [f64; 16],
 }
@@ -268,6 +278,7 @@ pub type SetNEToEERequest = Request<{ Command::SetNEToEE }, SetNEToEEData>;
 pub type SetNEToEEResponse = Response<{ Command::SetNEToEE }, GetterSetterStatus>;
 
 #[derive(Default, Serialize)]
+#[repr(packed)]
 pub struct SetNEToEEData {
     pose_ne_to_ee: [f64; 16],
 }
@@ -277,6 +288,7 @@ pub type SetLoadRequest = Request<{ Command::SetLoad }, SetLoadData>;
 pub type SetLoadResponse = Response<{ Command::SetLoad }, GetterSetterStatus>;
 
 #[derive(Default, Serialize)]
+#[repr(packed)]
 pub struct SetLoadData {
     m_load: f64,
     x_cload: [f64; 3],
@@ -288,6 +300,7 @@ pub type SetFiltersRequest = Request<{ Command::SetFilters }, SetFiltersData>;
 pub type SetFiltersResponse = Response<{ Command::SetFilters }, GetterSetterStatus>;
 
 #[derive(Default, Serialize)]
+#[repr(packed)]
 pub struct SetFiltersData {
     joint_position_filter_frequency: f64,
     joint_velocity_filter_frequency: f64,
@@ -382,6 +395,7 @@ impl<'de, const C: Command> Deserialize<'de> for CommandHeader<C> {
     {
         #[derive(Deserialize)]
         struct CommandHeaderInternal {
+            command: Command,
             command_id: u32,
             size: u32,
         }
@@ -454,5 +468,30 @@ impl Into<RobotResult<()>> for GetterSetterStatus {
                 "command failed".to_string(),
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn type_serde_test() {
+        // assert_eq!(
+        //     bincode::serialize(&connect_response).unwrap(),
+        //     [0u8, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 0, 5, 0]
+        // );
+        assert_eq!(ConnectResponse::size(), 15);
+        if let Err(e) = bincode::deserialize::<ConnectResponse>(&[
+            0u8, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 0, 5, 0,
+        ]) {
+            println!("{:?}", e);
+        }
+        // assert!(
+        //     bincode::deserialize::<ConnectResponse>(&[
+        //         0u8, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 0, 5, 0
+        //     ])
+        //     .is_ok()
+        // );
     }
 }

@@ -4,7 +4,6 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{
     io::{Read, Write},
     net::{TcpStream, UdpSocket},
-    // process::Command,
     sync::{Arc, Mutex, RwLock},
     thread,
 };
@@ -41,11 +40,9 @@ impl Network {
             };
             request.set_command_id(command_id);
             let request = bincode::serialize(&request).unwrap();
-            println!("request: {:?}", request);
             stream.write_all(&request)?;
             let mut buffer = [0; 1024];
             let size = stream.read(&mut buffer)?;
-            println!("response: {:?}", &buffer[..size]);
             bincode::deserialize(&buffer[..size])
                 .map_err(|e| RobotException::DeserializeError(e.to_string()))
         } else {
@@ -78,7 +75,7 @@ impl Network {
 
     pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
     where
-        R: Serialize + Send + Sync + 'static,
+        R: Serialize + Send + Sync + std::fmt::Debug + 'static,
         S: DeserializeOwned + Default + Send + Sync + 'static,
     {
         #[cfg(target_os = "windows")]
@@ -107,14 +104,14 @@ impl Network {
 
             let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
             loop {
-                let mut buffer = [0; 1024];
+                let mut buffer = vec![0; size_of::<S>()];
                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
                 let data: S = bincode::deserialize(&buffer[..size]).unwrap();
                 *res_queue.write().unwrap() = data;
 
                 if let Some(request) = req_queue.pop() {
-                    let mut data = bincode::serialize(&request).unwrap();
-                    data.extend_from_slice(&addr.ip().to_string().as_bytes());
+                    println!("send command {:?}", request);
+                    let data = bincode::serialize(&request).unwrap();
                     udp_socket.send_to(&data, addr).unwrap();
                 }
             }
@@ -125,6 +122,8 @@ impl Network {
 
 #[cfg(target_os = "windows")]
 fn is_firewall_rule_active(port: u16) -> bool {
+    use std::process::Command;
+
     let command = format!(
         "Get-NetFirewallRule -DisplayName 'LibFranka_UDP_{}' -ErrorAction SilentlyContinue | Where-Object {{ $_.Enabled -eq 'True' }}",
         port
