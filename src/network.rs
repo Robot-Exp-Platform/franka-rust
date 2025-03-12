@@ -52,26 +52,26 @@ impl Network {
         }
     }
 
-    /// 检查是否有可接收的 tcp 数据,如果有，则解析为对应的类型，如果没有，直接退出
-    pub fn tcp_recv<S>(&mut self) -> RobotResult<Option<S>>
-    where
-        S: DeserializeOwned + CommandIDConfig,
-    {
-        if let Some(stream) = &mut self.tcp_stream {
-            let mut buffer = [0; 1024];
-            let size = stream.read(&mut buffer)?;
-            if size == 0 {
-                return Ok(None);
-            }
-            bincode::deserialize(&buffer[..size])
-                .map(|data| Some(data))
-                .map_err(|e| RobotException::DeserializeError(e.to_string()))
-        } else {
-            Err(RobotException::NetworkError(
-                "No active tcp connection".to_string(),
-            ))
-        }
-    }
+    // /// 检查是否有可接收的 tcp 数据,如果有，则解析为对应的类型，如果没有，直接退出
+    // pub fn tcp_recv<S>(&mut self) -> RobotResult<Option<S>>
+    // where
+    //     S: DeserializeOwned + CommandIDConfig,
+    // {
+    //     if let Some(stream) = &mut self.tcp_stream {
+    //         let mut buffer = [0; 1024];
+    //         let size = stream.read(&mut buffer)?;
+    //         if size == 0 {
+    //             return Ok(None);
+    //         }
+    //         bincode::deserialize(&buffer[..size])
+    //             .map(|data| Some(data))
+    //             .map_err(|e| RobotException::DeserializeError(e.to_string()))
+    //     } else {
+    //         Err(RobotException::NetworkError(
+    //             "No active tcp connection".to_string(),
+    //         ))
+    //     }
+    // }
 
     pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
     where

@@ -374,10 +374,10 @@ impl Into<ArmState<7>> for RobotStateInter {
             joint_vel: Some(self.dq),
             joint_acc: None,
             tau: Some(self.tau_J),
-            cartisian_euler: None,
-            cartisian_quat: None,
-            cartisian_homo: Some(self.O_T_EE),
-            cartisian_vel: None,
+            cartesian_euler: None,
+            cartesian_quat: None,
+            cartesian_homo: Some(self.O_T_EE),
+            cartesian_vel: None,
         }
     }
 }

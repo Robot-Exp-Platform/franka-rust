@@ -78,9 +78,15 @@ pub struct ConnectData {
 
 #[derive(Deserialize_repr)]
 #[repr(u8)]
-pub enum ConnectStatus {
+pub enum ConnectStatusEnum {
     Success,
     IncompatibleLibraryVersion,
+}
+
+#[derive(Deserialize)]
+pub struct ConnectStatus {
+    pub status: ConnectStatusEnum,
+    pub version: u32,
 }
 
 // ! Move Command
@@ -177,14 +183,14 @@ pub type SetCollisionBehaviorResponse =
 
 #[derive(Serialize)]
 pub struct SetCollisionBehaviorData {
-    lower_torque_thresholds_acceleration: [f64; 7],
-    upper_torque_thresholds_acceleration: [f64; 7],
-    lower_torque_thresholds_nominal: [f64; 7],
-    upper_torque_thresholds_nominal: [f64; 7],
-    lower_force_thresholds_acceleration: [f64; 6],
-    upper_force_thresholds_acceleration: [f64; 6],
-    lower_force_thresholds_nominal: [f64; 6],
-    upper_force_thresholds_nominal: [f64; 6],
+    pub lower_torque_thresholds_acceleration: [f64; 7],
+    pub upper_torque_thresholds_acceleration: [f64; 7],
+    pub lower_torque_thresholds_nominal: [f64; 7],
+    pub upper_torque_thresholds_nominal: [f64; 7],
+    pub lower_force_thresholds_acceleration: [f64; 6],
+    pub upper_force_thresholds_acceleration: [f64; 6],
+    pub lower_force_thresholds_nominal: [f64; 6],
+    pub upper_force_thresholds_nominal: [f64; 6],
 }
 
 impl Default for SetCollisionBehaviorData {
