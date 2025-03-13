@@ -1,9 +1,10 @@
 #![allow(dead_code)]
 
-use robot_behavior::{RobotException, RobotResult};
+use robot_behavior::{ControlType, MotionType, RobotException, RobotResult};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::f64::consts::PI;
 use std::marker::ConstParamTy;
 
 #[derive(ConstParamTy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
@@ -96,24 +97,26 @@ pub struct ConnectStatus {
 pub type MoveRequest = Request<{ Command::Move }, MoveData>;
 pub type MoveResponse = Response<{ Command::Move }, MoveStatus>;
 
-#[derive(Serialize_repr)]
-#[repr(u8)]
+#[derive(Default, Serialize_repr)]
+#[repr(u32)]
 pub enum MoveControllerMode {
+    #[default]
     JointImpedance,
     CartesianImpedance,
     ExternalController,
 }
 
-#[derive(Serialize_repr)]
-#[repr(u8)]
+#[derive(Default, Serialize_repr)]
+#[repr(u32)]
 pub enum MoveMotionGeneratorMode {
+    #[default]
     JointPosition,
     JointVelocity,
     CartesianPosition,
     CartesianVelocity,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 #[repr(packed)]
 pub struct MoveDeviation {
     translation: f64,
@@ -121,12 +124,22 @@ pub struct MoveDeviation {
     elbow: f64,
 }
 
-#[derive(Serialize)]
+impl Default for MoveDeviation {
+    fn default() -> Self {
+        MoveDeviation {
+            translation: 10.,
+            rotation: 3.12,
+            elbow: 2. * PI,
+        }
+    }
+}
+
+#[derive(Default, Serialize)]
 pub struct MoveData {
-    controller_mode: MoveControllerMode,
-    motion_generator_mode: MoveMotionGeneratorMode,
-    maximum_path_deviation: MoveDeviation,
-    maximum_goal_deviation: MoveDeviation,
+    pub controller_mode: MoveControllerMode,
+    pub motion_generator_mode: MoveMotionGeneratorMode,
+    pub maximum_path_deviation: MoveDeviation,
+    pub maximum_goal_deviation: MoveDeviation,
 }
 
 #[derive(Deserialize_repr)]
@@ -467,6 +480,37 @@ impl Into<RobotResult<()>> for GetterSetterStatus {
             _ => Err(RobotException::CommandException(
                 "command failed".to_string(),
             )),
+        }
+    }
+}
+
+impl<const N: usize> From<MotionType<N>> for MoveData {
+    fn from(value: MotionType<N>) -> Self {
+        MoveData {
+            controller_mode: MoveControllerMode::JointImpedance,
+            motion_generator_mode: match value {
+                MotionType::Joint(_) => MoveMotionGeneratorMode::JointPosition,
+                MotionType::JointVel(_) => MoveMotionGeneratorMode::JointVelocity,
+                MotionType::CartesianHomo(_) => MoveMotionGeneratorMode::CartesianPosition,
+                MotionType::CartesianVel(_) => MoveMotionGeneratorMode::CartesianVelocity,
+                _ => MoveMotionGeneratorMode::JointPosition,
+            },
+            maximum_path_deviation: MoveDeviation::default(),
+            maximum_goal_deviation: MoveDeviation::default(),
+        }
+    }
+}
+
+impl<const N: usize> From<ControlType<N>> for MoveData {
+    fn from(value: ControlType<N>) -> Self {
+        MoveData {
+            controller_mode: match value {
+                ControlType::Force(_) => MoveControllerMode::ExternalController,
+                _ => MoveControllerMode::JointImpedance,
+            },
+            motion_generator_mode: MoveMotionGeneratorMode::JointPosition,
+            maximum_path_deviation: MoveDeviation::default(),
+            maximum_goal_deviation: MoveDeviation::default(),
         }
     }
 }
