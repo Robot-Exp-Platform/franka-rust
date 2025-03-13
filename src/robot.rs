@@ -202,7 +202,10 @@ impl RobotBehavior for FrankaRobot {
 
 impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
     fn move_to(&mut self, target: MotionType<FRANKA_EMIKA_DOF>, speed: f64) -> RobotResult<()> {
-        unimplemented!()
+        match target {
+            MotionType::Joint(target) => self.move_joint(&target, speed),
+            _ => unimplemented!(),
+        }
     }
 
     fn move_to_async(
