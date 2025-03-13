@@ -2,7 +2,7 @@ use crossbeam::queue::ArrayQueue;
 use nalgebra as na;
 use robot_behavior::{
     ArmBehavior, ArmBehaviorExt, ArmRealtimeBehavior, ArmRealtimeBehaviorExt, ArmState,
-    ControlType, MotionType, RobotBehavior, RobotException, RobotResult,
+    ControlType, MotionType, RobotBehavior, RobotException, RobotResult, utils::path_generate,
 };
 use std::{
     sync::{Arc, Mutex, RwLock},
@@ -11,7 +11,8 @@ use std::{
 };
 
 use crate::{
-    FRANKA_EMIKA_DOF, FRANKA_ROBOT_VERSION, LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
+    FRANKA_EMIKA_DOF, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION, LIBFRANKA_VERSION,
+    PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
     network::Network,
     types::{
         robot_command::RobotCommand,
@@ -200,35 +201,8 @@ impl RobotBehavior for FrankaRobot {
 }
 
 impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
-    fn move_to(&mut self, target: MotionType<FRANKA_EMIKA_DOF>, _speed: f64) -> RobotResult<()> {
-        self.is_moving = true;
-        let control_queue = self.control_queue.clone();
-        self._move(target.into())?;
-        {
-            loop {
-                let start_time = Instant::now();
-
-                let state = self.robot_state.read().unwrap();
-                let mut motion: RobotCommand = target.into();
-                motion.set_command_id(state.message_id as u32);
-                let state: ArmState<7> = (*state).into();
-
-                if state == target {
-                    motion.motion.motion_generation_finished = true;
-                    control_queue.force_push(motion);
-                    break;
-                }
-                control_queue.force_push(motion);
-
-                let end_time = Instant::now();
-                let elapsed = end_time - start_time;
-                if elapsed < Duration::from_millis(1) {
-                    sleep(Duration::from_millis(1) - elapsed);
-                }
-            }
-        }
-        self.is_moving = false;
-        Ok(())
+    fn move_to(&mut self, target: MotionType<FRANKA_EMIKA_DOF>, speed: f64) -> RobotResult<()> {
+        unimplemented!()
     }
 
     fn move_to_async(
@@ -289,6 +263,51 @@ impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
 }
 
 impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
+    fn move_joint(&mut self, target: &[f64; FRANKA_EMIKA_DOF], speed: f64) -> RobotResult<()> {
+        self.is_moving = true;
+
+        let state = self.robot_state.read().unwrap();
+        let joint = state.q;
+        let v_max: Vec<f64> = FRANKA_ROBOT_MAX_JOINT_VEL
+            .iter()
+            .map(|x| x * speed)
+            .collect();
+        let v_max: [f64; 7] = v_max.try_into().expect("slice with incorrect length");
+        let a_max = FRANKA_ROBOT_MAX_JOINT_VEL;
+        drop(state);
+
+        let path_generate = path_generate::joint_trapezoid(&joint, &joint, &v_max, &a_max);
+
+        self._move(MotionType::Joint(*target).into())?;
+        {
+            let time = Instant::now();
+            loop {
+                let start_time = Instant::now();
+
+                let state = self.robot_state.read().unwrap();
+                let mut motion: RobotCommand =
+                    MotionType::Joint(path_generate(start_time - time)).into();
+                motion.set_command_id(state.message_id as u32);
+
+                let state: ArmState<7> = (*state).into();
+                if state.joint.unwrap() == *target {
+                    motion.motion.motion_generation_finished = true;
+                    self.control_queue.force_push(motion);
+                    break;
+                }
+                self.control_queue.force_push(motion);
+
+                let end_time = Instant::now();
+                let elapsed = end_time - start_time;
+                if elapsed < Duration::from_millis(1) {
+                    sleep(Duration::from_millis(1) - elapsed);
+                }
+            }
+        }
+        self.is_moving = false;
+        Ok(())
+    }
+
     fn move_path_prepare(&mut self, _path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
         unimplemented!()
     }
