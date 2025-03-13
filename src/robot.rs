@@ -199,40 +199,62 @@ impl RobotBehavior for FrankaRobot {
 }
 
 impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
-    fn move_to(&mut self, target: MotionType<FRANKA_EMIKA_DOF>) -> RobotResult<()> {
+    fn move_to(&mut self, target: MotionType<FRANKA_EMIKA_DOF>, _speed: f64) -> RobotResult<()> {
         self.is_moving = true;
         let control_queue = self.control_queue.clone();
         {
             loop {
-                let mut motion: RobotCommand = target.into();
+                let start_time = Instant::now();
+
                 let state = self.robot_state.read().unwrap();
+                let mut motion: RobotCommand = target.into();
                 motion.set_command_id(state.message_id as u32);
                 let state: ArmState<7> = (*state).into();
+
                 if state == target {
+                    motion.motion.motion_generation_finished = true;
+                    control_queue.force_push(motion);
                     break;
                 }
-
                 control_queue.force_push(motion);
+
+                let end_time = Instant::now();
+                let elapsed = end_time - start_time;
+                if elapsed < Duration::from_millis(1) {
+                    sleep(Duration::from_millis(1) - elapsed);
+                }
             }
         }
         self.is_moving = false;
         Ok(())
     }
 
-    fn move_to_async(&mut self, target: MotionType<FRANKA_EMIKA_DOF>) -> RobotResult<()> {
+    fn move_to_async(
+        &mut self,
+        target: MotionType<FRANKA_EMIKA_DOF>,
+        _speed: f64,
+    ) -> RobotResult<()> {
         self.is_moving = true;
         let control_queue = self.control_queue.clone();
         let robot_state = self.robot_state.clone();
         self.control_handle = Some(thread::spawn(move || {
             loop {
+                let start_time = Instant::now();
+
                 let state = robot_state.read().unwrap();
-                let mut motion: RobotCommand = MotionType::Joint([0.0; 7]).into();
+                let mut motion: RobotCommand = target.into();
                 motion.set_command_id(state.message_id as u32);
                 let state: ArmState<7> = (*state).into();
                 if state == target {
                     break;
                 }
                 control_queue.force_push(motion);
+
+                let end_time = Instant::now();
+                let elapsed = end_time - start_time;
+                if elapsed < Duration::from_millis(1) {
+                    sleep(Duration::from_millis(1) - elapsed);
+                }
             }
         }));
         Ok(())
@@ -246,7 +268,11 @@ impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
         unimplemented!()
     }
 
-    fn move_path(&mut self, _path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
+    fn move_path(
+        &mut self,
+        _path: Vec<MotionType<FRANKA_EMIKA_DOF>>,
+        _speed: f64,
+    ) -> RobotResult<()> {
         unimplemented!()
     }
 

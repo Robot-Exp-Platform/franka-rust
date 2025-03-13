@@ -302,5 +302,16 @@ impl fmt::Display for ErrorFlag {
     }
 }
 
+impl From<ErrorFlag> for Option<FrankaError> {
+    fn from(value: ErrorFlag) -> Self {
+        for i in 0..41 {
+            if value.contains(ErrorFlag::from_bits(1 << i).unwrap()) {
+                return Some(FrankaError::from_u8(i).unwrap());
+            }
+        }
+        None
+    }
+}
+
 #[cfg(test)]
 mod test {}

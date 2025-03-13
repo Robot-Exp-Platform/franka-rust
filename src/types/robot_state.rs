@@ -5,6 +5,8 @@ use serde_big_array::BigArray;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::time::Duration;
 
+use super::robot_error::{ErrorFlag, FrankaError};
+
 #[derive(Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
 #[repr(u8)]
 pub enum MotionGeneratorMode {
@@ -231,10 +233,10 @@ pub struct RobotState {
     pub dtheta: [f64; 7],
     /// Currect error state.  
     /// 当前错误状态
-    pub currect_errors: [bool; 41],
+    pub currect_errors: Option<FrankaError>,
     /// contain the errirs that aborted the previous motion.  
     /// 包含中止上一次运动的错误
-    pub last_motion_errors: [bool; 41],
+    pub last_motion_errors: Option<FrankaError>,
     /// Percentage of the last 100 control commands that were successfully received by the robot.  
     /// Shows a value of zero if no control or motion generator loop is currently running.
     /// 最后100个控制命令中成功接收到的百分比, 如果当前没有控制或运动生成器循环正在运行，则显示为零
@@ -305,6 +307,13 @@ pub struct RobotStateInter {
     pub control_command_success_rate: f64,
 }
 
+impl RobotStateInter {
+    pub fn get_error(&self) -> Option<FrankaError> {
+        let error: ErrorFlag = self.errors.into();
+        if error.is_empty() { None } else { error.into() }
+    }
+}
+
 impl Into<RobotState> for RobotStateInter {
     fn into(self) -> RobotState {
         let (m_total, x_total, i_total) = combine_ee_load(
@@ -315,6 +324,8 @@ impl Into<RobotState> for RobotStateInter {
             self.F_x_Cload,
             self.I_load,
         );
+        let currect_error: ErrorFlag = self.errors.into();
+        let last_motion_error: ErrorFlag = self.reflex_reason.into();
         RobotState {
             pose_o_to_ee: self.O_T_EE,
             pose_o_to_ee_d: self.O_T_EE_d,
@@ -358,8 +369,8 @@ impl Into<RobotState> for RobotStateInter {
             ddpose_o_to_ee_c: self.O_ddP_EE_c,
             theta: self.theta,
             dtheta: self.dtheta,
-            currect_errors: self.errors,
-            last_motion_errors: self.reflex_reason,
+            currect_errors: currect_error.into(),
+            last_motion_errors: last_motion_error.into(),
             control_command_success_rate: self.control_command_success_rate,
             robot_mode: self.robot_mode,
             duration: Duration::from_millis(self.message_id),
