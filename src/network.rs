@@ -6,8 +6,7 @@ use std::{
     io::{Read, Write},
     net::{TcpStream, UdpSocket},
     sync::{Arc, Mutex, RwLock},
-    thread::{self, sleep},
-    time::Duration,
+    thread,
 };
 
 use crate::types::robot_types::CommandIDConfig;
@@ -79,8 +78,8 @@ impl Network {
 
     pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
     where
-        R: Serialize + Send + Sync + std::fmt::Debug + 'static,
-        S: DeserializeOwned + Default + Send + Sync + 'static,
+        R: Serialize + CommandIDConfig + Send + Sync + std::fmt::Debug + 'static,
+        S: DeserializeOwned + CommandIDConfig + Default + Send + Sync + 'static,
     {
         #[cfg(target_os = "windows")]
         {
@@ -92,7 +91,7 @@ impl Network {
         }
 
         let (request_queue, response_queue) = (
-            Arc::new(ArrayQueue::new(1)),
+            Arc::new(ArrayQueue::<R>::new(1)),
             Arc::new(RwLock::new(S::default())),
         );
         let req_queue = request_queue.clone();
@@ -111,24 +110,22 @@ impl Network {
             }
 
             let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
-            let mut udp_addr = udp_socket.local_addr().unwrap();
             let mut buffer = vec![0; size_of::<S>()];
             loop {
                 let start_time = std::time::Instant::now();
-                let request_data = req_queue.pop().map(|request| {
-                    println!("send command {:?}", request);
-                    bincode::serialize(&request).unwrap()
-                });
 
-                if let Some(data) = request_data {
-                    udp_socket.send_to(&data, udp_addr).unwrap();
-                }
                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
+                let response: S = bincode::deserialize(&buffer[..size]).unwrap();
 
-                udp_addr = addr;
-                let data: S = bincode::deserialize(&buffer[..size]).unwrap();
+                if let Some(data) = &mut req_queue.pop() {
+                    println!("send command {:?}", data);
+                    data.set_command_id(response.command_id());
+                    let data = bincode::serialize(&data).unwrap();
+                    udp_socket.send_to(&data, addr).unwrap();
+                }
+
                 let middle_time = std::time::Instant::now();
-                *res_queue.write().unwrap() = data;
+                *res_queue.write().unwrap() = response;
                 let end_time = std::time::Instant::now();
                 println!(
                     "udp latency: {:?} | {:?} + {:?}",

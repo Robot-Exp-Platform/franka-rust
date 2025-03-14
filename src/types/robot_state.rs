@@ -5,7 +5,10 @@ use serde_big_array::BigArray;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::time::Duration;
 
-use super::robot_error::{ErrorFlag, FrankaError};
+use super::{
+    robot_error::{ErrorFlag, FrankaError},
+    robot_types::CommandIDConfig,
+};
 
 #[derive(Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
 #[repr(u8)]
@@ -482,6 +485,16 @@ impl Default for RobotStateInter {
         }
     }
 }
+
+impl CommandIDConfig for RobotStateInter {
+    fn set_command_id(&mut self, id: u32) {
+        self.message_id = id as u64;
+    }
+    fn command_id(&self) -> u32 {
+        self.message_id as u32
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

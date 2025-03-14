@@ -222,13 +222,11 @@ impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
                 let start_time = Instant::now();
 
                 let state = robot_state.read().unwrap();
-                let mut motion: RobotCommand = target.into();
-                motion.set_command_id(state.message_id as u32);
                 let state: ArmState<7> = (*state).into();
                 if state == target {
                     break;
                 }
-                control_queue.force_push(motion);
+                control_queue.force_push(target.into());
 
                 let end_time = Instant::now();
                 let elapsed = end_time - start_time;

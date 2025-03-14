@@ -445,6 +445,14 @@ impl<const C: Command, S> From<S> for Response<C, S> {
     }
 }
 
+impl CommandIDConfig for () {
+    fn command_id(&self) -> u32 {
+        0
+    }
+
+    fn set_command_id(&mut self, _id: u32) {}
+}
+
 impl<const C: Command, R> CommandIDConfig for Request<C, R> {
     fn command_id(&self) -> u32 {
         self.header.command_id
