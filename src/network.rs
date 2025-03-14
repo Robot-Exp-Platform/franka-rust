@@ -112,8 +112,6 @@ impl Network {
             let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
             let mut buffer = vec![0; size_of::<S>()];
             loop {
-                let start_time = std::time::Instant::now();
-
                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
                 let response: S = bincode::deserialize(&buffer[..size]).unwrap();
 
@@ -124,15 +122,7 @@ impl Network {
                     udp_socket.send_to(&data, addr).unwrap();
                 }
 
-                let middle_time = std::time::Instant::now();
                 *res_queue.write().unwrap() = response;
-                let end_time = std::time::Instant::now();
-                println!(
-                    "udp latency: {:?} | {:?} + {:?}",
-                    end_time - start_time,
-                    middle_time - start_time,
-                    end_time - middle_time
-                );
             }
         });
         (request_queue, response_queue)
