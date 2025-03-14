@@ -309,7 +309,7 @@ pub struct RobotStateInter {
 
 impl RobotStateInter {
     pub fn get_error(&self) -> Option<FrankaError> {
-        let error: ErrorFlag = self.errors.into();
+        let error: ErrorFlag = self.reflex_reason.into();
         if error.is_empty() { None } else { error.into() }
     }
 }

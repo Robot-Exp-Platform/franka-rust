@@ -96,24 +96,40 @@ impl Network {
 
         thread::spawn(move || {
             if is_hardware_realtime() {
+                println!("you have realtime permission, enjoy it");
                 set_realtime_priority().unwrap();
             } else {
+                println!(
+                    "you don't have realtime permission, which may cause communication latency"
+                );
                 thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Max)
                     .unwrap();
             }
 
             let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
+            let mut buffer = vec![0; size_of::<S>()];
             loop {
-                let mut buffer = vec![0; size_of::<S>()];
-                let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
-                let data: S = bincode::deserialize(&buffer[..size]).unwrap();
-                *res_queue.write().unwrap() = data;
-
-                if let Some(request) = req_queue.pop() {
+                let request_data = req_queue.pop().map(|request| {
                     println!("send command {:?}", request);
-                    let data = bincode::serialize(&request).unwrap();
+                    bincode::serialize(&request).unwrap()
+                });
+
+                let start_time = std::time::Instant::now();
+                let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
+                let middle_time = std::time::Instant::now();
+                if let Some(data) = request_data {
                     udp_socket.send_to(&data, addr).unwrap();
                 }
+                let end_time = std::time::Instant::now();
+                println!(
+                    "udp latency: {:?} | {:?} + {:?}",
+                    end_time - start_time,
+                    middle_time - start_time,
+                    end_time - middle_time
+                );
+
+                let data: S = bincode::deserialize(&buffer[..size]).unwrap();
+                *res_queue.write().unwrap() = data;
             }
         });
         (request_queue, response_queue)

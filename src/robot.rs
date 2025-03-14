@@ -11,8 +11,8 @@ use std::{
 };
 
 use crate::{
-    FRANKA_EMIKA_DOF, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION, LIBFRANKA_VERSION,
-    PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
+    FRANKA_EMIKA_DOF, FRANKA_ROBOT_MAX_JOINT_ACC, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION,
+    LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
     network::Network,
     types::{
         robot_command::RobotCommand,
@@ -276,10 +276,10 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
             .map(|x| x * speed)
             .collect();
         let v_max: [f64; 7] = v_max.try_into().expect("slice with incorrect length");
-        let a_max = FRANKA_ROBOT_MAX_JOINT_VEL;
+        let a_max = FRANKA_ROBOT_MAX_JOINT_ACC;
         drop(state);
 
-        let path_generate = path_generate::joint_trapezoid(&joint, &joint, &v_max, &a_max);
+        let path_generate = path_generate::joint_trapezoid(&joint, &target, &v_max, &a_max);
 
         self._move(MotionType::Joint(*target).into())?;
         {
@@ -288,9 +288,12 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
                 let start_time = Instant::now();
 
                 let state = self.robot_state.read().unwrap();
-                let mut motion: RobotCommand =
-                    MotionType::Joint(path_generate(start_time - time)).into();
+                let joint = path_generate(start_time - time);
+                let mut motion: RobotCommand = MotionType::Joint(joint).into();
                 motion.set_command_id(state.message_id as u32);
+                if let Some(error) = state.get_error() {
+                    return Err(RobotException::InvalidInstruction(format!("{}", error)));
+                }
 
                 let state: ArmState<7> = (*state).into();
                 if state.joint.unwrap() == *target {
