@@ -7,7 +7,7 @@ use std::marker::ConstParamTy;
 
 use super::robot_types::CommandIDConfig;
 
-#[derive(ConstParamTy, PartialEq, Eq, Serialize_repr, Deserialize_repr, Debug, Copy, Clone)]
+#[derive(Debug, ConstParamTy, PartialEq, Eq, Serialize_repr, Deserialize_repr, Copy, Clone)]
 #[repr(u16)]
 pub enum Command {
     Connect,
@@ -26,13 +26,13 @@ pub enum Status {
     Aborted,
 }
 
-#[derive(Default, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct CommandHeader<const C: Command> {
     pub command_id: u32,
     pub size: u32,
 }
 
-#[derive(Default, Serialize, PartialEq)]
+#[derive(Debug, Default, Serialize, PartialEq)]
 pub struct Request<const C: Command, D> {
     pub header: CommandHeader<C>,
     pub data: D,
@@ -48,7 +48,7 @@ pub struct Response<const C: Command, S> {
 pub type ConnectRequest = Request<{ Command::Connect }, ConnectData>;
 pub type ConnectResponse = Response<{ Command::Connect }, ConnectStatus>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[repr(packed)]
 pub struct ConnectData {
     pub version: u16,
@@ -70,7 +70,7 @@ pub type GraspRequest = Request<{ Command::Grasp }, GraspData>;
 pub type GraspResponse = Response<{ Command::Grasp }, GraspStatus>;
 pub type GraspStatus = Status;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[repr(packed)]
 pub struct GraspData {
     pub width: f64,
@@ -84,7 +84,7 @@ pub type MoveRequest = Request<{ Command::Move }, MoveData>;
 pub type MoveResponse = Response<{ Command::Move }, MoveStatus>;
 pub type MoveStatus = Status;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[repr(packed)]
 pub struct MoveData {
     pub width: f64,

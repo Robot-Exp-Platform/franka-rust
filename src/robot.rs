@@ -281,21 +281,24 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
 
         let path_generate = path_generate::joint_trapezoid(&joint, &target, &v_max, &a_max);
 
-        self._move(MotionType::Joint(*target).into())?;
+        let result = self._move(MotionType::Joint(*target).into())?;
+        println!("{:?}", result);
         {
             let time = Instant::now();
             loop {
                 let start_time = Instant::now();
+                print!("time: {:?}>", start_time - time);
 
-                let state = self.robot_state.read().unwrap();
+                let state_inter = self.robot_state.read().unwrap();
+                state_inter.error_result()?;
+                let message_id = state_inter.message_id as u32;
+                let state: ArmState<7> = (*state_inter).into();
+                drop(state_inter);
+                println!("q: {:?}", state.joint.unwrap());
                 let joint = path_generate(start_time - time);
                 let mut motion: RobotCommand = MotionType::Joint(joint).into();
-                motion.set_command_id(state.message_id as u32);
-                if let Some(error) = state.get_error() {
-                    return Err(RobotException::InvalidInstruction(format!("{}", error)));
-                }
+                motion.set_command_id(message_id as u32);
 
-                let state: ArmState<7> = (*state).into();
                 if state.joint.unwrap() == *target {
                     motion.motion.motion_generation_finished = true;
                     self.control_queue.force_push(motion);

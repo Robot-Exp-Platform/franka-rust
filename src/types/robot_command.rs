@@ -147,15 +147,42 @@ mod test {
             "size of RobotCommandPacked: {}",
             std::mem::size_of::<RobotCommandPacked>()
         );
-        println!(
-            "size of bincode RobotCommand: {}",
-            bincode::serialize(&RobotCommand::default()).unwrap().len()
+
+        assert_eq!(
+            bincode::serialize(&RobotCommandPacked::default()).unwrap(),
+            bincode::serialize(&RobotCommand::default()).unwrap()
         );
-        println!(
-            "size of bincode RobotCommandPacked: {}",
-            bincode::serialize(&RobotCommandPacked::default())
-                .unwrap()
-                .len()
+
+        let robot_command_packed = RobotCommandPacked {
+            message_id: 1,
+            motion: MotionGeneratorCommandPacked {
+                q_c: [1.0; 7],
+                dq_c: [2.0; 7],
+                O_T_EE_c: [3.0; 16],
+                O_dP_EE_c: [4.0; 6],
+                elbow_c: [5.0; 2],
+                valid_elbow: true,
+                motion_generation_finished: true,
+            },
+            control: ControllerCommandPacked { tau_J_d: [6.0; 7] },
+        };
+        let robot_command = RobotCommand {
+            message_id: 1,
+            motion: MotionGeneratorCommand {
+                q_c: [1.0; 7],
+                dq_c: [2.0; 7],
+                pose_o_to_ee_c: [3.0; 16],
+                dpose_o_to_ee_c: [4.0; 6],
+                elbow_c: [5.0; 2],
+                valid_elbow: true,
+                motion_generation_finished: true,
+            },
+            control: ControllerCommand { tau_j_d: [6.0; 7] },
+        };
+
+        assert_eq!(
+            bincode::serialize(&robot_command_packed).unwrap(),
+            bincode::serialize(&robot_command).unwrap()
         );
     }
 }

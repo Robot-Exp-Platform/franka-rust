@@ -1,5 +1,5 @@
 use nalgebra as na;
-use robot_behavior::ArmState;
+use robot_behavior::{ArmState, RobotResult};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -308,9 +308,16 @@ pub struct RobotStateInter {
 }
 
 impl RobotStateInter {
-    pub fn get_error(&self) -> Option<FrankaError> {
-        let error: ErrorFlag = self.reflex_reason.into();
-        if error.is_empty() { None } else { error.into() }
+    pub fn error_result(&self) -> RobotResult<()> {
+        let flags: ErrorFlag = self.errors.into();
+        if flags.is_empty() {
+            Ok(())
+        } else {
+            Err(robot_behavior::RobotException::CommandException(format!(
+                "{}",
+                flags
+            )))
+        }
     }
 }
 

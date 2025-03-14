@@ -295,7 +295,7 @@ impl fmt::Display for ErrorFlag {
         let mut errors = Vec::new();
         for i in 0..41 {
             if self.contains(Self::from_bits(1 << i).unwrap()) {
-                errors.push(format!("{:?}", FrankaError::from_u8(i)));
+                errors.push(format!("{}", FrankaError::from_u8(i).unwrap()));
             }
         }
         write!(f, "[{}]", errors.join(","))

@@ -2,10 +2,12 @@ use crossbeam::queue::ArrayQueue;
 use robot_behavior::{RobotException, RobotResult, is_hardware_realtime, set_realtime_priority};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
+    fmt::Debug,
     io::{Read, Write},
     net::{TcpStream, UdpSocket},
     sync::{Arc, Mutex, RwLock},
-    thread,
+    thread::{self, sleep},
+    time::Duration,
 };
 
 use crate::types::robot_types::CommandIDConfig;
@@ -29,9 +31,10 @@ impl Network {
     /// 发送并阻塞接收 tcp 指令
     pub fn tcp_send_and_recv<R, S>(&mut self, request: &mut R) -> RobotResult<S>
     where
-        R: Serialize + CommandIDConfig,
+        R: Serialize + CommandIDConfig + Debug,
         S: DeserializeOwned + CommandIDConfig,
     {
+        println!("tcp send {:?}", request);
         if let Some(stream) = &mut self.tcp_stream {
             let command_id = {
                 let mut counter = self.command_counter.lock().unwrap();
@@ -43,6 +46,7 @@ impl Network {
             stream.write_all(&request)?;
             let mut buffer = [0; 1024];
             let size = stream.read(&mut buffer)?;
+
             bincode::deserialize(&buffer[..size])
                 .map_err(|e| RobotException::DeserializeError(e.to_string()))
         } else {
@@ -107,19 +111,24 @@ impl Network {
             }
 
             let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
+            let mut udp_addr = udp_socket.local_addr().unwrap();
             let mut buffer = vec![0; size_of::<S>()];
             loop {
+                let start_time = std::time::Instant::now();
                 let request_data = req_queue.pop().map(|request| {
                     println!("send command {:?}", request);
                     bincode::serialize(&request).unwrap()
                 });
 
-                let start_time = std::time::Instant::now();
-                let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
-                let middle_time = std::time::Instant::now();
                 if let Some(data) = request_data {
-                    udp_socket.send_to(&data, addr).unwrap();
+                    udp_socket.send_to(&data, udp_addr).unwrap();
                 }
+                let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
+
+                udp_addr = addr;
+                let data: S = bincode::deserialize(&buffer[..size]).unwrap();
+                let middle_time = std::time::Instant::now();
+                *res_queue.write().unwrap() = data;
                 let end_time = std::time::Instant::now();
                 println!(
                     "udp latency: {:?} | {:?} + {:?}",
@@ -127,9 +136,6 @@ impl Network {
                     middle_time - start_time,
                     end_time - middle_time
                 );
-
-                let data: S = bincode::deserialize(&buffer[..size]).unwrap();
-                *res_queue.write().unwrap() = data;
             }
         });
         (request_queue, response_queue)
