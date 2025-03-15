@@ -11,8 +11,9 @@ use std::{
 };
 
 use crate::{
-    FRANKA_EMIKA_DOF, FRANKA_ROBOT_MAX_JOINT_ACC, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION,
-    LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
+    FRANKA_EMIKA_DOF, FRANKA_ROBOT_MAX_JOINT_ACC, FRANKA_ROBOT_MAX_JOINT_JERK,
+    FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION, LIBFRANKA_VERSION, PORT_ROBOT_COMMAND,
+    PORT_ROBOT_UDP,
     network::Network,
     types::{
         robot_command::RobotCommand,
@@ -275,9 +276,10 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
             .collect();
         let v_max: [f64; 7] = v_max.try_into().expect("slice with incorrect length");
         let a_max = FRANKA_ROBOT_MAX_JOINT_ACC;
+        let j_max = FRANKA_ROBOT_MAX_JOINT_JERK;
         drop(state);
 
-        let path_generate = path_generate::joint_trapezoid(&joint, &target, &v_max, &a_max);
+        let path_generate = path_generate::joint_s_curve(&joint, &target, &v_max, &a_max, &j_max);
 
         let result = self._move(MotionType::Joint(*target).into())?;
         println!("{:?}", result);
