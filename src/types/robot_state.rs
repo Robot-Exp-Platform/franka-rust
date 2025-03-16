@@ -10,7 +10,7 @@ use super::{
     robot_types::CommandIDConfig,
 };
 
-#[derive(Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
+#[derive(Debug, Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
 #[repr(u8)]
 pub enum MotionGeneratorMode {
     #[default]
@@ -22,7 +22,7 @@ pub enum MotionGeneratorMode {
     None,
 }
 
-#[derive(Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
+#[derive(Debug, Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
 #[repr(u8)]
 pub enum ControllerMode {
     #[default]
@@ -32,15 +32,15 @@ pub enum ControllerMode {
     Other,
 }
 
-#[derive(Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
+#[derive(Debug, Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
 #[repr(u8)]
 pub enum RobotMode {
     Other,
+    #[default]
     Idle,
     Move,
     Guiding,
     Reflux,
-    #[default]
     UserStopped,
     AutomaticErrorRecovery,
 }
@@ -515,17 +515,89 @@ mod test {
         assert_eq!(i_total, [3.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 3.0]);
     }
 
+    #[derive(Serialize, Default, Deserialize, Debug, Copy, Clone)]
+    #[allow(non_snake_case)]
+    #[repr(packed)]
+    pub struct RobotStateIntern {
+        pub message_id: u64,
+        pub O_T_EE: [f64; 16],
+        pub O_T_EE_d: [f64; 16],
+        pub F_T_EE: [f64; 16],
+        pub EE_T_K: [f64; 16],
+        pub F_T_NE: [f64; 16],
+        pub NE_T_EE: [f64; 16],
+        pub m_ee: f64,
+        pub I_ee: [f64; 9],
+        pub F_x_Cee: [f64; 3],
+        pub m_load: f64,
+        pub I_load: [f64; 9],
+        pub F_x_Cload: [f64; 3],
+        pub elbow: [f64; 2],
+        pub elbow_d: [f64; 2],
+        pub tau_J: [f64; 7],
+        pub tau_J_d: [f64; 7],
+        pub dtau_J: [f64; 7],
+        pub q: [f64; 7],
+        pub q_d: [f64; 7],
+        pub dq: [f64; 7],
+        pub dq_d: [f64; 7],
+        pub ddq_d: [f64; 7],
+        pub joint_contact: [f64; 7],
+        pub cartesian_contact: [f64; 6],
+        pub joint_collision: [f64; 7],
+        pub cartesian_collision: [f64; 6],
+        pub tau_ext_hat_filtered: [f64; 7],
+        pub O_F_ext_hat_K: [f64; 6],
+        pub K_F_ext_hat_K: [f64; 6],
+        pub O_dP_EE_d: [f64; 6],
+        pub O_ddP_O: [f64; 3],
+        pub elbow_c: [f64; 2],
+        pub delbow_c: [f64; 2],
+        pub ddelbow_c: [f64; 2],
+        pub O_T_EE_c: [f64; 16],
+        pub O_dP_EE_c: [f64; 6],
+        pub O_ddP_EE_c: [f64; 6],
+        pub theta: [f64; 7],
+        pub dtheta: [f64; 7],
+        pub motion_generator_mode: MotionGeneratorMode,
+        pub controller_mode: ControllerMode,
+        // pub errors: [bool; 37], reenable when const generics arrive
+        // pub reflex_reason: [bool; 37], reenable when const generics arrive
+        pub errors: RoboErrorHelperStruct,
+        pub robot_mode: RobotMode,
+        pub control_command_success_rate: f64,
+    }
+
+    #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone, PartialEq)]
+    #[repr(packed)]
+    pub struct RoboErrorHelperStruct {
+        pub errors1: [bool; 32],
+        pub errors2: [bool; 9],
+        pub reflex_reason1: [bool; 32],
+        pub reflex_reason2: [bool; 9],
+    }
+
     #[test]
     fn state_inter_size() {
         println!(
             "RobotStateInter size: {}",
             std::mem::size_of::<RobotStateInter>()
         );
-        println!(
-            "bincode RobotStateInter size: {}",
-            bincode::serialize(&RobotStateInter::default())
-                .unwrap()
-                .len()
+        let robot_state_inter = RobotStateInter::default();
+        let robot_state_intern = RobotStateIntern::default();
+
+        assert_eq!(
+            std::mem::size_of::<RobotStateInter>(),
+            std::mem::size_of::<RobotStateIntern>()
         );
+        assert_eq!(
+            bincode::serialize(&robot_state_inter).unwrap().len(),
+            bincode::serialize(&robot_state_intern).unwrap().len()
+        );
+
+        let data_1 = bincode::serialize(&robot_state_inter.robot_mode).unwrap();
+        let data_2 = bincode::serialize(&robot_state_intern.robot_mode).unwrap();
+
+        assert_eq!(data_1, data_2);
     }
 }
