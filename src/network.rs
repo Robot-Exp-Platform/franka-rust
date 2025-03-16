@@ -1,13 +1,17 @@
 use crossbeam::queue::ArrayQueue;
-use robot_behavior::{RobotException, RobotResult, is_hardware_realtime, set_realtime_priority};
+use robot_behavior::{RobotException, RobotResult};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
     fmt::Debug,
     io::{Read, Write},
     net::{TcpStream, UdpSocket},
     sync::{Arc, Mutex, RwLock},
-    thread,
 };
+
+#[cfg(not(feature = "async"))]
+use robot_behavior::{is_hardware_realtime, set_realtime_priority};
+#[cfg(not(feature = "async"))]
+use std::thread;
 
 use crate::types::robot_types::CommandIDConfig;
 
@@ -91,7 +95,65 @@ impl Network {
     //     }
     //     Ok(())
 
-    pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
+    // pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
+    // where
+    //     R: Serialize + CommandIDConfig<u64> + Send + Sync + std::fmt::Debug + 'static,
+    //     S: DeserializeOwned + CommandIDConfig<u64> + Default + Send + Sync + 'static,
+    // {
+    //     #[cfg(target_os = "windows")]
+    //     {
+    //         if !is_firewall_rule_active(port) {
+    //             let (title, fix_step, cleanup_info) = get_localized_message(port);
+    //             eprintln!("\n{}\n\n{}\n\n{}\n", title, fix_step, cleanup_info);
+    //             std::process::exit(1);
+    //         }
+    //     }
+
+    //     let (request_queue, response_queue) = (
+    //         Arc::new(ArrayQueue::<R>::new(1)),
+    //         Arc::new(RwLock::new(S::default())),
+    //     );
+    //     let req_queue = request_queue.clone();
+    //     let res_queue = response_queue.clone();
+
+    //     thread::spawn(move || {
+    //         if is_hardware_realtime() {
+    //             println!("you have realtime permission, enjoy it");
+    //             set_realtime_priority().unwrap();
+    //         } else {
+    //             println!(
+    //                 "you don't have realtime permission, which may cause communication latency"
+    //             );
+    //             thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Max)
+    //                 .unwrap();
+    //         }
+
+    //         let start_time = std::time::Instant::now();
+
+    //         let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
+    //         let mut buffer = vec![0; size_of::<S>()];
+    //         loop {
+    //             let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
+    //             let response: S = bincode::deserialize(&buffer[..size]).unwrap();
+    //             println!("{:?} >udp received data", start_time.elapsed());
+
+    //             if let Some(data) = &mut req_queue.pop() {
+    //                 data.set_command_id(response.command_id());
+    //                 println!("{:?} >udp sending data", start_time.elapsed());
+    //                 let data = bincode::serialize(&data).unwrap();
+    //                 let send_size = udp_socket.send_to(&data, addr).unwrap();
+    //                 if send_size != size_of::<R>() {
+    //                     eprintln!("udp send error");
+    //                 }
+    //             }
+
+    //             *res_queue.write().unwrap() = response;
+    //         }
+    //     });
+    //     (request_queue, response_queue)
+    // }
+
+    pub fn spawn_udp_async<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
     where
         R: Serialize + CommandIDConfig<u64> + Send + Sync + std::fmt::Debug + 'static,
         S: DeserializeOwned + CommandIDConfig<u64> + Default + Send + Sync + 'static,
@@ -104,48 +166,75 @@ impl Network {
                 std::process::exit(1);
             }
         }
-
+        // 创建共享队列
         let (request_queue, response_queue) = (
             Arc::new(ArrayQueue::<R>::new(1)),
             Arc::new(RwLock::new(S::default())),
         );
+
+        // 克隆用于闭包捕获
         let req_queue = request_queue.clone();
         let res_queue = response_queue.clone();
 
-        thread::spawn(move || {
-            if is_hardware_realtime() {
-                println!("you have realtime permission, enjoy it");
-                set_realtime_priority().unwrap();
-            } else {
-                println!(
-                    "you don't have realtime permission, which may cause communication latency"
-                );
-                thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Max)
-                    .unwrap();
-            }
+        // 启动异步任务
+        tokio::spawn(async move {
+            // 绑定 UDP 端口
+            let socket = match UdpSocket::bind(format!("0.0.0.0:{}", port)) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("[UDP] Bind failed: {}", e);
+                    return;
+                }
+            };
 
+            let mut buffer = vec![0u8; size_of::<S>()];
             let start_time = std::time::Instant::now();
 
-            let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
-            let mut buffer = vec![0; size_of::<S>()];
             loop {
-                let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
-                let response: S = bincode::deserialize(&buffer[..size]).unwrap();
-                println!("{:?} >udp received data", start_time.elapsed());
+                // 异步接收数据
+                let (size, addr) = match socket.recv_from(&mut buffer) {
+                    Ok(res) => res,
+                    Err(e) => {
+                        eprintln!("[UDP] Receive error: {}", e);
+                        continue;
+                    }
+                };
 
-                if let Some(data) = &mut req_queue.pop() {
-                    data.set_command_id(response.command_id());
-                    println!("{:?} >udp sending data", start_time.elapsed());
-                    let data = bincode::serialize(&data).unwrap();
-                    let send_size = udp_socket.send_to(&data, addr).unwrap();
-                    if send_size != size_of::<R>() {
-                        eprintln!("udp send error");
+                // 反序列化处理
+                let response = match bincode::deserialize::<S>(&buffer[..size]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("[Deserialize] Error: {}", e);
+                        continue;
+                    }
+                };
+
+                // 处理请求队列
+                if let Some(mut request) = req_queue.pop() {
+                    request.set_command_id(response.command_id());
+                    let serialized = match bincode::serialize(&request) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            eprintln!("[Serialize] Error: {}", e);
+                            return;
+                        }
+                    };
+
+                    match socket.send_to(&serialized, addr) {
+                        Ok(_) => {
+                            println!("{:?} > UDP response sent", start_time.elapsed());
+                        }
+                        Err(e) => {
+                            eprintln!("[UDP] Send error: {}", e);
+                        }
                     }
                 }
 
+                // 更新响应状态
                 *res_queue.write().unwrap() = response;
             }
         });
+
         (request_queue, response_queue)
     }
 }
