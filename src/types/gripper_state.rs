@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use super::robot_types::CommandIDConfig;
 
 #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
-#[repr(C, packed)]
+#[repr(packed)]
 pub struct GripperStateInter {
-    pub message_id: u32,
+    pub message_id: u64,
     pub width: f64,
     pub max_width: f64,
     pub is_grasped: bool,
@@ -40,11 +40,11 @@ impl Into<GripperState> for GripperStateInter {
     }
 }
 
-impl CommandIDConfig for GripperStateInter {
-    fn set_command_id(&mut self, id: u32) {
+impl CommandIDConfig<u64> for GripperStateInter {
+    fn set_command_id(&mut self, id: u64) {
         self.message_id = id;
     }
-    fn command_id(&self) -> u32 {
+    fn command_id(&self) -> u64 {
         self.message_id
     }
 }

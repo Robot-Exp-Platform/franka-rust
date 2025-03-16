@@ -164,7 +164,7 @@ impl<const C: Command, S> From<S> for Response<C, S> {
     }
 }
 
-impl<const C: Command, R> CommandIDConfig for Request<C, R> {
+impl<const C: Command, R> CommandIDConfig<u32> for Request<C, R> {
     fn command_id(&self) -> u32 {
         self.header.command_id
     }
@@ -174,7 +174,7 @@ impl<const C: Command, R> CommandIDConfig for Request<C, R> {
     }
 }
 
-impl<const C: Command, S> CommandIDConfig for Response<C, S> {
+impl<const C: Command, S> CommandIDConfig<u32> for Response<C, S> {
     fn command_id(&self) -> u32 {
         self.header.command_id
     }

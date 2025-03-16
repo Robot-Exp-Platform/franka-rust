@@ -256,9 +256,9 @@ pub struct RobotState {
     pub duration: Duration,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[allow(non_snake_case)]
-#[repr(C, packed)]
+#[repr(packed)]
 pub struct RobotStateInter {
     pub message_id: u64,
     pub O_T_EE: [f64; 16],
@@ -486,12 +486,12 @@ impl Default for RobotStateInter {
     }
 }
 
-impl CommandIDConfig for RobotStateInter {
-    fn set_command_id(&mut self, id: u32) {
-        self.message_id = id as u64;
+impl CommandIDConfig<u64> for RobotStateInter {
+    fn set_command_id(&mut self, id: u64) {
+        self.message_id = id;
     }
-    fn command_id(&self) -> u32 {
-        self.message_id as u32
+    fn command_id(&self) -> u64 {
+        self.message_id
     }
 }
 

@@ -30,8 +30,8 @@ impl Network {
     /// 发送并阻塞接收 tcp 指令
     pub fn tcp_send_and_recv<R, S>(&mut self, request: &mut R) -> RobotResult<S>
     where
-        R: Serialize + CommandIDConfig + Debug,
-        S: DeserializeOwned + CommandIDConfig,
+        R: Serialize + CommandIDConfig<u32> + Debug,
+        S: DeserializeOwned + CommandIDConfig<u32>,
     {
         println!("tcp send {:?}", request);
         if let Some(stream) = &mut self.tcp_stream {
@@ -76,10 +76,25 @@ impl Network {
     //     }
     // }
 
+    // let time = self.start_time.elapsed();
+    //     println!("{:?} >udp sending data", time);
+    //     let bytes_send = self
+    //         .udp_socket
+    //         .send_to(&serialize(data), self.udp_server_address)
+    //         .map_err(|e| FrankaException::NetworkException {
+    //             message: e.to_string(),
+    //         })?;
+    //     if bytes_send != size_of::<T>() {
+    //         return Err(FrankaException::NetworkException {
+    //             message: "libfranka-rs: UDP object could not be send".to_string(),
+    //         });
+    //     }
+    //     Ok(())
+
     pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
     where
-        R: Serialize + CommandIDConfig + Send + Sync + std::fmt::Debug + 'static,
-        S: DeserializeOwned + CommandIDConfig + Default + Send + Sync + 'static,
+        R: Serialize + CommandIDConfig<u64> + Send + Sync + std::fmt::Debug + 'static,
+        S: DeserializeOwned + CommandIDConfig<u64> + Default + Send + Sync + 'static,
     {
         #[cfg(target_os = "windows")]
         {
@@ -109,17 +124,23 @@ impl Network {
                     .unwrap();
             }
 
+            let start_time = std::time::Instant::now();
+
             let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
             let mut buffer = vec![0; size_of::<S>()];
             loop {
                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
                 let response: S = bincode::deserialize(&buffer[..size]).unwrap();
+                println!("{:?} >udp received data", start_time.elapsed());
 
                 if let Some(data) = &mut req_queue.pop() {
-                    println!("send command {:?}", data);
                     data.set_command_id(response.command_id());
+                    println!("{:?} >udp sending data", start_time.elapsed());
                     let data = bincode::serialize(&data).unwrap();
-                    udp_socket.send_to(&data, addr).unwrap();
+                    let send_size = udp_socket.send_to(&data, addr).unwrap();
+                    if send_size != size_of::<R>() {
+                        eprintln!("udp send error");
+                    }
                 }
 
                 *res_queue.write().unwrap() = response;

@@ -269,36 +269,38 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
         self.is_moving = true;
 
         let state = self.robot_state.read().unwrap();
-        let joint = state.q;
+        let joint = state.q_d;
         let v_max: Vec<f64> = FRANKA_ROBOT_MAX_JOINT_VEL
             .iter()
             .map(|x| x * speed)
             .collect();
         let v_max: [f64; 7] = v_max.try_into().expect("slice with incorrect length");
         let a_max = FRANKA_ROBOT_MAX_JOINT_ACC;
-        let j_max = FRANKA_ROBOT_MAX_JOINT_JERK;
         drop(state);
 
-        let path_generate = path_generate::joint_s_curve(&joint, &target, &v_max, &a_max, &j_max);
+        let path_generate = path_generate::joint_simple_4th_curve(&joint, target, &v_max, &a_max);
 
-        let result = self._move(MotionType::Joint(*target).into())?;
-        println!("{:?}", result);
+        self._move(MotionType::Joint(*target).into())?;
         {
             let time = Instant::now();
             loop {
                 let start_time = Instant::now();
-                print!("time: {:?}>", start_time - time);
 
                 let state_inter = self.robot_state.read().unwrap();
-                state_inter.error_result()?;
+                let q = state_inter.q;
                 let q_d = state_inter.q_d;
                 let dq_d = state_inter.dq_d;
                 let ddq_d = state_inter.ddq_d;
-                println!("\tq_d: {:?}\n\tdq_d: {:?}\n\tddq_d: {:?}", q_d, dq_d, ddq_d);
+                println!(
+                    "\tq: {:?}\n\tq_d: {:?}\n\tdq_d: {:?}\n\tddq_d: {:?}",
+                    q, q_d, dq_d, ddq_d
+                );
+                state_inter.error_result()?;
                 let state: ArmState<7> = (*state_inter).into();
                 drop(state_inter);
 
                 let joint = path_generate(start_time - time);
+                println!("\toutput: {:?}\n", joint);
                 let mut motion: RobotCommand = MotionType::Joint(joint).into();
 
                 if state.joint.unwrap() == *target {
@@ -351,7 +353,7 @@ impl ArmRealtimeBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
                 let state = robot_state.read().unwrap();
                 let mut motion: RobotCommand =
                     closure((*state).into(), Duration::from_millis(1)).into();
-                motion.set_command_id(state.message_id as u32);
+                motion.set_command_id(state.message_id);
                 control_queue.force_push(motion);
 
                 let end_time = Instant::now();
@@ -381,7 +383,7 @@ impl ArmRealtimeBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
                 let state = robot_state.read().unwrap();
                 let mut control: RobotCommand =
                     closure((*state).into(), Duration::from_millis(1)).into();
-                control.set_command_id(state.message_id as u32);
+                control.set_command_id(state.message_id);
                 control_queue.force_push(control);
 
                 let end_time = Instant::now();

@@ -46,9 +46,9 @@ pub struct Response<const C: Command, S> {
     pub status: S,
 }
 
-pub trait CommandIDConfig {
-    fn command_id(&self) -> u32;
-    fn set_command_id(&mut self, id: u32);
+pub trait CommandIDConfig<T> {
+    fn command_id(&self) -> T;
+    fn set_command_id(&mut self, id: T);
 }
 
 #[derive(Debug, Deserialize_repr)]
@@ -445,7 +445,7 @@ impl<const C: Command, S> From<S> for Response<C, S> {
     }
 }
 
-impl CommandIDConfig for () {
+impl CommandIDConfig<u32> for () {
     fn command_id(&self) -> u32 {
         0
     }
@@ -453,7 +453,15 @@ impl CommandIDConfig for () {
     fn set_command_id(&mut self, _id: u32) {}
 }
 
-impl<const C: Command, R> CommandIDConfig for Request<C, R> {
+impl CommandIDConfig<u64> for () {
+    fn command_id(&self) -> u64 {
+        0
+    }
+
+    fn set_command_id(&mut self, _id: u64) {}
+}
+
+impl<const C: Command, R> CommandIDConfig<u32> for Request<C, R> {
     fn command_id(&self) -> u32 {
         self.header.command_id
     }
@@ -463,7 +471,7 @@ impl<const C: Command, R> CommandIDConfig for Request<C, R> {
     }
 }
 
-impl<const C: Command, S> CommandIDConfig for Response<C, S> {
+impl<const C: Command, S> CommandIDConfig<u32> for Response<C, S> {
     fn command_id(&self) -> u32 {
         self.header.command_id
     }
