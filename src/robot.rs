@@ -291,13 +291,15 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
 
                 let state_inter = self.robot_state.read().unwrap();
                 state_inter.error_result()?;
-                let message_id = state_inter.message_id as u32;
+                let q_d = state_inter.q_d;
+                let dq_d = state_inter.dq_d;
+                let ddq_d = state_inter.ddq_d;
+                println!("\tq_d: {:?}\n\tdq_d: {:?}\n\tddq_d: {:?}", q_d, dq_d, ddq_d);
                 let state: ArmState<7> = (*state_inter).into();
                 drop(state_inter);
-                println!("q: {:?}", state.joint.unwrap());
+
                 let joint = path_generate(start_time - time);
                 let mut motion: RobotCommand = MotionType::Joint(joint).into();
-                motion.set_command_id(message_id as u32);
 
                 if state.joint.unwrap() == *target {
                     motion.motion.motion_generation_finished = true;
