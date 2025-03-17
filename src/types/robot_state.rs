@@ -497,6 +497,8 @@ impl CommandIDConfig<u64> for RobotStateInter {
 
 #[cfg(test)]
 mod test {
+    use std::mem::offset_of;
+
     use super::*;
 
     #[test]
@@ -599,5 +601,10 @@ mod test {
         let data_2 = bincode::serialize(&robot_state_intern.robot_mode).unwrap();
 
         assert_eq!(data_1, data_2);
+    }
+
+    #[test]
+    fn test_offect() {
+        println!("q_d offset: {}", offset_of!(RobotStateInter, dtau_J));
     }
 }

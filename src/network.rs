@@ -80,80 +80,69 @@ impl Network {
     //     }
     // }
 
-    // let time = self.start_time.elapsed();
-    //     println!("{:?} >udp sending data", time);
-    //     let bytes_send = self
-    //         .udp_socket
-    //         .send_to(&serialize(data), self.udp_server_address)
-    //         .map_err(|e| FrankaException::NetworkException {
-    //             message: e.to_string(),
-    //         })?;
-    //     if bytes_send != size_of::<T>() {
-    //         return Err(FrankaException::NetworkException {
-    //             message: "libfranka-rs: UDP object could not be send".to_string(),
-    //         });
-    //     }
-    //     Ok(())
+    pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
+    where
+        R: Serialize + CommandIDConfig<u64> + Send + Sync + std::fmt::Debug + 'static,
+        S: DeserializeOwned + CommandIDConfig<u64> + Default + Send + Sync + 'static,
+    {
+        #[cfg(target_os = "windows")]
+        {
+            if !is_firewall_rule_active(port) {
+                let (title, fix_step, cleanup_info) = get_localized_message(port);
+                eprintln!("\n{}\n\n{}\n\n{}\n", title, fix_step, cleanup_info);
+                std::process::exit(1);
+            }
+        }
 
-    // pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
-    // where
-    //     R: Serialize + CommandIDConfig<u64> + Send + Sync + std::fmt::Debug + 'static,
-    //     S: DeserializeOwned + CommandIDConfig<u64> + Default + Send + Sync + 'static,
-    // {
-    //     #[cfg(target_os = "windows")]
-    //     {
-    //         if !is_firewall_rule_active(port) {
-    //             let (title, fix_step, cleanup_info) = get_localized_message(port);
-    //             eprintln!("\n{}\n\n{}\n\n{}\n", title, fix_step, cleanup_info);
-    //             std::process::exit(1);
-    //         }
-    //     }
+        let (request_queue, response_queue) = (
+            Arc::new(ArrayQueue::<R>::new(1)),
+            Arc::new(RwLock::new(S::default())),
+        );
+        let req_queue = request_queue.clone();
+        let res_queue = response_queue.clone();
 
-    //     let (request_queue, response_queue) = (
-    //         Arc::new(ArrayQueue::<R>::new(1)),
-    //         Arc::new(RwLock::new(S::default())),
-    //     );
-    //     let req_queue = request_queue.clone();
-    //     let res_queue = response_queue.clone();
+        thread::spawn(move || {
+            if is_hardware_realtime() {
+                println!("you have realtime permission, enjoy it");
+                set_realtime_priority().unwrap();
+            } else {
+                println!(
+                    "you don't have realtime permission, which may cause communication latency"
+                );
+                thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Max)
+                    .unwrap();
+            }
 
-    //     thread::spawn(move || {
-    //         if is_hardware_realtime() {
-    //             println!("you have realtime permission, enjoy it");
-    //             set_realtime_priority().unwrap();
-    //         } else {
-    //             println!(
-    //                 "you don't have realtime permission, which may cause communication latency"
-    //             );
-    //             thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Max)
-    //                 .unwrap();
-    //         }
+            let start_time = std::time::Instant::now();
 
-    //         let start_time = std::time::Instant::now();
+            let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
+            let mut buffer = vec![0; size_of::<S>()];
+            loop {
+                let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
+                // let res_q: [f64; 7] = bincode::deserialize(&buffer[8..63]).unwrap();
+                let response: S = bincode::deserialize(&buffer[..size]).unwrap();
+                println!("{:?} >udp received data", start_time.elapsed());
 
-    //         let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
-    //         let mut buffer = vec![0; size_of::<S>()];
-    //         loop {
-    //             let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
-    //             let response: S = bincode::deserialize(&buffer[..size]).unwrap();
-    //             println!("{:?} >udp received data", start_time.elapsed());
+                if let Some(data) = &mut req_queue.pop() {
+                    data.set_command_id(response.command_id());
+                    print!("{:?} >udp sending data ", start_time.elapsed());
+                    let data = bincode::serialize(&data).unwrap();
+                    // let send_q: [f64; 7] = bincode::deserialize(&buffer[8..63]).unwrap();
+                    // println!("{:?}", send_q);
+                    let send_size = udp_socket.send_to(&data, addr).unwrap();
+                    if send_size != size_of::<R>() {
+                        eprintln!("udp send error");
+                    }
+                }
 
-    //             if let Some(data) = &mut req_queue.pop() {
-    //                 data.set_command_id(response.command_id());
-    //                 println!("{:?} >udp sending data", start_time.elapsed());
-    //                 let data = bincode::serialize(&data).unwrap();
-    //                 let send_size = udp_socket.send_to(&data, addr).unwrap();
-    //                 if send_size != size_of::<R>() {
-    //                     eprintln!("udp send error");
-    //                 }
-    //             }
+                *res_queue.write().unwrap() = response;
+            }
+        });
+        (request_queue, response_queue)
+    }
 
-    //             *res_queue.write().unwrap() = response;
-    //         }
-    //     });
-    //     (request_queue, response_queue)
-    // }
-
-    pub fn spawn_udp_async<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
+    #[cfg(feature = "async")]
+    pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
     where
         R: Serialize + CommandIDConfig<u64> + Send + Sync + std::fmt::Debug + 'static,
         S: DeserializeOwned + CommandIDConfig<u64> + Default + Send + Sync + 'static,

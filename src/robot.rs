@@ -42,7 +42,7 @@ macro_rules! cmd_fn {
 
 impl FrankaRobot {
     pub fn new(ip: &str) -> Self {
-        let (control_queue, robot_state) = Network::spawn_udp_async(PORT_ROBOT_UDP);
+        let (control_queue, robot_state) = Network::spawn_udp_thread(PORT_ROBOT_UDP);
         let mut robot = FrankaRobot {
             network: Network::new(ip, PORT_ROBOT_COMMAND),
             control_queue,
