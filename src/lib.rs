@@ -3,7 +3,7 @@
 mod gripper;
 // mod logger;
 pub mod control;
-mod network;
+pub mod network;
 mod params;
 mod robot;
 pub mod types;

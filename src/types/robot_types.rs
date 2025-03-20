@@ -51,7 +51,7 @@ pub trait CommandIDConfig<T> {
     fn set_command_id(&mut self, id: T);
 }
 
-#[derive(Debug, Deserialize_repr)]
+#[derive(Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum DefaultStatus {
     Success,
@@ -59,7 +59,7 @@ pub enum DefaultStatus {
     CommandRejectedDueToActivatedSafetyFunctions,
 }
 
-#[derive(Debug, Deserialize_repr)]
+#[derive(Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum GetterSetterStatus {
     Success,
@@ -72,7 +72,7 @@ pub enum GetterSetterStatus {
 pub type ConnectRequest = Request<{ Command::Connect }, ConnectData>;
 pub type ConnectResponse = Response<{ Command::Connect }, ConnectStatus>;
 
-#[derive(Debug, Default, Serialize, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 #[repr(packed)]
 pub struct ConnectData {
     pub version: u16,
@@ -86,8 +86,7 @@ pub enum ConnectStatusEnum {
     IncompatibleLibraryVersion,
 }
 
-#[derive(Deserialize)]
-#[repr(packed)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ConnectStatus {
     pub status: ConnectStatusEnum,
     pub version: u16,
@@ -97,7 +96,7 @@ pub struct ConnectStatus {
 pub type MoveRequest = Request<{ Command::Move }, MoveData>;
 pub type MoveResponse = Response<{ Command::Move }, MoveStatus>;
 
-#[derive(Debug, Default, Serialize_repr)]
+#[derive(Debug, Default, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
 pub enum MoveControllerMode {
     #[default]
@@ -106,7 +105,7 @@ pub enum MoveControllerMode {
     ExternalController,
 }
 
-#[derive(Debug, Default, Serialize_repr)]
+#[derive(Debug, Default, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
 pub enum MoveMotionGeneratorMode {
     #[default]
@@ -116,8 +115,7 @@ pub enum MoveMotionGeneratorMode {
     CartesianVelocity,
 }
 
-#[derive(Debug, Serialize)]
-#[repr(packed)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MoveDeviation {
     translation: f64,
     rotation: f64,
@@ -134,7 +132,7 @@ impl Default for MoveDeviation {
     }
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct MoveData {
     pub controller_mode: MoveControllerMode,
     pub motion_generator_mode: MoveMotionGeneratorMode,
@@ -142,7 +140,7 @@ pub struct MoveData {
     pub maximum_goal_deviation: MoveDeviation,
 }
 
-#[derive(Debug, Deserialize_repr)]
+#[derive(Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum MoveStatus {
     Success,
@@ -163,7 +161,7 @@ pub enum MoveStatus {
 pub type StopMoveRequest = Request<{ Command::StopMove }, ()>;
 pub type StopMoveResponse = Response<{ Command::StopMove }, StopMoveStatus>;
 
-#[derive(Debug, Deserialize_repr)]
+#[derive(Debug, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum StopMoveStatus {
     Success,
@@ -180,14 +178,12 @@ pub type GetCartesianLimitResponse =
     Response<{ Command::GetCartesianLimit }, GetCartesianLimitStatus>;
 pub type GetCartesianLimitStatus = DefaultStatus;
 
-#[derive(Debug, Default, Serialize)]
-#[repr(packed)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct GetCartesianLimitData {
     id: i32,
 }
 
-#[derive(Debug, Default, Serialize)]
-#[repr(packed)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct GetCartesianLimitResponseData {
     object_world_size: [f64; 3],
     object_frame: [f64; 16],
@@ -200,7 +196,7 @@ pub type SetCollisionBehaviorRequest =
 pub type SetCollisionBehaviorResponse =
     Response<{ Command::SetCollisionBehavior }, GetterSetterStatus>;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SetCollisionBehaviorData {
     pub lower_torque_thresholds_acceleration: [f64; 7],
     pub upper_torque_thresholds_acceleration: [f64; 7],
@@ -231,8 +227,7 @@ impl Default for SetCollisionBehaviorData {
 pub type SetJointImpedanceRequest = Request<{ Command::SetJointImpedance }, SetJointImpedanceData>;
 pub type SetJointImpedanceResponse = Response<{ Command::SetJointImpedance }, GetterSetterStatus>;
 
-#[derive(Debug, Serialize)]
-#[repr(packed)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SetJointImpedanceData {
     k_theta: [f64; 7],
 }
@@ -251,8 +246,7 @@ pub type SetCartesianImpedanceRequest =
 pub type SetCartesianImpedanceResponse =
     Response<{ Command::SetCartesianImpedance }, GetterSetterStatus>;
 
-#[derive(Debug, Serialize)]
-#[repr(packed)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SetCartesianImpedanceData {
     k_x: [f64; 6],
 }
@@ -269,8 +263,7 @@ impl Default for SetCartesianImpedanceData {
 pub type SetGuidingModeRequest = Request<{ Command::SetGuidingMode }, SetGuidingModeData>;
 pub type SetGuidingModeResponse = Response<{ Command::SetGuidingMode }, GetterSetterStatus>;
 
-#[derive(Debug, Default, Serialize)]
-#[repr(packed)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct SetGuidingModeData {
     guiding_mode: [bool; 6],
     nullspace: bool,
@@ -280,8 +273,7 @@ pub struct SetGuidingModeData {
 pub type SetEEToKRequest = Request<{ Command::SetEEToK }, SetEEToKData>;
 pub type SetEEToKResponse = Response<{ Command::SetEEToK }, GetterSetterStatus>;
 
-#[derive(Debug, Default, Serialize)]
-#[repr(packed)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct SetEEToKData {
     pose_ee_to_k: [f64; 16],
 }
@@ -290,8 +282,7 @@ pub struct SetEEToKData {
 pub type SetNEToEERequest = Request<{ Command::SetNEToEE }, SetNEToEEData>;
 pub type SetNEToEEResponse = Response<{ Command::SetNEToEE }, GetterSetterStatus>;
 
-#[derive(Debug, Default, Serialize)]
-#[repr(packed)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct SetNEToEEData {
     pose_ne_to_ee: [f64; 16],
 }
@@ -300,8 +291,7 @@ pub struct SetNEToEEData {
 pub type SetLoadRequest = Request<{ Command::SetLoad }, SetLoadData>;
 pub type SetLoadResponse = Response<{ Command::SetLoad }, GetterSetterStatus>;
 
-#[derive(Debug, Default, Serialize)]
-#[repr(packed)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct SetLoadData {
     m_load: f64,
     x_cload: [f64; 3],
@@ -312,8 +302,7 @@ pub struct SetLoadData {
 pub type SetFiltersRequest = Request<{ Command::SetFilters }, SetFiltersData>;
 pub type SetFiltersResponse = Response<{ Command::SetFilters }, GetterSetterStatus>;
 
-#[derive(Debug, Default, Serialize)]
-#[repr(packed)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct SetFiltersData {
     joint_position_filter_frequency: f64,
     joint_velocity_filter_frequency: f64,

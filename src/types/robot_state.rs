@@ -256,7 +256,7 @@ pub struct RobotState {
     pub duration: Duration,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
 #[allow(non_snake_case)]
 #[repr(packed)]
 pub struct RobotStateInter {
