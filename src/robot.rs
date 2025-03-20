@@ -279,27 +279,21 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
 
         let path_generate = path_generate::joint_simple_4th_curve(&joint, target, &v_max, &a_max);
 
+        sleep(Duration::from_millis(20));
+
         self._move(MotionType::Joint(*target).into())?;
         {
+            println!("============================");
             let time = Instant::now();
             loop {
                 let start_time = Instant::now();
 
                 let state_inter = self.robot_state.read().unwrap();
-                let q = state_inter.q;
-                let q_d = state_inter.q_d;
-                let dq_d = state_inter.dq_d;
-                let ddq_d = state_inter.ddq_d;
-                println!(
-                    "\tq: {:?}\n\tq_d: {:?}\n\tdq_d: {:?}\n\tddq_d: {:?}",
-                    q, q_d, dq_d, ddq_d
-                );
                 state_inter.error_result()?;
                 let state: ArmState<7> = (*state_inter).into();
                 drop(state_inter);
 
                 let joint = path_generate(start_time - time);
-                println!("\toutput: {:?}\n", joint);
                 let mut motion: RobotCommand = MotionType::Joint(joint).into();
 
                 if state.joint.unwrap() == *target {
@@ -308,6 +302,8 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
                     break;
                 }
                 self.control_queue.force_push(motion);
+
+                println!(">>>>update command");
 
                 let end_time = Instant::now();
                 let elapsed = end_time - start_time;

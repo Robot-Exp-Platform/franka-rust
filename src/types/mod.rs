@@ -1,3 +1,4 @@
+pub mod gripper_command;
 pub mod gripper_state;
 pub mod gripper_types;
 pub mod robot_command;

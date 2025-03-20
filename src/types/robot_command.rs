@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use robot_behavior::{ControlType, MotionType};
 use serde::{Deserialize, Serialize};
 
@@ -98,6 +100,21 @@ impl From<ControlType<7>> for RobotCommand {
                 _ => ControllerCommand::default(),
             },
         }
+    }
+}
+
+impl Display for RobotCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message_id = self.message_id;
+        let q = self.motion.q_c;
+        write!(
+            f,
+            r#"robot command:
+    | message_id: {},
+    | motion:
+        | q_c: {:?}"#,
+            message_id, q
+        )
     }
 }
 
@@ -331,5 +348,11 @@ mod test {
             bincode::deserialize::<RobotCommandPacked>(&command_u8).unwrap()
         );
         println!("command {:?}", command);
+    }
+
+    #[test]
+    fn display_robot_command() {
+        let command = RobotCommand::default();
+        println!("{}", command);
     }
 }

@@ -3,7 +3,7 @@ use robot_behavior::{ArmState, RobotResult};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use std::time::Duration;
+use std::{fmt::Display, time::Duration};
 
 use super::{
     robot_error::{ErrorFlag, FrankaError},
@@ -495,6 +495,31 @@ impl CommandIDConfig<u64> for RobotStateInter {
     }
 }
 
+impl Display for RobotStateInter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let robot_state: RobotState = self.clone().into();
+        let message_id = self.message_id;
+        let success_rate = self.control_command_success_rate;
+        let errors = self.clone().error_result();
+        write!(
+            f,
+            r#"robot state:
+    | message_id: {}, success_rate: {}, errors: {:?},
+    | q: {:?},
+    | q_d: {:?},
+    | dq_d: {:?},
+    | ddq_d: {:?},"#,
+            message_id,
+            success_rate,
+            errors,
+            robot_state.q,
+            robot_state.q_d,
+            robot_state.dq_d,
+            robot_state.ddq_d,
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::mem::offset_of;
@@ -606,5 +631,11 @@ mod test {
     #[test]
     fn test_offect() {
         println!("q_d offset: {}", offset_of!(RobotStateInter, dtau_J));
+    }
+
+    #[test]
+    fn display_robot_state() {
+        let robot_state_inter = RobotStateInter::default();
+        println!("{}", robot_state_inter);
     }
 }

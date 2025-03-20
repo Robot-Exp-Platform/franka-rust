@@ -23,6 +23,10 @@ robot_behavior = { path = "crates/robot_behavior" }
 [target.'cfg(target_os = "windows")'.dependencies]
 sys-locale = "*"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+mio = { version = "*", optional = true, features = ["os-poll", "net"] }
+
 [features]
-default = []
+default = ["mio_udp"]
 async = ["tokio"]
+mio_udp = ["mio"]

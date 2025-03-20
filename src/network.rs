@@ -1,17 +1,20 @@
 use crossbeam::queue::ArrayQueue;
 use robot_behavior::{RobotException, RobotResult};
-use serde::{Serialize, de::DeserializeOwned};
-use std::{
-    fmt::Debug,
-    io::{Read, Write},
-    net::{TcpStream, UdpSocket},
-    sync::{Arc, Mutex, RwLock},
-};
-
 #[cfg(not(feature = "async"))]
 use robot_behavior::{is_hardware_realtime, set_realtime_priority};
+use serde::{Serialize, de::DeserializeOwned};
+use std::{
+    fmt::{Debug, Display},
+    io::{Read, Write},
+    net::TcpStream,
+    sync::{Arc, Mutex, RwLock},
+};
 #[cfg(not(feature = "async"))]
-use std::thread;
+#[cfg(not(feature = "mio_udp"))]
+use std::{net::UdpSocket, thread};
+
+#[cfg(feature = "mio_udp")]
+use mio::{Events, Interest, Token, net::UdpSocket};
 
 use crate::types::robot_types::CommandIDConfig;
 
@@ -80,10 +83,12 @@ impl Network {
     //     }
     // }
 
+    #[cfg(not(feature = "async"))]
+    #[cfg(not(feature = "mio_udp"))]
     pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
     where
-        R: Serialize + CommandIDConfig<u64> + Send + Sync + std::fmt::Debug + 'static,
-        S: DeserializeOwned + CommandIDConfig<u64> + Default + Send + Sync + 'static,
+        R: Serialize + CommandIDConfig<u64> + Display + Send + Sync + 'static,
+        S: DeserializeOwned + CommandIDConfig<u64> + Display + Default + Send + Sync + 'static,
     {
         #[cfg(target_os = "windows")]
         {
@@ -121,14 +126,12 @@ impl Network {
                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
                 // let res_q: [f64; 7] = bincode::deserialize(&buffer[8..63]).unwrap();
                 let response: S = bincode::deserialize(&buffer[..size]).unwrap();
-                println!("{:?} >udp received data", start_time.elapsed());
+                println!("{:?} >{}", start_time.elapsed(), response);
 
                 if let Some(data) = &mut req_queue.pop() {
                     data.set_command_id(response.command_id());
-                    print!("{:?} >udp sending data ", start_time.elapsed());
+                    print!("{:?} >{}", start_time.elapsed(), data);
                     let data = bincode::serialize(&data).unwrap();
-                    // let send_q: [f64; 7] = bincode::deserialize(&buffer[8..63]).unwrap();
-                    // println!("{:?}", send_q);
                     let send_size = udp_socket.send_to(&data, addr).unwrap();
                     if send_size != size_of::<R>() {
                         eprintln!("udp send error");
@@ -138,6 +141,99 @@ impl Network {
                 *res_queue.write().unwrap() = response;
             }
         });
+        (request_queue, response_queue)
+    }
+
+    #[cfg(feature = "mio_udp")]
+    pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
+    where
+        R: Serialize + CommandIDConfig<u64> + Display + Send + Sync + 'static,
+        S: DeserializeOwned + CommandIDConfig<u64> + Display + Default + Send + Sync + 'static,
+    {
+        use std::{
+            net::{IpAddr, SocketAddr},
+            thread,
+            time::Duration,
+        };
+
+        use mio::Poll;
+
+        #[cfg(target_os = "windows")]
+        {
+            if !is_firewall_rule_active(port) {
+                let (title, fix_step, cleanup_info) = get_localized_message(port);
+                eprintln!("\n{}\n\n{}\n\n{}\n", title, fix_step, cleanup_info);
+                std::process::exit(1);
+            }
+        }
+
+        // 创建共享队列
+        let (request_queue, response_queue) = (
+            Arc::new(ArrayQueue::<R>::new(1)),
+            Arc::new(RwLock::new(S::default())),
+        );
+
+        let req_queue = request_queue.clone();
+        let res_queue = response_queue.clone();
+
+        thread::spawn(move || {
+            if is_hardware_realtime() {
+                println!("you have realtime permission, enjoy it");
+                set_realtime_priority().unwrap();
+            } else {
+                println!(
+                    "you don't have realtime permission, which may cause communication latency"
+                );
+                thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Max)
+                    .unwrap();
+            }
+
+            let udp_timeout = Duration::from_secs(1);
+            let ip_addr = IpAddr::from([0, 0, 0, 0]);
+            let udp_addr = SocketAddr::new(ip_addr, port);
+            let mut udp_socket = UdpSocket::bind(udp_addr).unwrap();
+            let mut poll_read_udp = Poll::new().unwrap();
+            poll_read_udp
+                .registry()
+                .register(&mut udp_socket, Token(1), Interest::READABLE)
+                .unwrap();
+            let mut events_udp = Events::with_capacity(1);
+
+            let start_time = std::time::Instant::now();
+            let mut buffer = vec![0; size_of::<S>()];
+            loop {
+                // 处理 UDP 事件
+                poll_read_udp
+                    .poll(&mut events_udp, Some(udp_timeout))
+                    .unwrap();
+                for event in events_udp.iter() {
+                    match event.token() {
+                        Token(1) => {
+                            if event.is_readable() {
+                                let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
+                                while udp_socket.recv_from(&mut buffer).is_ok() {}
+                                let response: S = bincode::deserialize(&buffer[..size]).unwrap();
+                                println!("{:?}> {}", start_time.elapsed(), response);
+
+                                if let Some(data) = &mut req_queue.pop() {
+                                    data.set_command_id(response.command_id());
+                                    println!("{:?}> {}", start_time.elapsed(), data);
+                                    let data = bincode::serialize(&data).unwrap();
+                                    let send_size = udp_socket.send_to(&data, addr).unwrap();
+                                    if send_size != size_of::<R>() {
+                                        eprintln!("udp send error");
+                                    }
+                                }
+
+                                *res_queue.write().unwrap() = response;
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        });
+
         (request_queue, response_queue)
     }
 
