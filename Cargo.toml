@@ -17,16 +17,14 @@ crossbeam-channel = "*"
 crossbeam = "*"
 tokio = { version = "1.0", features = ["full"], optional = true }
 thread-priority = "*"
+libloading = "*"
+libc = "*"
 
 robot_behavior = { path = "crates/robot_behavior" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 sys-locale = "*"
 
-[target.'cfg(target_os = "linux")'.dependencies]
-mio = { version = "*", optional = true, features = ["os-poll", "net"] }
-
 [features]
 default = []
 async = ["tokio"]
-mio_udp = ["mio"]

@@ -1,5 +1,3 @@
-#[cfg(feature = "mio_udp")]
-use mio::{Events, Interest, Token, net::UdpSocket};
 use robot_behavior::{RobotException, RobotResult};
 #[cfg(not(feature = "async"))]
 use robot_behavior::{is_hardware_realtime, set_realtime_priority};
@@ -11,7 +9,6 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 #[cfg(not(feature = "async"))]
-#[cfg(not(feature = "mio_udp"))]
 use std::{net::UdpSocket, thread};
 
 use crate::command_handle::CommandHandle;
@@ -61,6 +58,34 @@ impl Network {
         }
     }
 
+    pub fn tcp_send_and_recv_buffer<R, S>(&mut self, request: &mut R) -> RobotResult<(S, Vec<u8>)>
+    where
+        R: Serialize + CommandIDConfig<u32> + Debug,
+        S: DeserializeOwned + CommandIDConfig<u32>,
+    {
+        println!("tcp send {:?}", request);
+        if let Some(stream) = &mut self.tcp_stream {
+            let command_id = {
+                let mut counter = self.command_counter.lock().unwrap();
+                *counter += 1;
+                *counter
+            };
+            request.set_command_id(command_id);
+            let request = bincode::serialize(&request).unwrap();
+            stream.write_all(&request)?;
+            let mut buffer = Vec::new();
+            stream.read(&mut buffer)?;
+
+            let res = bincode::deserialize(&buffer[..size_of::<S>()])
+                .map_err(|e| RobotException::DeserializeError(e.to_string()))?;
+            Ok((res, buffer[size_of::<S>()..].to_vec()))
+        } else {
+            Err(RobotException::NetworkError(
+                "No active tcp connection".to_string(),
+            ))
+        }
+    }
+
     // /// 检查是否有可接收的 tcp 数据,如果有，则解析为对应的类型，如果没有，直接退出
     // pub fn tcp_recv<S>(&mut self) -> RobotResult<Option<S>>
     // where
@@ -83,7 +108,6 @@ impl Network {
     // }
 
     #[cfg(not(feature = "async"))]
-    #[cfg(not(feature = "mio_udp"))]
     pub fn spawn_udp_thread<R, S>(port: u16) -> (CommandHandle<R, S>, Arc<RwLock<S>>)
     where
         R: Serialize + CommandIDConfig<u64> + Clone + Display + Send + Sync + 'static,
@@ -155,99 +179,6 @@ impl Network {
             }
         });
         (cmd_handle, res_handle)
-    }
-
-    #[cfg(feature = "mio_udp")]
-    pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
-    where
-        R: Serialize + CommandIDConfig<u64> + Display + Send + Sync + 'static,
-        S: DeserializeOwned + CommandIDConfig<u64> + Display + Default + Send + Sync + 'static,
-    {
-        use std::{
-            net::{IpAddr, SocketAddr},
-            thread,
-            time::Duration,
-        };
-
-        use mio::Poll;
-
-        #[cfg(target_os = "windows")]
-        {
-            if !is_firewall_rule_active(port) {
-                let (title, fix_step, cleanup_info) = get_localized_message(port);
-                eprintln!("\n{}\n\n{}\n\n{}\n", title, fix_step, cleanup_info);
-                std::process::exit(1);
-            }
-        }
-
-        // 创建共享队列
-        let (request_queue, response_queue) = (
-            Arc::new(ArrayQueue::<R>::new(1)),
-            Arc::new(RwLock::new(S::default())),
-        );
-
-        let req_queue = request_queue.clone();
-        let res_queue = response_queue.clone();
-
-        thread::spawn(move || {
-            if is_hardware_realtime() {
-                println!("you have realtime permission, enjoy it");
-                set_realtime_priority().unwrap();
-            } else {
-                println!(
-                    "you don't have realtime permission, which may cause communication latency"
-                );
-                thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Max)
-                    .unwrap();
-            }
-
-            let udp_timeout = Duration::from_secs(1);
-            let ip_addr = IpAddr::from([0, 0, 0, 0]);
-            let udp_addr = SocketAddr::new(ip_addr, port);
-            let mut udp_socket = UdpSocket::bind(udp_addr).unwrap();
-            let mut poll_read_udp = Poll::new().unwrap();
-            poll_read_udp
-                .registry()
-                .register(&mut udp_socket, Token(1), Interest::READABLE)
-                .unwrap();
-            let mut events_udp = Events::with_capacity(1);
-
-            let start_time = std::time::Instant::now();
-            let mut buffer = vec![0; size_of::<S>()];
-            loop {
-                // 处理 UDP 事件
-                poll_read_udp
-                    .poll(&mut events_udp, Some(udp_timeout))
-                    .unwrap();
-                for event in events_udp.iter() {
-                    match event.token() {
-                        Token(1) => {
-                            if event.is_readable() {
-                                let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
-                                while udp_socket.recv_from(&mut buffer).is_ok() {}
-                                let response: S = bincode::deserialize(&buffer[..size]).unwrap();
-                                println!("{:?}>udp receive {}", start_time.elapsed(), response);
-
-                                if let Some(data) = &mut req_queue.pop() {
-                                    data.set_command_id(response.command_id());
-                                    println!("{:?}>udp send {}", start_time.elapsed(), data);
-                                    let data = bincode::serialize(&data).unwrap();
-                                    let send_size = udp_socket.send_to(&data, addr).unwrap();
-                                    if send_size != size_of::<R>() {
-                                        eprintln!("udp send error");
-                                    }
-                                }
-
-                                *res_queue.write().unwrap() = response;
-                            }
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-            }
-        });
-
-        (request_queue, response_queue)
     }
 
     #[cfg(feature = "async")]

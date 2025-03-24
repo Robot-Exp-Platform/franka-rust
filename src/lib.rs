@@ -4,6 +4,7 @@ mod gripper;
 // mod logger;
 mod command_handle;
 pub mod control;
+mod model;
 mod network;
 mod params;
 mod robot;

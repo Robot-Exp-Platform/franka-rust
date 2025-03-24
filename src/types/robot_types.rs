@@ -369,11 +369,36 @@ pub struct LoadModelLibraryData {
     system: LoadModelLibrarySystem,
 }
 
-#[derive(Debug, Deserialize_repr)]
+#[derive(Debug, Deserialize_repr, PartialEq)]
 #[repr(u8)]
 pub enum LoadModelLibraryStatus {
     Success,
     Error,
+}
+
+impl Default for LoadModelLibraryData {
+    fn default() -> Self {
+        let arch = if cfg!(target_arch = "x86_64") {
+            LoadModelLibraryArchitecture::X64
+        } else if cfg!(target_arch = "x86") {
+            LoadModelLibraryArchitecture::X86
+        } else if cfg!(target_arch = "aarch64") {
+            LoadModelLibraryArchitecture::Arm64
+        } else {
+            LoadModelLibraryArchitecture::Arm
+        };
+        let sys = if cfg!(target_os = "linux") {
+            LoadModelLibrarySystem::Linux
+        } else if cfg!(target_os = "windows") {
+            LoadModelLibrarySystem::Windows
+        } else {
+            LoadModelLibrarySystem::Linux
+        };
+        LoadModelLibraryData {
+            architecture: arch,
+            system: sys,
+        }
+    }
 }
 
 // ! GetRobotModel Command

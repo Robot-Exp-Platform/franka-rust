@@ -391,8 +391,8 @@ impl Into<RobotState> for RobotStateInter {
 impl Into<ArmState<7>> for RobotStateInter {
     fn into(self) -> ArmState<7> {
         ArmState {
-            joint: Some(self.q),
-            joint_vel: Some(self.dq),
+            joint: Some(self.q_d),
+            joint_vel: Some(self.dq_d),
             joint_acc: None,
             tau: Some(self.tau_J),
             cartesian_euler: None,

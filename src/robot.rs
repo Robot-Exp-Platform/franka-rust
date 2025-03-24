@@ -4,6 +4,9 @@ use robot_behavior::{
     ControlType, MotionType, RobotBehavior, RobotException, RobotResult, utils::path_generate,
 };
 use std::{
+    fs::File,
+    io::Write,
+    path::Path,
     sync::{Arc, Mutex, RwLock},
     thread::sleep,
     time::Duration,
@@ -13,6 +16,7 @@ use crate::{
     FRANKA_EMIKA_DOF, FRANKA_ROBOT_MAX_JOINT_ACC, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION,
     LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
     command_handle::CommandHandle,
+    model::{self, Model},
     network::Network,
     types::{
         robot_command::RobotCommand,
@@ -29,7 +33,7 @@ pub struct FrankaRobot {
 }
 
 macro_rules! cmd_fn {
-    ($fn_name:ident, $command:expr; $arg_name:ident: $arg_type:ty ; $ret_type:ty) => {
+    ($fn_name:ident, $command:expr; $arg_name:ident: $arg_type:ty; $ret_type:ty) => {
         fn $fn_name(&mut self, $arg_name: $arg_type) -> RobotResult<$ret_type> {
             let response: Response<$command, $ret_type> = self
                 .network
@@ -146,6 +150,47 @@ impl FrankaRobot {
         self.set_cartesian_impedance(SetCartesianImpedanceData::default())?;
         Ok(())
     }
+
+    fn download_library(&mut self, download_path: &Path) -> RobotResult<()> {
+        let mut req: LoadModelLibraryRequest = LoadModelLibraryData::default().into();
+        let (res, library_buffer) = self
+            .network
+            .tcp_send_and_recv_buffer::<_, LoadModelLibraryResponse>(&mut req)?;
+
+        if res.status != LoadModelLibraryStatus::Success {
+            return Err(RobotException::ModelException(
+                "Error downloading model library".to_string(),
+            ));
+        }
+
+        let mut file = File::create(download_path).map_err(|_| {
+            RobotException::ModelException("Error writing model to disk:".to_string())
+        })?;
+
+        file.write_all(&library_buffer).map_err(|_| {
+            RobotException::ModelException("Error writing model to disk:".to_string())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn model(&mut self) -> RobotResult<Model> {
+        let model_path = if cfg!(target_os = "linux") {
+            "/tmp/model.so"
+        } else if cfg!(target_os = "windows") {
+            "C:\\tmp\\model.dll"
+        } else {
+            return Err(RobotException::ModelException(
+                "Your platform is not yet supported for Downloading models.".to_string(),
+            ));
+        };
+        let model_path = Path::new(model_path);
+        if !model_path.exists() {
+            self.download_library(model_path)?;
+        }
+        let model = model::Model::new(model_path)?;
+        Ok(model)
+    }
 }
 
 impl RobotBehavior for FrankaRobot {
@@ -243,7 +288,6 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
     fn move_joint(&mut self, target: &[f64; FRANKA_EMIKA_DOF], speed: f64) -> RobotResult<()> {
         self.is_moving = true;
         self._move(MotionType::Joint(*target).into())?;
-        println!("============================");
         sleep(Duration::from_millis(2));
 
         let state = self.robot_state.read().unwrap();
@@ -319,6 +363,7 @@ impl ArmRealtimeBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
         self.is_moving = true;
         let example = ArmState::<FRANKA_EMIKA_DOF>::default();
         self._move(closure(example, Duration::from_millis(1)).into())?;
+        sleep(Duration::from_millis(2));
         self.command_handle
             .set_closure(move |state, duration| closure(state.into(), duration).into());
         Ok(())
