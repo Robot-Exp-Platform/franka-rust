@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::f64::consts::PI;
 use std::marker::ConstParamTy;
+use std::time::Duration;
 
 #[derive(ConstParamTy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
@@ -49,6 +50,9 @@ pub struct Response<const C: Command, S> {
 pub trait CommandIDConfig<T> {
     fn command_id(&self) -> T;
     fn set_command_id(&mut self, id: T);
+    fn time(&self) -> Option<Duration> {
+        None
+    }
 }
 
 #[derive(Debug, Deserialize_repr)]

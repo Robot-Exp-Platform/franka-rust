@@ -493,6 +493,9 @@ impl CommandIDConfig<u64> for RobotStateInter {
     fn command_id(&self) -> u64 {
         self.message_id
     }
+    fn time(&self) -> Option<Duration> {
+        Some(Duration::from_millis(self.message_id))
+    }
 }
 
 impl Display for RobotStateInter {
@@ -500,7 +503,7 @@ impl Display for RobotStateInter {
         let robot_state: RobotState = self.clone().into();
         let message_id = self.message_id;
         let success_rate = self.control_command_success_rate;
-        let errors = self.clone().error_result();
+        let errors = self.error_result();
         write!(
             f,
             r#"robot state:

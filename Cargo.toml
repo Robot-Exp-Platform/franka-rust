@@ -27,6 +27,6 @@ sys-locale = "*"
 mio = { version = "*", optional = true, features = ["os-poll", "net"] }
 
 [features]
-default = ["mio_udp"]
+default = []
 async = ["tokio"]
 mio_udp = ["mio"]

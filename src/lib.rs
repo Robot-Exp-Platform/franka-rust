@@ -2,6 +2,7 @@
 
 mod gripper;
 // mod logger;
+mod command_handle;
 pub mod control;
 mod network;
 mod params;

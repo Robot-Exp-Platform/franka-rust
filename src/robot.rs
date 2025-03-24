@@ -1,4 +1,3 @@
-use crossbeam::queue::ArrayQueue;
 use nalgebra as na;
 use robot_behavior::{
     ArmBehavior, ArmBehaviorExt, ArmRealtimeBehavior, ArmRealtimeBehaviorExt, ArmState,
@@ -6,13 +5,14 @@ use robot_behavior::{
 };
 use std::{
     sync::{Arc, Mutex, RwLock},
-    thread::{self, sleep},
-    time::{Duration, Instant},
+    thread::sleep,
+    time::Duration,
 };
 
 use crate::{
     FRANKA_EMIKA_DOF, FRANKA_ROBOT_MAX_JOINT_ACC, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION,
     LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
+    command_handle::CommandHandle,
     network::Network,
     types::{
         robot_command::RobotCommand,
@@ -23,10 +23,9 @@ use crate::{
 
 pub struct FrankaRobot {
     network: Network,
-    control_queue: Arc<ArrayQueue<RobotCommand>>,
+    command_handle: CommandHandle<RobotCommand, RobotStateInter>,
     robot_state: Arc<RwLock<RobotStateInter>>,
     is_moving: bool,
-    control_handle: Option<thread::JoinHandle<()>>,
 }
 
 macro_rules! cmd_fn {
@@ -42,13 +41,12 @@ macro_rules! cmd_fn {
 
 impl FrankaRobot {
     pub fn new(ip: &str) -> Self {
-        let (control_queue, robot_state) = Network::spawn_udp_thread(PORT_ROBOT_UDP);
+        let (command_handle, robot_state) = Network::spawn_udp_thread(PORT_ROBOT_UDP);
         let mut robot = FrankaRobot {
             network: Network::new(ip, PORT_ROBOT_COMMAND),
-            control_queue,
+            command_handle,
             robot_state,
             is_moving: false,
-            control_handle: None,
         };
         robot.connect().unwrap();
         robot
@@ -210,32 +208,10 @@ impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
 
     fn move_to_async(
         &mut self,
-        target: MotionType<FRANKA_EMIKA_DOF>,
+        _target: MotionType<FRANKA_EMIKA_DOF>,
         _speed: f64,
     ) -> RobotResult<()> {
-        self.is_moving = true;
-        let control_queue = self.control_queue.clone();
-        let robot_state = self.robot_state.clone();
-        self._move(target.into())?;
-        self.control_handle = Some(thread::spawn(move || {
-            loop {
-                let start_time = Instant::now();
-
-                let state = robot_state.read().unwrap();
-                let state: ArmState<7> = (*state).into();
-                if state == target {
-                    break;
-                }
-                control_queue.force_push(target.into());
-
-                let end_time = Instant::now();
-                let elapsed = end_time - start_time;
-                if elapsed < Duration::from_millis(1) {
-                    sleep(Duration::from_millis(1) - elapsed);
-                }
-            }
-        }));
-        Ok(())
+        unimplemented!()
     }
 
     fn move_rel(&mut self, _rel: MotionType<FRANKA_EMIKA_DOF>) -> RobotResult<()> {
@@ -266,51 +242,41 @@ impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
 impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
     fn move_joint(&mut self, target: &[f64; FRANKA_EMIKA_DOF], speed: f64) -> RobotResult<()> {
         self.is_moving = true;
+        self._move(MotionType::Joint(*target).into())?;
+        println!("============================");
+        sleep(Duration::from_millis(2));
 
         let state = self.robot_state.read().unwrap();
         let joint = state.q_d;
-        let v_max: Vec<f64> = FRANKA_ROBOT_MAX_JOINT_VEL
-            .iter()
-            .map(|x| x * speed)
-            .collect();
-        let v_max: [f64; 7] = v_max.try_into().expect("slice with incorrect length");
-        let a_max = FRANKA_ROBOT_MAX_JOINT_ACC;
         drop(state);
+        let mut v_max = FRANKA_ROBOT_MAX_JOINT_VEL;
+        let mut a_max = FRANKA_ROBOT_MAX_JOINT_ACC;
+        // let mut jeck = FRANKA_ROBOT_MAX_JOINT_JERK;
+        for i in 0..FRANKA_EMIKA_DOF {
+            v_max[i] *= speed;
+            a_max[i] *= speed;
+        }
 
         let path_generate = path_generate::joint_simple_4th_curve(&joint, target, &v_max, &a_max);
 
-        sleep(Duration::from_millis(20));
+        self.command_handle
+            .set_closure(move |_, duration| MotionType::Joint(path_generate(duration)).into());
 
-        self._move(MotionType::Joint(*target).into())?;
-        {
-            println!("============================");
-            let time = Instant::now();
-            loop {
-                let start_time = Instant::now();
-
-                let state_inter = self.robot_state.read().unwrap();
-                state_inter.error_result()?;
-                let state: ArmState<7> = (*state_inter).into();
-                drop(state_inter);
-
-                let joint = path_generate(start_time - time);
-                let mut motion: RobotCommand = MotionType::Joint(joint).into();
-
-                if state.joint.unwrap() == *target {
-                    motion.motion.motion_generation_finished = true;
-                    self.control_queue.force_push(motion);
+        loop {
+            let state = self.robot_state.read().unwrap();
+            let joint = state.q_d;
+            drop(state);
+            let mut is_done = true;
+            for i in 0..FRANKA_EMIKA_DOF {
+                if (joint[i] - target[i]).abs() > 0.01 {
+                    is_done = false;
                     break;
                 }
-                self.control_queue.force_push(motion);
-
-                println!(">>>>update command");
-
-                let end_time = Instant::now();
-                let elapsed = end_time - start_time;
-                if elapsed < Duration::from_millis(1) {
-                    sleep(Duration::from_millis(1) - elapsed);
-                }
             }
+            if is_done {
+                break;
+            }
+            sleep(Duration::from_millis(1));
         }
         self.is_moving = false;
         Ok(())
@@ -337,29 +303,13 @@ impl ArmRealtimeBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
         closure: FM,
     ) -> RobotResult<()> {
         self.is_moving = true;
-        let robot_state = self.robot_state.clone();
-        let control_queue = self.control_queue.clone();
         let example = ArmState::<FRANKA_EMIKA_DOF>::default();
         self._move(closure(example, Duration::from_millis(1)).into())?;
-        self.control_handle = Some(thread::spawn(move || {
-            loop {
-                let start_time = Instant::now();
-
-                let state = robot_state.read().unwrap();
-                let mut motion: RobotCommand =
-                    closure((*state).into(), Duration::from_millis(1)).into();
-                motion.set_command_id(state.message_id);
-                control_queue.force_push(motion);
-
-                let end_time = Instant::now();
-                let elapsed = end_time - start_time;
-                if elapsed < Duration::from_millis(1) {
-                    sleep(Duration::from_millis(1) - elapsed);
-                }
-            }
-        }));
+        self.command_handle
+            .set_closure(move |state, duration| closure(state.into(), duration).into());
         Ok(())
     }
+
     fn control_with_closure<
         FC: Fn(ArmState<FRANKA_EMIKA_DOF>, Duration) -> ControlType<FRANKA_EMIKA_DOF> + Send + 'static,
     >(
@@ -367,109 +317,29 @@ impl ArmRealtimeBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
         closure: FC,
     ) -> RobotResult<()> {
         self.is_moving = true;
-        let robot_state = self.robot_state.clone();
-        let control_queue = self.control_queue.clone();
         let example = ArmState::<FRANKA_EMIKA_DOF>::default();
         self._move(closure(example, Duration::from_millis(1)).into())?;
-        self.control_handle = Some(thread::spawn(move || {
-            loop {
-                let start_time = Instant::now();
-
-                let state = robot_state.read().unwrap();
-                let mut control: RobotCommand =
-                    closure((*state).into(), Duration::from_millis(1)).into();
-                control.set_command_id(state.message_id);
-                control_queue.force_push(control);
-
-                let end_time = Instant::now();
-                let elapsed = end_time - start_time;
-                if elapsed < Duration::from_millis(1) {
-                    sleep(Duration::from_millis(1) - elapsed);
-                }
-            }
-        }));
+        self.command_handle
+            .set_closure(move |state, duration| closure(state.into(), duration).into());
         Ok(())
     }
 
     fn move_to_target(&mut self) -> Arc<Mutex<Option<MotionType<FRANKA_EMIKA_DOF>>>> {
-        self.is_moving = true;
-        let control_queue = self.control_queue.clone();
-        let target = Arc::new(Mutex::new(None));
-        let target_clone: Arc<Mutex<Option<MotionType<7>>>> = target.clone();
-        // TODO send move command
-        self.control_handle = Some(thread::spawn(move || {
-            loop {
-                if let Some(motion) = target.lock().unwrap().take() {
-                    control_queue.force_push(motion.into());
-                }
-
-                sleep(Duration::from_millis(1));
-            }
-        }));
-        target_clone
+        unimplemented!()
     }
 
     fn control_to_target(&mut self) -> Arc<Mutex<Option<ControlType<FRANKA_EMIKA_DOF>>>> {
-        self.is_moving = true;
-        let control_queue = self.control_queue.clone();
-        let target = Arc::new(Mutex::new(None));
-        let target_clone: Arc<Mutex<Option<ControlType<7>>>> = target.clone();
-        // TODO send move command
-        self.control_handle = Some(thread::spawn(move || {
-            loop {
-                if let Some(control) = target.lock().unwrap().take() {
-                    control_queue.force_push(control.into());
-                }
-                sleep(Duration::from_millis(1));
-            }
-        }));
-        target_clone
+        unimplemented!()
     }
 }
 
 impl ArmRealtimeBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
     fn move_joint_target(&mut self) -> Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> {
-        self.is_moving = true;
-        let control_queue = self.control_queue.clone();
-        let target = Arc::new(Mutex::new(None));
-        let target_clone: Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> = target.clone();
-        let move_data = MoveData {
-            motion_generator_mode: MoveMotionGeneratorMode::JointPosition,
-            ..MoveData::default()
-        };
-        self._move(move_data).unwrap();
-        self.control_handle = Some(thread::spawn(move || {
-            loop {
-                if let Some(joint) = target.lock().unwrap().take() {
-                    control_queue.force_push(MotionType::Joint(joint).into());
-                }
-
-                sleep(Duration::from_millis(1));
-            }
-        }));
-        target_clone
+        unimplemented!()
     }
 
     fn move_joint_vel_target(&mut self) -> Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> {
-        self.is_moving = true;
-        let control_queue = self.control_queue.clone();
-        let target = Arc::new(Mutex::new(None));
-        let target_clone: Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> = target.clone();
-        let move_data = MoveData {
-            motion_generator_mode: MoveMotionGeneratorMode::JointVelocity,
-            ..MoveData::default()
-        };
-        self._move(move_data).unwrap();
-        self.control_handle = Some(thread::spawn(move || {
-            loop {
-                if let Some(joint_vel) = target.lock().unwrap().take() {
-                    control_queue.force_push(MotionType::JointVel(joint_vel).into());
-                }
-
-                sleep(Duration::from_millis(1));
-            }
-        }));
-        target_clone
+        unimplemented!()
     }
 
     fn move_joint_acc_target(&mut self) -> Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> {
@@ -485,70 +355,14 @@ impl ArmRealtimeBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
     }
 
     fn move_cartesian_homo_target(&mut self) -> Arc<Mutex<Option<[f64; 16]>>> {
-        self.is_moving = true;
-        let control_queue = self.control_queue.clone();
-        let target = Arc::new(Mutex::new(None));
-        let target_clone: Arc<Mutex<Option<[f64; 16]>>> = target.clone();
-        let move_data = MoveData {
-            motion_generator_mode: MoveMotionGeneratorMode::CartesianPosition,
-            controller_mode: MoveControllerMode::CartesianImpedance,
-            ..MoveData::default()
-        };
-        self._move(move_data).unwrap();
-        self.control_handle = Some(thread::spawn(move || {
-            loop {
-                if let Some(cartesian_homo) = target.lock().unwrap().take() {
-                    control_queue.force_push(MotionType::CartesianHomo(cartesian_homo).into());
-                }
-
-                sleep(Duration::from_millis(1));
-            }
-        }));
-        target_clone
+        unimplemented!()
     }
 
     fn move_cartesian_vel_target(&mut self) -> Arc<Mutex<Option<[f64; 6]>>> {
-        self.is_moving = true;
-        let control_queue = self.control_queue.clone();
-        let target = Arc::new(Mutex::new(None));
-        let target_clone: Arc<Mutex<Option<[f64; 6]>>> = target.clone();
-        let move_data = MoveData {
-            motion_generator_mode: MoveMotionGeneratorMode::CartesianVelocity,
-            controller_mode: MoveControllerMode::CartesianImpedance,
-            ..MoveData::default()
-        };
-        self._move(move_data).unwrap();
-        self.control_handle = Some(thread::spawn(move || {
-            loop {
-                if let Some(cartesian_vel) = target.lock().unwrap().take() {
-                    control_queue.force_push(MotionType::CartesianVel(cartesian_vel).into());
-                }
-
-                sleep(Duration::from_millis(1));
-            }
-        }));
-        target_clone
+        unimplemented!()
     }
 
     fn control_tau_target(&mut self) -> Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> {
-        self.is_moving = true;
-        let control_queue = self.control_queue.clone();
-        let target = Arc::new(Mutex::new(None));
-        let target_clone: Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> = target.clone();
-        let move_data = MoveData {
-            controller_mode: MoveControllerMode::ExternalController,
-            ..MoveData::default()
-        };
-        self._move(move_data).unwrap();
-        self.control_handle = Some(thread::spawn(move || {
-            loop {
-                if let Some(force) = target.lock().unwrap().take() {
-                    control_queue.force_push(ControlType::Force(force).into());
-                }
-
-                sleep(Duration::from_millis(1));
-            }
-        }));
-        target_clone
+        unimplemented!()
     }
 }

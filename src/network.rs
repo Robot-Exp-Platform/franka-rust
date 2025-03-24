@@ -1,4 +1,5 @@
-use crossbeam::queue::ArrayQueue;
+#[cfg(feature = "mio_udp")]
+use mio::{Events, Interest, Token, net::UdpSocket};
 use robot_behavior::{RobotException, RobotResult};
 #[cfg(not(feature = "async"))]
 use robot_behavior::{is_hardware_realtime, set_realtime_priority};
@@ -13,9 +14,7 @@ use std::{
 #[cfg(not(feature = "mio_udp"))]
 use std::{net::UdpSocket, thread};
 
-#[cfg(feature = "mio_udp")]
-use mio::{Events, Interest, Token, net::UdpSocket};
-
+use crate::command_handle::CommandHandle;
 use crate::types::robot_types::CommandIDConfig;
 
 #[derive(Default)]
@@ -85,11 +84,20 @@ impl Network {
 
     #[cfg(not(feature = "async"))]
     #[cfg(not(feature = "mio_udp"))]
-    pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
+    pub fn spawn_udp_thread<R, S>(port: u16) -> (CommandHandle<R, S>, Arc<RwLock<S>>)
     where
-        R: Serialize + CommandIDConfig<u64> + Display + Send + Sync + 'static,
-        S: DeserializeOwned + CommandIDConfig<u64> + Display + Default + Send + Sync + 'static,
+        R: Serialize + CommandIDConfig<u64> + Clone + Display + Send + Sync + 'static,
+        S: DeserializeOwned
+            + CommandIDConfig<u64>
+            + Clone
+            + Display
+            + Default
+            + Send
+            + Sync
+            + 'static,
     {
+        use std::time::Duration;
+
         #[cfg(target_os = "windows")]
         {
             if !is_firewall_rule_active(port) {
@@ -99,12 +107,10 @@ impl Network {
             }
         }
 
-        let (request_queue, response_queue) = (
-            Arc::new(ArrayQueue::<R>::new(1)),
-            Arc::new(RwLock::new(S::default())),
-        );
-        let req_queue = request_queue.clone();
-        let res_queue = response_queue.clone();
+        let cmd = CommandHandle::<R, S>::new();
+        let res = Arc::new(RwLock::new(S::default()));
+        let cmd_handle = cmd.clone();
+        let res_handle = res.clone();
 
         thread::spawn(move || {
             if is_hardware_realtime() {
@@ -119,29 +125,36 @@ impl Network {
             }
 
             let start_time = std::time::Instant::now();
+            let mut duration = Duration::from_millis(0);
 
             let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
-            let mut buffer = vec![0; size_of::<S>()];
+            udp_socket
+                .set_read_timeout(Some(Duration::from_micros(1200)))
+                .unwrap();
+            let mut buffer = vec![0; size_of::<S>() * 5];
             loop {
                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
-                // let res_q: [f64; 7] = bincode::deserialize(&buffer[8..63]).unwrap();
+
                 let response: S = bincode::deserialize(&buffer[..size]).unwrap();
                 println!("{:?} >{}", start_time.elapsed(), response);
 
-                if let Some(data) = &mut req_queue.pop() {
+                if let Some(data) = &mut cmd.command(response.clone(), duration) {
                     data.set_command_id(response.command_id());
-                    print!("{:?} >{}", start_time.elapsed(), data);
+                    println!("{:?} >{}", start_time.elapsed(), data);
                     let data = bincode::serialize(&data).unwrap();
                     let send_size = udp_socket.send_to(&data, addr).unwrap();
                     if send_size != size_of::<R>() {
                         eprintln!("udp send error");
                     }
+                    duration += Duration::from_millis(1);
+                } else {
+                    duration = Duration::from_millis(0);
                 }
 
-                *res_queue.write().unwrap() = response;
+                *res.write().unwrap() = response;
             }
         });
-        (request_queue, response_queue)
+        (cmd_handle, res_handle)
     }
 
     #[cfg(feature = "mio_udp")]
@@ -213,11 +226,11 @@ impl Network {
                                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
                                 while udp_socket.recv_from(&mut buffer).is_ok() {}
                                 let response: S = bincode::deserialize(&buffer[..size]).unwrap();
-                                println!("{:?}> {}", start_time.elapsed(), response);
+                                println!("{:?}>udp receive {}", start_time.elapsed(), response);
 
                                 if let Some(data) = &mut req_queue.pop() {
                                     data.set_command_id(response.command_id());
-                                    println!("{:?}> {}", start_time.elapsed(), data);
+                                    println!("{:?}>udp send {}", start_time.elapsed(), data);
                                     let data = bincode::serialize(&data).unwrap();
                                     let send_size = udp_socket.send_to(&data, addr).unwrap();
                                     if send_size != size_of::<R>() {
