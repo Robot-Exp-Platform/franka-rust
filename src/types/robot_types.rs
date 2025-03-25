@@ -28,14 +28,15 @@ pub enum Command {
     GetRobotModel,
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Clone, Copy)]
 pub struct CommandHeader<const C: Command> {
     pub command_id: u32,
     pub size: u32,
 }
 
 #[derive(Debug, Default, Serialize, PartialEq)]
-pub struct Request<const C: Command, D> {
+#[repr(packed)]
+pub struct Request<const C: Command, D: Clone + Copy> {
     pub header: CommandHeader<C>,
     pub data: D,
 }
@@ -76,7 +77,7 @@ pub enum GetterSetterStatus {
 pub type ConnectRequest = Request<{ Command::Connect }, ConnectData>;
 pub type ConnectResponse = Response<{ Command::Connect }, ConnectStatus>;
 
-#[derive(Debug, Default, Serialize, PartialEq)]
+#[derive(Debug, Default, Serialize, PartialEq, Copy, Clone)]
 #[repr(packed)]
 pub struct ConnectData {
     pub version: u16,
@@ -101,7 +102,7 @@ pub struct ConnectStatus {
 pub type MoveRequest = Request<{ Command::Move }, MoveData>;
 pub type MoveResponse = Response<{ Command::Move }, MoveStatus>;
 
-#[derive(Debug, Default, Serialize_repr)]
+#[derive(Debug, Default, Serialize_repr, Copy, Clone)]
 #[repr(u32)]
 pub enum MoveControllerMode {
     #[default]
@@ -110,7 +111,7 @@ pub enum MoveControllerMode {
     ExternalController,
 }
 
-#[derive(Debug, Default, Serialize_repr)]
+#[derive(Debug, Default, Serialize_repr, Copy, Clone)]
 #[repr(u32)]
 pub enum MoveMotionGeneratorMode {
     #[default]
@@ -120,7 +121,7 @@ pub enum MoveMotionGeneratorMode {
     CartesianVelocity,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Copy, Clone)]
 #[repr(packed)]
 pub struct MoveDeviation {
     translation: f64,
@@ -138,7 +139,7 @@ impl Default for MoveDeviation {
     }
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Copy, Clone)]
 pub struct MoveData {
     pub controller_mode: MoveControllerMode,
     pub motion_generator_mode: MoveMotionGeneratorMode,
@@ -184,13 +185,13 @@ pub type GetCartesianLimitResponse =
     Response<{ Command::GetCartesianLimit }, GetCartesianLimitStatus>;
 pub type GetCartesianLimitStatus = DefaultStatus;
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Copy, Clone)]
 #[repr(packed)]
 pub struct GetCartesianLimitData {
     id: i32,
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Copy, Clone)]
 #[repr(packed)]
 pub struct GetCartesianLimitResponseData {
     object_world_size: [f64; 3],
@@ -204,7 +205,7 @@ pub type SetCollisionBehaviorRequest =
 pub type SetCollisionBehaviorResponse =
     Response<{ Command::SetCollisionBehavior }, GetterSetterStatus>;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Copy, Clone)]
 pub struct SetCollisionBehaviorData {
     pub lower_torque_thresholds_acceleration: [f64; 7],
     pub upper_torque_thresholds_acceleration: [f64; 7],
@@ -250,7 +251,7 @@ impl From<f64> for SetCollisionBehaviorData {
 pub type SetJointImpedanceRequest = Request<{ Command::SetJointImpedance }, SetJointImpedanceData>;
 pub type SetJointImpedanceResponse = Response<{ Command::SetJointImpedance }, GetterSetterStatus>;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Copy, Clone)]
 #[repr(packed)]
 pub struct SetJointImpedanceData {
     k_theta: [f64; 7],
@@ -276,7 +277,7 @@ pub type SetCartesianImpedanceRequest =
 pub type SetCartesianImpedanceResponse =
     Response<{ Command::SetCartesianImpedance }, GetterSetterStatus>;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Copy, Clone)]
 #[repr(packed)]
 pub struct SetCartesianImpedanceData {
     k_x: [f64; 6],
@@ -300,7 +301,7 @@ impl From<[f64; 6]> for SetCartesianImpedanceData {
 pub type SetGuidingModeRequest = Request<{ Command::SetGuidingMode }, SetGuidingModeData>;
 pub type SetGuidingModeResponse = Response<{ Command::SetGuidingMode }, GetterSetterStatus>;
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Copy, Clone)]
 #[repr(packed)]
 pub struct SetGuidingModeData {
     guiding_mode: [bool; 6],
@@ -311,7 +312,7 @@ pub struct SetGuidingModeData {
 pub type SetEEToKRequest = Request<{ Command::SetEEToK }, SetEEToKData>;
 pub type SetEEToKResponse = Response<{ Command::SetEEToK }, GetterSetterStatus>;
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Copy, Clone)]
 #[repr(packed)]
 pub struct SetEEToKData {
     pose_ee_to_k: [f64; 16],
@@ -321,7 +322,7 @@ pub struct SetEEToKData {
 pub type SetNEToEERequest = Request<{ Command::SetNEToEE }, SetNEToEEData>;
 pub type SetNEToEEResponse = Response<{ Command::SetNEToEE }, GetterSetterStatus>;
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Copy, Clone)]
 #[repr(packed)]
 pub struct SetNEToEEData {
     pose_ne_to_ee: [f64; 16],
@@ -331,7 +332,7 @@ pub struct SetNEToEEData {
 pub type SetLoadRequest = Request<{ Command::SetLoad }, SetLoadData>;
 pub type SetLoadResponse = Response<{ Command::SetLoad }, GetterSetterStatus>;
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Copy, Clone)]
 #[repr(packed)]
 pub struct SetLoadData {
     m_load: f64,
@@ -343,7 +344,7 @@ pub struct SetLoadData {
 pub type SetFiltersRequest = Request<{ Command::SetFilters }, SetFiltersData>;
 pub type SetFiltersResponse = Response<{ Command::SetFilters }, GetterSetterStatus>;
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Copy, Clone)]
 #[repr(packed)]
 pub struct SetFiltersData {
     joint_position_filter_frequency: f64,
@@ -374,7 +375,7 @@ pub enum AutomaticErrorRecoveryStatus {
 pub type LoadModelLibraryRequest = Request<{ Command::LoadModelLibrary }, LoadModelLibraryData>;
 pub type LoadModelLibraryResponse = Response<{ Command::LoadModelLibrary }, LoadModelLibraryStatus>;
 
-#[derive(Debug, Serialize_repr)]
+#[derive(Serialize_repr, Deserialize_repr, Debug, Copy, Clone)]
 #[repr(u8)]
 pub enum LoadModelLibraryArchitecture {
     X64,
@@ -383,17 +384,18 @@ pub enum LoadModelLibraryArchitecture {
     Arm64,
 }
 
-#[derive(Debug, Serialize_repr)]
+#[derive(Serialize_repr, Deserialize_repr, Debug, Copy, Clone)]
 #[repr(u8)]
 pub enum LoadModelLibrarySystem {
     Linux,
     Windows,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
+#[repr(packed)]
 pub struct LoadModelLibraryData {
-    architecture: LoadModelLibraryArchitecture,
-    system: LoadModelLibrarySystem,
+    pub architecture: LoadModelLibraryArchitecture,
+    pub system: LoadModelLibrarySystem,
 }
 
 #[derive(Debug, Deserialize_repr, PartialEq)]
@@ -432,7 +434,7 @@ impl Default for LoadModelLibraryData {
 pub type GetRobotModelRequest = Request<{ Command::GetRobotModel }, ()>;
 pub type GetRobotModelResponse = Response<{ Command::GetRobotModel }, DefaultStatus>;
 
-impl<const C: Command, D> Request<C, D> {
+impl<const C: Command, D: Clone + Copy> Request<C, D> {
     pub fn size() -> usize {
         std::mem::size_of::<Request<C, D>>() + 4
     }
@@ -477,7 +479,7 @@ impl<'de, const C: Command> Deserialize<'de> for CommandHeader<C> {
     }
 }
 
-impl<const C: Command, D> From<D> for Request<C, D> {
+impl<const C: Command, D: Clone + Copy> From<D> for Request<C, D> {
     fn from(data: D) -> Self {
         Request {
             header: CommandHeader {
@@ -517,7 +519,7 @@ impl CommandIDConfig<u64> for () {
     fn set_command_id(&mut self, _id: u64) {}
 }
 
-impl<const C: Command, R> CommandIDConfig<u32> for Request<C, R> {
+impl<const C: Command, D: Clone + Copy> CommandIDConfig<u32> for Request<C, D> {
     fn command_id(&self) -> u32 {
         self.header.command_id
     }

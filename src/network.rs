@@ -72,6 +72,7 @@ impl Network {
             };
             request.set_command_id(command_id);
             let request = bincode::serialize(&request).unwrap();
+            println!("request :{:?}", request);
             stream.write_all(&request)?;
             let mut buffer = Vec::new();
             stream.read(&mut buffer)?;
@@ -144,27 +145,28 @@ impl Network {
                 println!(
                     "you don't have realtime permission, which may cause communication latency"
                 );
-                thread_priority::set_current_thread_priority(thread_priority::ThreadPriority::Max)
-                    .unwrap();
+                let _ = thread_priority::set_current_thread_priority(
+                    thread_priority::ThreadPriority::Max,
+                );
             }
 
-            let start_time = std::time::Instant::now();
+            // let start_time = std::time::Instant::now();
             let mut duration = Duration::from_millis(0);
 
             let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
             udp_socket
                 .set_read_timeout(Some(Duration::from_micros(1200)))
                 .unwrap();
-            let mut buffer = vec![0; size_of::<S>() * 5];
+            let mut buffer = Vec::new();
             loop {
                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
 
                 let response: S = bincode::deserialize(&buffer[..size]).unwrap();
-                println!("{:?} >{}", start_time.elapsed(), response);
+                // println!("{:?} >{}", start_time.elapsed(), response);
 
                 if let Some(data) = &mut cmd.command(response.clone(), duration) {
                     data.set_command_id(response.command_id());
-                    println!("{:?} >{}", start_time.elapsed(), data);
+                    // println!("{:?} >{}", start_time.elapsed(), data);
                     let data = bincode::serialize(&data).unwrap();
                     let send_size = udp_socket.send_to(&data, addr).unwrap();
                     if send_size != size_of::<R>() {
