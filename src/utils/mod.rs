@@ -1,1 +1,4 @@
-pub mod filters;
+mod filters;
+mod matrix;
+
+pub use matrix::*;

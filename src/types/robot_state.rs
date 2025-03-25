@@ -1,5 +1,5 @@
 use nalgebra as na;
-use robot_behavior::{ArmState, RobotResult};
+use robot_behavior::{ArmState, LoadState, Pose, RobotResult};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -390,15 +390,24 @@ impl Into<RobotState> for RobotStateInter {
 
 impl Into<ArmState<7>> for RobotStateInter {
     fn into(self) -> ArmState<7> {
+        let (m, x, i) = combine_ee_load(
+            self.m_ee,
+            self.F_x_Cee,
+            self.I_ee,
+            self.m_load,
+            self.F_x_Cload,
+            self.I_load,
+        );
         ArmState {
             joint: Some(self.q_d),
             joint_vel: Some(self.dq_d),
             joint_acc: None,
             tau: Some(self.tau_J),
-            cartesian_euler: None,
-            cartesian_quat: None,
-            cartesian_homo: Some(self.O_T_EE),
+            pose_o_to_ee: Some(Pose::Homo(self.O_T_EE)),
+            pose_f_to_ee: Some(Pose::Homo(self.F_T_EE)),
+            pose_ee_to_k: Some(Pose::Homo(self.EE_T_K)),
             cartesian_vel: None,
+            load: Some(LoadState { m, x, i }),
         }
     }
 }

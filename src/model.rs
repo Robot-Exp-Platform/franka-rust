@@ -1,5 +1,5 @@
 use nalgebra::Matrix4;
-use robot_behavior::RobotResult;
+use robot_behavior::{ArmState, Pose, RobotResult};
 use std::fmt;
 use std::path::Path;
 
@@ -268,6 +268,31 @@ impl Model {
             &robot_state.pose_ee_to_k,
         )
     }
+
+    pub fn zero_jacobian_from_arm_state(
+        &self,
+        frame: &Frame,
+        arm_state: &ArmState<7>,
+    ) -> [f64; 42] {
+        let pose_f_to_ee = if let Some(Pose::Homo(pose)) = arm_state.pose_o_to_ee {
+            pose
+        } else {
+            [0.; 16]
+        };
+
+        let pose_ee_to_k = if let Some(Pose::Homo(pose)) = arm_state.pose_ee_to_k {
+            pose
+        } else {
+            [0.; 16]
+        };
+        self.zero_jacobian(
+            frame,
+            &arm_state.joint.unwrap(),
+            &pose_f_to_ee,
+            &pose_ee_to_k,
+        )
+    }
+
     /// Calculates the 7x7 mass matrix. Unit: [kg \times m^2].
     /// # Arguments
     /// * `q` - Joint position.
@@ -342,6 +367,15 @@ impl Model {
             &robot_state.x_total,
         )
     }
+    pub fn coriolis_from_arm_state(&self, arm_state: &ArmState<7>) -> [f64; 7] {
+        self.coriolis(
+            &arm_state.joint.unwrap(),
+            &arm_state.joint_vel.unwrap(),
+            &arm_state.load.as_ref().unwrap().i,
+            arm_state.load.as_ref().unwrap().m,
+            &arm_state.load.as_ref().unwrap().x,
+        )
+    }
     ///  Calculates the gravity vector. Unit: \[Nm\].
     /// # Arguments
     /// * `q` - Joint position.
@@ -381,6 +415,21 @@ impl Model {
             robot_state.m_total,
             &robot_state.x_total,
             gravity_earth.into().unwrap_or(&robot_state.ddpose_o_to_ee),
+        )
+    }
+
+    pub fn gravity_from_arm_state<'a, Grav: Into<Option<&'a [f64; 3]>>>(
+        &self,
+        arm_state: &ArmState<7>,
+        gravity_earth: Grav,
+    ) -> [f64; 7] {
+        self.gravity(
+            &arm_state.joint.unwrap(),
+            arm_state.load.as_ref().unwrap().m,
+            &arm_state.load.as_ref().unwrap().x,
+            gravity_earth
+                .into()
+                .unwrap_or(&arm_state.load.as_ref().unwrap().x),
         )
     }
 }

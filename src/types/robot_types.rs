@@ -231,6 +231,21 @@ impl Default for SetCollisionBehaviorData {
     }
 }
 
+impl From<f64> for SetCollisionBehaviorData {
+    fn from(value: f64) -> Self {
+        SetCollisionBehaviorData {
+            lower_torque_thresholds_acceleration: [value; 7],
+            upper_torque_thresholds_acceleration: [value; 7],
+            lower_torque_thresholds_nominal: [value; 7],
+            upper_torque_thresholds_nominal: [value; 7],
+            lower_force_thresholds_acceleration: [value; 6],
+            upper_force_thresholds_acceleration: [value; 6],
+            lower_force_thresholds_nominal: [value; 6],
+            upper_force_thresholds_nominal: [value; 6],
+        }
+    }
+}
+
 // ! SetJointImpedance Command
 pub type SetJointImpedanceRequest = Request<{ Command::SetJointImpedance }, SetJointImpedanceData>;
 pub type SetJointImpedanceResponse = Response<{ Command::SetJointImpedance }, GetterSetterStatus>;
@@ -246,6 +261,12 @@ impl Default for SetJointImpedanceData {
         SetJointImpedanceData {
             k_theta: [3000., 3000., 3000., 2500., 2500., 2000., 2000.],
         }
+    }
+}
+
+impl From<[f64; 7]> for SetJointImpedanceData {
+    fn from(value: [f64; 7]) -> Self {
+        SetJointImpedanceData { k_theta: value }
     }
 }
 
@@ -266,6 +287,12 @@ impl Default for SetCartesianImpedanceData {
         SetCartesianImpedanceData {
             k_x: [3000., 3000., 3000., 300., 300., 300.],
         }
+    }
+}
+
+impl From<[f64; 6]> for SetCartesianImpedanceData {
+    fn from(value: [f64; 6]) -> Self {
+        SetCartesianImpedanceData { k_x: value }
     }
 }
 
