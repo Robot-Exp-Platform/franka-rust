@@ -157,7 +157,7 @@ impl Network {
             udp_socket
                 .set_read_timeout(Some(Duration::from_micros(1200)))
                 .unwrap();
-            let mut buffer = Vec::new();
+            let mut buffer = vec![0u8; size_of::<S>() * 5];
             loop {
                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
 

@@ -1,4 +1,4 @@
-use libloading::{Library, Symbol};
+use libloading::{Library, Symbol, os};
 use robot_behavior::{RobotException, RobotResult};
 use std::path::Path;
 
@@ -20,6 +20,14 @@ macro_rules! lib_fn {
 
 impl ModelLibrary {
     pub fn new(model_filename: &Path) -> RobotResult<Self> {
+        let libm = if cfg!(target_os = "linux") {
+            unsafe {
+                os::unix::Library::open(Path::new("libm.so.6"), libc::RTLD_NOW | libc::RTLD_GLOBAL)
+            }
+        } else {
+            return Err(RobotException::ModelException("Unsupported OS".to_string()));
+        };
+
         let lib = unsafe { Library::new(model_filename) }
             .map_err(|e| RobotException::ModelException(e.to_string()))?;
 
