@@ -3,12 +3,7 @@
 
 use std::{thread::sleep, time::Duration};
 
-use franka_rust::{
-    FrankaRobot,
-    model::Frame,
-    types::robot_types::{SetCartesianImpedanceData, SetJointImpedanceData},
-    utils::array_to_isometry,
-};
+use franka_rust::{FrankaRobot, model::Frame, utils::array_to_isometry};
 use nalgebra as na;
 use robot_behavior::{ArmRealtimeBehavior, ArmState, ControlType, Pose, RobotResult};
 
@@ -27,8 +22,8 @@ fn main() -> RobotResult<()> {
     let mut robot = FrankaRobot::new("172.16.0.3");
     let model = robot.model()?;
     robot.set_collision_behavior(100.0.into())?;
-    robot.set_joint_impedance(SetJointImpedanceData::default())?;
-    robot.set_cartesian_impedance(SetCartesianImpedanceData::default())?;
+    robot.set_joint_impedance([3000., 3000., 3000., 2500., 2500., 2000., 2000.].into())?;
+    robot.set_cartesian_impedance([3000., 3000., 3000., 300., 300., 300.].into())?;
 
     let state = robot.read_state()?;
     let initial_pose = array_to_isometry(&state.pose_o_to_ee);
@@ -55,13 +50,12 @@ fn main() -> RobotResult<()> {
         }
         let orientation = na::UnitQuaternion::new_normalize(orientation);
         let error_quaternion: na::UnitQuaternion<f64> = orientation.inverse() * orientation_d;
-        let error_tail = (-1.
+        let error_tail: [f64; 3] = (-1.
             * (transform.rotation.to_rotation_matrix()
                 * na::Vector3::new(error_quaternion.i, error_quaternion.j, error_quaternion.k)))
         .into();
 
-        let error =
-            na::Vector6::<f64>::from_partial_diagonal(&combine_vec(&error_head, &error_tail));
+        let error = na::Vector6::<f64>::from_column_slice(&combine_vec(&error_head, &error_tail));
 
         let tau_task = jacobian.transpose() * (-stiffness * error - damping * (jacobian * dq));
         let tau_d = tau_task + coriolis;

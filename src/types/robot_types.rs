@@ -582,7 +582,7 @@ impl<const N: usize> From<ControlType<N>> for MoveData {
                 ControlType::Force(_) => MoveControllerMode::ExternalController,
                 _ => MoveControllerMode::JointImpedance,
             },
-            motion_generator_mode: MoveMotionGeneratorMode::JointPosition,
+            motion_generator_mode: MoveMotionGeneratorMode::JointVelocity,
             maximum_path_deviation: MoveDeviation::default(),
             maximum_goal_deviation: MoveDeviation::default(),
         }

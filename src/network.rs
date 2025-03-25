@@ -150,7 +150,7 @@ impl Network {
                 );
             }
 
-            // let start_time = std::time::Instant::now();
+            let start_time = std::time::Instant::now();
             let mut duration = Duration::from_millis(0);
 
             let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
@@ -162,11 +162,11 @@ impl Network {
                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
 
                 let response: S = bincode::deserialize(&buffer[..size]).unwrap();
-                // println!("{:?} >{}", start_time.elapsed(), response);
+                println!("{:?} >{}", start_time.elapsed(), response);
 
                 if let Some(data) = &mut cmd.command(response.clone(), duration) {
                     data.set_command_id(response.command_id());
-                    // println!("{:?} >{}", start_time.elapsed(), data);
+                    println!("{:?} >{}", start_time.elapsed(), data);
                     let data = bincode::serialize(&data).unwrap();
                     let send_size = udp_socket.send_to(&data, addr).unwrap();
                     if send_size != size_of::<R>() {
