@@ -1,4 +1,6 @@
-use libloading::{Library, Symbol, os};
+#[cfg(target_os = "linux")]
+use libloading::os;
+use libloading::{Library, Symbol};
 use robot_behavior::{RobotException, RobotResult};
 use std::path::Path;
 

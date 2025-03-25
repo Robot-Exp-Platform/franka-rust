@@ -1,7 +1,8 @@
 use nalgebra as na;
 use robot_behavior::{
     ArmBehavior, ArmBehaviorExt, ArmRealtimeBehavior, ArmRealtimeBehaviorExt, ArmState,
-    ControlType, MotionType, RobotBehavior, RobotException, RobotResult, utils::path_generate,
+    ControlType, MotionType, Pose, RobotBehavior, RobotException, RobotResult,
+    utils::path_generate,
 };
 use std::{
     fs::File,
@@ -13,7 +14,8 @@ use std::{
 };
 
 use crate::{
-    FRANKA_EMIKA_DOF, FRANKA_ROBOT_MAX_JOINT_ACC, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION,
+    FRANKA_EMIKA_DOF, FRANKA_ROBOT_MAX_CARTESIAN_ACC, FRANKA_ROBOT_MAX_CARTESIAN_VEL,
+    FRANKA_ROBOT_MAX_JOINT_ACC, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION,
     LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
     command_handle::CommandHandle,
     model::{self, Model},
@@ -23,6 +25,7 @@ use crate::{
         robot_state::{RobotState, RobotStateInter},
         robot_types::*,
     },
+    utils::array_to_isometry,
 };
 
 pub struct FrankaRobot {
@@ -247,6 +250,7 @@ impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
     fn move_to(&mut self, target: MotionType<FRANKA_EMIKA_DOF>, speed: f64) -> RobotResult<()> {
         match target {
             MotionType::Joint(target) => self.move_joint(&target, speed),
+            MotionType::CartesianQuat(target) => self.move_linear_with_quat(&target, speed),
             _ => unimplemented!(),
         }
     }
@@ -323,6 +327,46 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
             sleep(Duration::from_millis(1));
         }
         self.is_moving = false;
+        Ok(())
+    }
+
+    fn move_linear_with_quat(
+        &mut self,
+        target: &nalgebra::Isometry3<f64>,
+        speed: f64,
+    ) -> RobotResult<()> {
+        self.is_moving = true;
+        self._move(
+            MotionType::<7>::CartesianHomo(target.to_homogeneous().as_slice().try_into().unwrap())
+                .into(),
+        )?;
+        sleep(Duration::from_millis(2));
+
+        let state = self.robot_state.read().unwrap();
+        let state: ArmState<FRANKA_EMIKA_DOF> = (*state).into();
+        let pose = if let Some(Pose::Homo(pose)) = state.pose_o_to_ee {
+            array_to_isometry(&pose)
+        } else {
+            na::Isometry3::identity()
+        };
+
+        let v_max = FRANKA_ROBOT_MAX_CARTESIAN_VEL[0] / speed;
+        let a_max = FRANKA_ROBOT_MAX_CARTESIAN_ACC[0] / speed;
+
+        let path_generate =
+            path_generate::cartesian_quat_simple_4th_curve(pose, *target, v_max, a_max);
+
+        self.command_handle.set_closure(move |_, duration| {
+            MotionType::CartesianHomo(
+                path_generate(duration)
+                    .to_homogeneous()
+                    .as_slice()
+                    .try_into()
+                    .unwrap(),
+            )
+            .into()
+        });
+
         Ok(())
     }
 
