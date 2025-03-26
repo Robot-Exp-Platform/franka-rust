@@ -3,6 +3,10 @@ name = "franka_rust"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "franka_rust"
+crate-type = ["cdylib", "staticlib"]
+
 [dependencies]
 serde_repr = "*"
 serde = { version = "1.0", features = ["derive"] }
