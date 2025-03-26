@@ -11,27 +11,28 @@ categories = ["science::robotics"]
 keywords = ["franka", "emika", "panda", "libfranka"]
 
 [dependencies]
-serde_repr = "*"
+serde_repr = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde-big-array = "0.5.1"
-bitflags = "*"
-num-traits = "*"
-num-derive = "*"
-thiserror = "*"
-nalgebra = "*"
-bincode = "*"
-crossbeam-channel = "*"
-crossbeam = "*"
-tokio = { version = "1.0", features = ["full"], optional = true }
-thread-priority = "*"
-libloading = "*"
-libc = "*"
-pyo3 = { version = "*", features = ["extension-module"] }
+bitflags = "2.9"
+num-traits = "0.2"
+num-derive = "0.4"
+thiserror = "2.0"
+nalgebra = "0.33"
+bincode = "2.0"
+crossbeam-channel = "0.5"
+crossbeam = "0.8"
+tokio = { version = "1.44", features = ["full"], optional = true }
+thread-priority = "1.2"
+libloading = "0.8"
+libc = "0.2"
+pyo3 = { version = "0.24", features = ["extension-module"] }
 
-robot_behavior = { path = "crates/robot_behavior" }
+# robot_behavior = { path = "crates/robot_behavior" }
+robot_behavior = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-sys-locale = "*"
+sys-locale = "0.3"
 
 [features]
 default = []
