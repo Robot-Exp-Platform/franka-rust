@@ -36,6 +36,7 @@ impl Network {
         R: Serialize + CommandIDConfig<u32> + Debug,
         S: DeserializeOwned + CommandIDConfig<u32>,
     {
+        #[cfg(feature = "debug")]
         println!("tcp send {:?}", request);
         if let Some(stream) = &mut self.tcp_stream {
             let command_id = {
@@ -63,6 +64,7 @@ impl Network {
         R: Serialize + CommandIDConfig<u32> + Debug,
         S: DeserializeOwned + CommandIDConfig<u32>,
     {
+        #[cfg(feature = "debug")]
         println!("tcp send {:?}", request);
         if let Some(stream) = &mut self.tcp_stream {
             let command_id = {
@@ -72,6 +74,7 @@ impl Network {
             };
             request.set_command_id(command_id);
             let request = bincode::serialize(&request).unwrap();
+            #[cfg(feature = "debug")]
             println!("request :{:?}", request);
             stream.write_all(&request)?;
             let mut buffer = Vec::new();
@@ -150,6 +153,7 @@ impl Network {
                 );
             }
 
+            #[cfg(feature = "debug")]
             let start_time = std::time::Instant::now();
             let mut duration = Duration::from_millis(0);
 
@@ -162,10 +166,12 @@ impl Network {
                 let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
 
                 let response: S = bincode::deserialize(&buffer[..size]).unwrap();
+                #[cfg(feature = "debug")]
                 println!("{:?} >{}", start_time.elapsed(), response);
 
                 if let Some(data) = &mut cmd.command(response.clone(), duration) {
                     data.set_command_id(response.command_id());
+                    #[cfg(feature = "debug")]
                     println!("{:?} >{}", start_time.elapsed(), data);
                     let data = bincode::serialize(&data).unwrap();
                     let send_size = udp_socket.send_to(&data, addr).unwrap();
@@ -280,7 +286,7 @@ fn is_firewall_rule_active(port: u16) -> bool {
     );
 
     let output = Command::new("powershell")
-        .args(&["-Command", &command])
+        .args(["-Command", &command])
         .output();
 
     match output {

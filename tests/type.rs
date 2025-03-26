@@ -17,7 +17,7 @@ mod gripper_tests {
     }
 
     #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-    #[repr(packed)]
+    #[repr(C, packed)]
     pub struct CommandHeader {
         pub command: Command,
         pub command_id: u32,
@@ -25,14 +25,14 @@ mod gripper_tests {
     }
 
     #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-    #[repr(packed)]
+    #[repr(C, packed)]
     pub struct ConnectRequest {
         pub version: u16,
         pub udp_port: u16,
     }
 
     #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-    #[repr(packed)]
+    #[repr(C, packed)]
     pub struct ConnectRequestWithHeader {
         pub header: CommandHeader,
         pub request: ConnectRequest,

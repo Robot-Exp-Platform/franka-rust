@@ -147,6 +147,11 @@ impl FrankaRobot {
         Ok((*state).into())
     }
 
+    pub fn arm_state(&mut self) -> RobotResult<ArmState<FRANKA_EMIKA_DOF>> {
+        let state = self.robot_state.read().unwrap();
+        Ok((*state).into())
+    }
+
     pub fn set_default_behavior(&mut self) -> RobotResult<()> {
         self.set_collision_behavior(SetCollisionBehaviorData::default())?;
         self.set_joint_impedance(SetJointImpedanceData::default())?;
@@ -388,6 +393,18 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
         self._stop_move(())?;
         self.is_moving = false;
         Ok(())
+    }
+
+    fn move_linear_with_homo(&mut self, target: &[f64; 16], speed: f64) -> RobotResult<()> {
+        self.move_linear_with_quat(&array_to_isometry(target), speed)
+    }
+
+    fn move_linear_with_euler(&mut self, target: &[f64; 6], speed: f64) -> RobotResult<()> {
+        let translation = na::Translation3::new(target[0], target[1], target[2]);
+        let rotation =
+            na::Unit::<na::Quaternion<f64>>::from_euler_angles(target[3], target[4], target[5]);
+        let target = na::Isometry3::from_parts(translation, rotation);
+        self.move_linear_with_quat(&target, speed)
     }
 
     fn move_path_prepare(&mut self, _path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {

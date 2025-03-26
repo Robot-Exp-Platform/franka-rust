@@ -258,7 +258,7 @@ pub struct RobotState {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[allow(non_snake_case)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct RobotStateInter {
     pub message_id: u64,
     pub O_T_EE: [f64; 16],
@@ -324,88 +324,88 @@ impl RobotStateInter {
     }
 }
 
-impl Into<RobotState> for RobotStateInter {
-    fn into(self) -> RobotState {
+impl From<RobotStateInter> for RobotState {
+    fn from(val: RobotStateInter) -> Self {
         let (m_total, x_total, i_total) = combine_ee_load(
-            self.m_ee,
-            self.F_x_Cee,
-            self.I_ee,
-            self.m_load,
-            self.F_x_Cload,
-            self.I_load,
+            val.m_ee,
+            val.F_x_Cee,
+            val.I_ee,
+            val.m_load,
+            val.F_x_Cload,
+            val.I_load,
         );
-        let currect_error: ErrorFlag = self.errors.into();
-        let last_motion_error: ErrorFlag = self.reflex_reason.into();
+        let currect_error: ErrorFlag = val.errors.into();
+        let last_motion_error: ErrorFlag = val.reflex_reason.into();
         RobotState {
-            pose_o_to_ee: self.O_T_EE,
-            pose_o_to_ee_d: self.O_T_EE_d,
-            pose_f_to_ee: self.F_T_EE,
-            pose_f_to_ne: self.F_T_NE,
-            pose_ne_to_ee: self.NE_T_EE,
-            pose_ee_to_k: self.EE_T_K,
-            m_ee: self.m_ee,
-            x_ee: self.F_x_Cee,
-            i_ee: self.I_ee,
-            m_load: self.m_load,
-            i_load: self.I_load,
-            x_load: self.F_x_Cload,
+            pose_o_to_ee: val.O_T_EE,
+            pose_o_to_ee_d: val.O_T_EE_d,
+            pose_f_to_ee: val.F_T_EE,
+            pose_f_to_ne: val.F_T_NE,
+            pose_ne_to_ee: val.NE_T_EE,
+            pose_ee_to_k: val.EE_T_K,
+            m_ee: val.m_ee,
+            x_ee: val.F_x_Cee,
+            i_ee: val.I_ee,
+            m_load: val.m_load,
+            i_load: val.I_load,
+            x_load: val.F_x_Cload,
             m_total,
             i_total,
             x_total,
-            elbow: self.elbow,
-            elbow_d: self.elbow_d,
-            tau_j: self.tau_J,
-            tau_j_d: self.tau_J_d,
-            dtau_j: self.dtau_J,
-            q: self.q,
-            q_d: self.q_d,
-            dq: self.dq,
-            dq_d: self.dq_d,
-            ddq_d: self.ddq_d,
-            joint_contact: self.joint_contact,
-            cartesian_contact: self.cartesian_contact,
-            joint_collision: self.joint_collision,
-            cartesian_collision: self.cartesian_collision,
-            tau_ext_hat_filtered: self.tau_ext_hat_filtered,
-            force_ext_in_o: self.O_F_ext_hat_K,
-            force_ext_in_k: self.K_F_ext_hat_K,
-            dpose_o_to_ee_d: self.O_dP_EE_d,
-            ddpose_o_to_ee: self.O_ddP_O,
-            elbow_c: self.elbow_c,
-            delbow_c: self.delbow_c,
-            ddelbow_c: self.ddelbow_c,
-            pose_o_to_ee_c: self.O_T_EE_c,
-            dpose_o_to_ee_c: self.O_dP_EE_c,
-            ddpose_o_to_ee_c: self.O_ddP_EE_c,
-            theta: self.theta,
-            dtheta: self.dtheta,
+            elbow: val.elbow,
+            elbow_d: val.elbow_d,
+            tau_j: val.tau_J,
+            tau_j_d: val.tau_J_d,
+            dtau_j: val.dtau_J,
+            q: val.q,
+            q_d: val.q_d,
+            dq: val.dq,
+            dq_d: val.dq_d,
+            ddq_d: val.ddq_d,
+            joint_contact: val.joint_contact,
+            cartesian_contact: val.cartesian_contact,
+            joint_collision: val.joint_collision,
+            cartesian_collision: val.cartesian_collision,
+            tau_ext_hat_filtered: val.tau_ext_hat_filtered,
+            force_ext_in_o: val.O_F_ext_hat_K,
+            force_ext_in_k: val.K_F_ext_hat_K,
+            dpose_o_to_ee_d: val.O_dP_EE_d,
+            ddpose_o_to_ee: val.O_ddP_O,
+            elbow_c: val.elbow_c,
+            delbow_c: val.delbow_c,
+            ddelbow_c: val.ddelbow_c,
+            pose_o_to_ee_c: val.O_T_EE_c,
+            dpose_o_to_ee_c: val.O_dP_EE_c,
+            ddpose_o_to_ee_c: val.O_ddP_EE_c,
+            theta: val.theta,
+            dtheta: val.dtheta,
             currect_errors: currect_error.into(),
             last_motion_errors: last_motion_error.into(),
-            control_command_success_rate: self.control_command_success_rate,
-            robot_mode: self.robot_mode,
-            duration: Duration::from_millis(self.message_id),
+            control_command_success_rate: val.control_command_success_rate,
+            robot_mode: val.robot_mode,
+            duration: Duration::from_millis(val.message_id),
         }
     }
 }
 
-impl Into<ArmState<7>> for RobotStateInter {
-    fn into(self) -> ArmState<7> {
+impl From<RobotStateInter> for ArmState<7> {
+    fn from(val: RobotStateInter) -> Self {
         let (m, x, i) = combine_ee_load(
-            self.m_ee,
-            self.F_x_Cee,
-            self.I_ee,
-            self.m_load,
-            self.F_x_Cload,
-            self.I_load,
+            val.m_ee,
+            val.F_x_Cee,
+            val.I_ee,
+            val.m_load,
+            val.F_x_Cload,
+            val.I_load,
         );
         ArmState {
-            joint: Some(self.q_d),
-            joint_vel: Some(self.dq_d),
+            joint: Some(val.q_d),
+            joint_vel: Some(val.dq_d),
             joint_acc: None,
-            tau: Some(self.tau_J),
-            pose_o_to_ee: Some(Pose::Homo(self.O_T_EE)),
-            pose_f_to_ee: Some(Pose::Homo(self.F_T_EE)),
-            pose_ee_to_k: Some(Pose::Homo(self.EE_T_K)),
+            tau: Some(val.tau_J),
+            pose_o_to_ee: Some(Pose::Homo(val.O_T_EE)),
+            pose_f_to_ee: Some(Pose::Homo(val.F_T_EE)),
+            pose_ee_to_k: Some(Pose::Homo(val.EE_T_K)),
             cartesian_vel: None,
             load: Some(LoadState { m, x, i }),
         }
@@ -509,7 +509,7 @@ impl CommandIDConfig<u64> for RobotStateInter {
 
 impl Display for RobotStateInter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let robot_state: RobotState = self.clone().into();
+        let robot_state: RobotState = (*self).into();
         let message_id = self.message_id;
         let success_rate = self.control_command_success_rate;
         let errors = self.error_result();
@@ -556,7 +556,7 @@ mod test {
 
     #[derive(Serialize, Default, Deserialize, Debug, Copy, Clone)]
     #[allow(non_snake_case)]
-    #[repr(packed)]
+    #[repr(C, packed)]
     pub struct RobotStateIntern {
         pub message_id: u64,
         pub O_T_EE: [f64; 16],
@@ -608,7 +608,7 @@ mod test {
     }
 
     #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone, PartialEq)]
-    #[repr(packed)]
+    #[repr(C, packed)]
     pub struct RoboErrorHelperStruct {
         pub errors1: [bool; 32],
         pub errors2: [bool; 9],

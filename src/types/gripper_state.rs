@@ -21,7 +21,7 @@ pub struct GripperState {
     pub temperature: u16,
 }
 #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct GripperStateInter {
     pub message_id: u64,
     pub width: f64,
@@ -30,13 +30,13 @@ pub struct GripperStateInter {
     pub temperature: u16,
 }
 
-impl Into<GripperState> for GripperStateInter {
-    fn into(self) -> GripperState {
+impl From<GripperStateInter> for GripperState {
+    fn from(state: GripperStateInter) -> Self {
         GripperState {
-            width: self.width,
-            max_width: self.max_width,
-            is_grasped: self.is_grasped,
-            temperature: self.temperature,
+            width: state.width,
+            max_width: state.max_width,
+            is_grasped: state.is_grasped,
+            temperature: state.temperature,
         }
     }
 }
@@ -52,7 +52,7 @@ impl CommandIDConfig<u64> for GripperStateInter {
 
 impl Display for GripperStateInter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let gripper_state: GripperState = self.clone().into();
+        let gripper_state: GripperState = (*self).into();
         let message_id = self.message_id;
         write!(
             f,

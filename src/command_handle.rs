@@ -4,6 +4,8 @@ use std::{
     time::Duration,
 };
 
+type ControlClosure<R, S> = Option<Box<dyn Fn(S, Duration) -> R + Send>>;
+
 #[derive(Clone, Default)]
 pub struct CommandHandle<R, S>
 where
@@ -11,7 +13,7 @@ where
     S: Display + Clone + Default + Send + Sync + 'static,
 {
     target: Arc<Mutex<Option<R>>>,
-    closure: Arc<Mutex<Option<Box<dyn Fn(S, Duration) -> R + Send>>>>,
+    closure: Arc<Mutex<ControlClosure<R, S>>>,
 }
 
 impl<R, S> CommandHandle<R, S>
@@ -44,11 +46,9 @@ where
 
     pub fn run_closure(&self, state: S, duration: Duration) -> Option<R> {
         let closure_lock = self.closure.lock().unwrap();
-        if let Some(ref closure) = *closure_lock {
-            Some(closure(state, duration))
-        } else {
-            None
-        }
+        (*closure_lock)
+            .as_ref()
+            .map(|closure| closure(state, duration))
     }
 
     pub fn command(&self, state: S, duration: Duration) -> Option<R> {

@@ -35,14 +35,14 @@ pub struct CommandHeader<const C: Command> {
 }
 
 #[derive(Debug, Default, Serialize, PartialEq)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Request<const C: Command, D: Clone + Copy> {
     pub header: CommandHeader<C>,
     pub data: D,
 }
 
 #[derive(Default, Deserialize)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Response<const C: Command, S> {
     pub header: CommandHeader<C>,
     pub status: S,
@@ -78,7 +78,7 @@ pub type ConnectRequest = Request<{ Command::Connect }, ConnectData>;
 pub type ConnectResponse = Response<{ Command::Connect }, ConnectStatus>;
 
 #[derive(Debug, Default, Serialize, PartialEq, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct ConnectData {
     pub version: u16,
     pub udp_port: u16,
@@ -92,7 +92,7 @@ pub enum ConnectStatusEnum {
 }
 
 #[derive(Deserialize)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct ConnectStatus {
     pub status: ConnectStatusEnum,
     pub version: u16,
@@ -122,7 +122,7 @@ pub enum MoveMotionGeneratorMode {
 }
 
 #[derive(Debug, Serialize, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct MoveDeviation {
     translation: f64,
     rotation: f64,
@@ -186,13 +186,13 @@ pub type GetCartesianLimitResponse =
 pub type GetCartesianLimitStatus = DefaultStatus;
 
 #[derive(Debug, Default, Serialize, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct GetCartesianLimitData {
     id: i32,
 }
 
 #[derive(Debug, Default, Serialize, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct GetCartesianLimitResponseData {
     object_world_size: [f64; 3],
     object_frame: [f64; 16],
@@ -252,7 +252,7 @@ pub type SetJointImpedanceRequest = Request<{ Command::SetJointImpedance }, SetJ
 pub type SetJointImpedanceResponse = Response<{ Command::SetJointImpedance }, GetterSetterStatus>;
 
 #[derive(Debug, Serialize, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct SetJointImpedanceData {
     k_theta: [f64; 7],
 }
@@ -278,7 +278,7 @@ pub type SetCartesianImpedanceResponse =
     Response<{ Command::SetCartesianImpedance }, GetterSetterStatus>;
 
 #[derive(Debug, Serialize, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct SetCartesianImpedanceData {
     k_x: [f64; 6],
 }
@@ -302,10 +302,10 @@ pub type SetGuidingModeRequest = Request<{ Command::SetGuidingMode }, SetGuiding
 pub type SetGuidingModeResponse = Response<{ Command::SetGuidingMode }, GetterSetterStatus>;
 
 #[derive(Debug, Default, Serialize, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct SetGuidingModeData {
-    guiding_mode: [bool; 6],
-    nullspace: bool,
+    pub guiding_mode: [bool; 6],
+    pub nullspace: bool,
 }
 
 // ! SetEEToK Command
@@ -313,9 +313,17 @@ pub type SetEEToKRequest = Request<{ Command::SetEEToK }, SetEEToKData>;
 pub type SetEEToKResponse = Response<{ Command::SetEEToK }, GetterSetterStatus>;
 
 #[derive(Debug, Default, Serialize, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct SetEEToKData {
     pose_ee_to_k: [f64; 16],
+}
+
+impl From<[f64; 16]> for SetEEToKData {
+    fn from(value: [f64; 16]) -> Self {
+        SetEEToKData {
+            pose_ee_to_k: value,
+        }
+    }
 }
 
 // ! SetNEToEE Command
@@ -323,9 +331,17 @@ pub type SetNEToEERequest = Request<{ Command::SetNEToEE }, SetNEToEEData>;
 pub type SetNEToEEResponse = Response<{ Command::SetNEToEE }, GetterSetterStatus>;
 
 #[derive(Debug, Default, Serialize, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct SetNEToEEData {
     pose_ne_to_ee: [f64; 16],
+}
+
+impl From<[f64; 16]> for SetNEToEEData {
+    fn from(value: [f64; 16]) -> Self {
+        SetNEToEEData {
+            pose_ne_to_ee: value,
+        }
+    }
 }
 
 // ! SetLoad Command
@@ -333,11 +349,11 @@ pub type SetLoadRequest = Request<{ Command::SetLoad }, SetLoadData>;
 pub type SetLoadResponse = Response<{ Command::SetLoad }, GetterSetterStatus>;
 
 #[derive(Debug, Default, Serialize, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct SetLoadData {
-    m_load: f64,
-    x_cload: [f64; 3],
-    i_load: [f64; 9],
+    pub m_load: f64,
+    pub x_load: [f64; 3],
+    pub i_load: [f64; 9],
 }
 
 // ! SetFilters Command
@@ -345,7 +361,7 @@ pub type SetFiltersRequest = Request<{ Command::SetFilters }, SetFiltersData>;
 pub type SetFiltersResponse = Response<{ Command::SetFilters }, GetterSetterStatus>;
 
 #[derive(Debug, Default, Serialize, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct SetFiltersData {
     joint_position_filter_frequency: f64,
     joint_velocity_filter_frequency: f64,
@@ -392,7 +408,7 @@ pub enum LoadModelLibrarySystem {
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct LoadModelLibraryData {
     pub architecture: LoadModelLibraryArchitecture,
     pub system: LoadModelLibrarySystem,
@@ -539,9 +555,9 @@ impl<const C: Command, S> CommandIDConfig<u32> for Response<C, S> {
     }
 }
 
-impl Into<RobotResult<()>> for GetterSetterStatus {
-    fn into(self) -> RobotResult<()> {
-        match self {
+impl From<GetterSetterStatus> for RobotResult<()> {
+    fn from(value: GetterSetterStatus) -> Self {
+        match value {
             GetterSetterStatus::Success => Ok(()),
             GetterSetterStatus::CommandNotPossibleRejected => {
                 Err(RobotException::UnprocessableInstructionError(

@@ -10,7 +10,7 @@ use super::robot_types::CommandIDConfig;
 ///
 /// 运动生成器指令结构体，包含 关节角度生成器、关节速度生成器、笛卡尔空间生成器、笛卡尔空间速度生成器的指令
 #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct MotionGeneratorCommand {
     /// joint angle command
     /// 关节角度指令
@@ -32,14 +32,14 @@ pub struct MotionGeneratorCommand {
 /// This struct is a command of the controller, including joint torque command
 /// 控制器指令结构体，包含关节力矩指令
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct ControllerCommand {
     /// joint torque command
     pub tau_j_d: [f64; 7],
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct RobotCommand {
     pub message_id: u64,
     /// Motion generator command
@@ -93,10 +93,7 @@ impl From<ControlType<7>> for RobotCommand {
             message_id: 0,
             motion: MotionGeneratorCommand::default(),
             control: match value {
-                ControlType::Force(tau) => ControllerCommand {
-                    tau_j_d: tau,
-                    ..ControllerCommand::default()
-                },
+                ControlType::Force(tau) => ControllerCommand { tau_j_d: tau },
                 _ => ControllerCommand::default(),
             },
         }
@@ -131,7 +128,7 @@ mod test {
 
     #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
     #[allow(non_snake_case)]
-    #[repr(packed)]
+    #[repr(C, packed)]
     pub struct MotionGeneratorCommandPacked {
         pub q_c: [f64; 7],
         pub dq_c: [f64; 7],
@@ -144,13 +141,13 @@ mod test {
 
     #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
     #[allow(non_snake_case)]
-    #[repr(packed)]
+    #[repr(C, packed)]
     pub struct ControllerCommandPacked {
         pub tau_J_d: [f64; 7],
     }
 
     #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
-    #[repr(packed)]
+    #[repr(C, packed)]
     pub struct RobotCommandPacked {
         pub message_id: u64,
         pub motion: MotionGeneratorCommandPacked,
