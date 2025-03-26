@@ -23,6 +23,7 @@ tokio = { version = "1.0", features = ["full"], optional = true }
 thread-priority = "*"
 libloading = "*"
 libc = "*"
+pyo3 = "*"
 
 robot_behavior = { path = "crates/robot_behavior" }
 
@@ -32,3 +33,4 @@ sys-locale = "*"
 [features]
 default = []
 async = ["tokio"]
+debug = []

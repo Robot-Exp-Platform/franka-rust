@@ -280,13 +280,13 @@ impl From<[bool; 41]> for ErrorFlag {
     }
 }
 
-impl Into<[bool; 41]> for ErrorFlag {
-    fn into(self) -> [bool; 41] {
-        let mut value = [false; 41];
-        for (i, value) in value.iter_mut().enumerate() {
-            *value = self.contains(Self::from_bits(1 << i).unwrap());
+impl From<ErrorFlag> for [bool; 41] {
+    fn from(value: ErrorFlag) -> Self {
+        let mut flags = [false; 41];
+        for (i, flag) in flags.iter_mut().enumerate() {
+            *flag = value.contains(ErrorFlag::from_bits(1 << i).unwrap());
         }
-        value
+        flags
     }
 }
 

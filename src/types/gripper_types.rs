@@ -49,7 +49,7 @@ pub type ConnectRequest = Request<{ Command::Connect }, ConnectData>;
 pub type ConnectResponse = Response<{ Command::Connect }, ConnectStatus>;
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct ConnectData {
     pub version: u16,
     pub udp_port: u16,
@@ -71,7 +71,7 @@ pub type GraspResponse = Response<{ Command::Grasp }, GraspStatus>;
 pub type GraspStatus = Status;
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct GraspData {
     pub width: f64,
     pub epsilon: (f64, f64),
@@ -85,7 +85,7 @@ pub type MoveResponse = Response<{ Command::Move }, MoveStatus>;
 pub type MoveStatus = Status;
 
 #[derive(Debug, Serialize, Deserialize)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct MoveData {
     pub width: f64,
     pub speed: f64,
@@ -184,9 +184,9 @@ impl<const C: Command, S> CommandIDConfig<u32> for Response<C, S> {
     }
 }
 
-impl Into<RobotResult<bool>> for Status {
-    fn into(self) -> RobotResult<bool> {
-        match self {
+impl From<Status> for RobotResult<bool> {
+    fn from(value: Status) -> Self {
+        match value {
             Status::Success => Ok(true),
             Status::Fail => Err(RobotException::CommandException(
                 "gripper: Command failed!".to_string(),

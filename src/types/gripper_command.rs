@@ -4,7 +4,7 @@ use std::fmt::Display;
 use super::robot_types::CommandIDConfig;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct GripperCommand {}
 
 impl Display for GripperCommand {
