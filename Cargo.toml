@@ -23,7 +23,7 @@ tokio = { version = "1.0", features = ["full"], optional = true }
 thread-priority = "*"
 libloading = "*"
 libc = "*"
-pyo3 = "*"
+pyo3 = { version = "*", features = ["extension-module"] }
 
 robot_behavior = { path = "crates/robot_behavior" }
 
