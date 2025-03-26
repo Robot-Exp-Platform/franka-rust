@@ -2,6 +2,13 @@
 name = "franka_rust"
 version = "0.1.0"
 edition = "2024"
+authors = ["Yixing <yanjizhou312@163.com>"]
+readme = "README.md"
+repository = "https://github.com/Robot-Exp-Platform/franka-rust"
+license = "Apache-2.0"
+description = "Rust bindings for the Franka Emika Panda robot"
+categories = ["science::robotics"]
+keywords = ["franka", "emika", "panda", "libfranka"]
 
 [dependencies]
 serde_repr = "*"
