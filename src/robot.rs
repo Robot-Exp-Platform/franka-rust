@@ -326,6 +326,7 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
             }
             sleep(Duration::from_millis(1));
         }
+        self._stop_move(())?;
         self.is_moving = false;
         Ok(())
     }
@@ -340,18 +341,19 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
             MotionType::<7>::CartesianHomo(target.to_homogeneous().as_slice().try_into().unwrap())
                 .into(),
         )?;
-        sleep(Duration::from_millis(2));
+        sleep(Duration::from_millis(1));
 
         let state = self.robot_state.read().unwrap();
-        let state: ArmState<FRANKA_EMIKA_DOF> = (*state).into();
-        let pose = if let Some(Pose::Homo(pose)) = state.pose_o_to_ee {
+        let arm_state: ArmState<FRANKA_EMIKA_DOF> = (*state).into();
+        drop(state);
+        let pose = if let Some(Pose::Homo(pose)) = arm_state.pose_o_to_ee {
             array_to_isometry(&pose)
         } else {
-            na::Isometry3::identity()
+            unreachable!()
         };
 
-        let v_max = FRANKA_ROBOT_MAX_CARTESIAN_VEL[0] / speed;
-        let a_max = FRANKA_ROBOT_MAX_CARTESIAN_ACC[0] / speed;
+        let v_max = FRANKA_ROBOT_MAX_CARTESIAN_VEL[0] * speed;
+        let a_max = FRANKA_ROBOT_MAX_CARTESIAN_ACC[0] * speed;
 
         let path_generate =
             path_generate::cartesian_quat_simple_4th_curve(pose, *target, v_max, a_max);
@@ -367,6 +369,24 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
             .into()
         });
 
+        loop {
+            let state = self.robot_state.read().unwrap();
+            let arm_state: ArmState<FRANKA_EMIKA_DOF> = (*state).into();
+            drop(state);
+            let pose = if let Some(Pose::Homo(pose)) = arm_state.pose_o_to_ee {
+                array_to_isometry(&pose)
+            } else {
+                unreachable!()
+            };
+
+            if (target.translation.vector - pose.translation.vector).norm() < 0.01 {
+                break;
+            } else {
+                sleep(Duration::from_millis(1));
+            }
+        }
+        self._stop_move(())?;
+        self.is_moving = false;
         Ok(())
     }
 

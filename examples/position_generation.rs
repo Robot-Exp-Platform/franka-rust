@@ -18,10 +18,7 @@ fn main() -> RobotResult<()> {
         upper_force_thresholds_nominal: [20., 20., 20., 25., 25., 25.],
     })?;
 
-    robot.move_to(MotionType::Joint(FRANKA_ROBOT_DEFAULT_JOINT), 0.7)?;
-
-    let state = robot.read_state()?;
-    println!("pose: {:?}", state.pose_o_to_ee);
+    robot.move_to(MotionType::Joint(FRANKA_ROBOT_DEFAULT_JOINT), 0.3)?;
 
     Ok(())
 }

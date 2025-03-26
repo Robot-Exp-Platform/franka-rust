@@ -1,5 +1,6 @@
-use franka_rust::{FrankaRobot, types::robot_types::SetCollisionBehaviorData};
-use nalgebra as na;
+use franka_rust::{
+    FrankaRobot, types::robot_types::SetCollisionBehaviorData, utils::array_to_isometry,
+};
 use robot_behavior::{ArmBehavior, MotionType, RobotResult};
 
 fn main() -> RobotResult<()> {
@@ -17,7 +18,26 @@ fn main() -> RobotResult<()> {
         upper_force_thresholds_nominal: [20., 20., 20., 25., 25., 25.],
     })?;
 
-    robot.move_to(MotionType::CartesianQuat(na::Isometry3::identity()), 0.5)?;
+    let pose = array_to_isometry(&[
+        0.999988717111279,
+        -0.0017158199764830543,
+        0.0006070528432007165,
+        0.0,
+        -0.0017159793580267732,
+        -0.9999888667416037,
+        0.0002621238143371493,
+        0.0,
+        0.0006066080065316006,
+        -0.00026316761376355145,
+        -0.9999997813847427,
+        0.0,
+        0.30648819513520104,
+        -0.0005332618190956864,
+        0.48708322693240846,
+        1.0,
+    ]);
+
+    robot.move_to(MotionType::CartesianQuat(pose), 0.2)?;
 
     Ok(())
 }

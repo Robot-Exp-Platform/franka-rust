@@ -107,6 +107,7 @@ impl Display for RobotCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let message_id = self.message_id;
         let q = self.motion.q_c;
+        let pose = self.motion.pose_o_to_ee_c;
         let tau = self.control.tau_j_d;
         write!(
             f,
@@ -114,9 +115,10 @@ impl Display for RobotCommand {
     | message_id: {},
     | motion:
         | q_c: {:?},
+        | pose: {:?},
     | control:
         | tau: {:?}"#,
-            message_id, q, tau
+            message_id, q, pose, tau
         )
     }
 }
