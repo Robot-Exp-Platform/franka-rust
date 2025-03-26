@@ -3,7 +3,6 @@
 mod gripper;
 // mod logger;
 mod command_handle;
-pub mod control;
 pub mod ffi;
 pub mod model;
 mod network;
