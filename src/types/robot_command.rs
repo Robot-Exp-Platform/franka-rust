@@ -1,9 +1,19 @@
 use std::fmt::Display;
 
+use libc::stat;
 use robot_behavior::{ControlType, MotionType};
 use serde::{Deserialize, Serialize};
 
-use super::robot_types::CommandIDConfig;
+use crate::utils::{
+    franka_limit_rate_cartesian_pose, franka_limit_rate_cartesian_velocity,
+    franka_limit_rate_joint_positions, franka_limit_rate_joint_velocities,
+    franka_limit_rate_torques,
+};
+
+use super::{
+    robot_state::{RobotState, RobotStateInter},
+    robot_types::{CommandFilter, CommandIDConfig},
+};
 
 /// This struct is a command of the motion generator, including joint angle generator,
 /// joint velocity generator, Cartesian space generator, and Cartesian space velocity generator
@@ -56,6 +66,57 @@ impl CommandIDConfig<u64> for RobotCommand {
     }
     fn set_command_id(&mut self, id: u64) {
         self.message_id = id;
+    }
+}
+
+impl CommandFilter<RobotStateInter> for MotionGeneratorCommand {
+    fn filter(self, state: &RobotStateInter) -> Self {
+        let state: RobotState = state.clone().into();
+        let q_c = self.q_c;
+        let dq_c = self.dq_c;
+        let pose_o_to_ee_c = self.pose_o_to_ee_c;
+        let dpose_o_to_ee_c = self.dpose_o_to_ee_c;
+        let q_c = franka_limit_rate_joint_positions(&q_c, &state.q_d, &state.dq_d, &state.ddq_d);
+        let dq_c = franka_limit_rate_joint_velocities(&dq_c, &state.dq, &state.ddq_d);
+        let pose_o_to_ee_c = franka_limit_rate_cartesian_pose(
+            &pose_o_to_ee_c,
+            &state.pose_o_to_ee_c,
+            &state.dpose_o_to_ee_c,
+            &state.ddpose_o_to_ee_c,
+        );
+        let dpose_o_to_ee_c = franka_limit_rate_cartesian_velocity(
+            &dpose_o_to_ee_c,
+            &state.ddpose_o_to_ee_c,
+            &state.ddpose_o_to_ee_c,
+        );
+        MotionGeneratorCommand {
+            q_c,
+            dq_c,
+            pose_o_to_ee_c,
+            dpose_o_to_ee_c,
+            elbow_c: self.elbow_c,
+            valid_elbow: self.valid_elbow,
+            motion_generation_finished: self.motion_generation_finished,
+        }
+    }
+}
+
+impl CommandFilter<RobotStateInter> for ControllerCommand {
+    fn filter(self, state: &RobotStateInter) -> Self {
+        let tau_j_d = self.tau_j_d;
+        let tau_j = state.tau_J;
+        let tau_j_d = franka_limit_rate_torques(&tau_j_d, &tau_j);
+        ControllerCommand { tau_j_d }
+    }
+}
+
+impl CommandFilter<RobotStateInter> for RobotCommand {
+    fn filter(self, state: &RobotStateInter) -> Self {
+        RobotCommand {
+            message_id: self.message_id,
+            motion: self.motion.filter(state),
+            control: self.control.filter(state),
+        }
     }
 }
 

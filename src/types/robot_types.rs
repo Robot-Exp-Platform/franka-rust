@@ -56,6 +56,10 @@ pub trait CommandIDConfig<T> {
     }
 }
 
+pub trait CommandFilter<S> {
+    fn filter(self, state: &S) -> Self;
+}
+
 #[derive(Debug, Deserialize_repr)]
 #[repr(u8)]
 pub enum DefaultStatus {

@@ -8,7 +8,7 @@ This library is part of the [Universal Robot Driver Project](https://github.com/
 
 During implementation, we referenced both [libfranka](https://github.com/frankaemika/libfranka) and [libfranka-rs](https://github.com/marcbone/libfranka-rs). Special thanks to open-source contributors, especially [marcbone](https://github.com/marcbone) - their library provided significant assistance! This implementation is not intended to be a direct replica of the official approach, but rather follows a more **idiomatic Rust** methodology.
 
-Additionally, the official driver implementation has limited support for non-`Ubuntu` systems and high dependency on real-time kernels. In this library, we make real-time kernels an optional dependency. While optimized for users with real-time kernels, we strive to provide support for platforms without real-time kernels or with performance constraints.
+Additionally, the official driver implementation has limited support for non-`Ubuntu` systems and high dependency on real-time kernels. In this library, we make real-time kernels an optional dependency. We strive to provide support for platforms without real-time kernels or with performance constraints.
 
 | OS         | Architecture | Support |
 | ---------- | ------------ | ------- |
@@ -51,7 +51,7 @@ This library also aims to support multiple language bindings through our unified
   - [x] Cartesian position control
   - [x] Cartesian velocity control
   - [x] Torque control
-- [ ] Trajectory tracking interfaces
+- [ ] Handler tracking interfaces
   - [ ] Joint position tracking
   - [ ] Joint velocity tracking
   - [ ] Cartesian position tracking
@@ -96,3 +96,8 @@ fn main() -> RobotResult<()> {
 This code connects to a Franka Emika robot at `172.16.0.3` and performs a blocking move to `FRANKA_ROBOT_DEFAULT_JOINT`.
 
 Simple, right? Give it a try!
+
+## TODO
+
+- [ ] more examples
+- [ ] handler interface

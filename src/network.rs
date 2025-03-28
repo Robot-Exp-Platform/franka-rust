@@ -12,7 +12,7 @@ use std::{
 use std::{net::UdpSocket, thread};
 
 use crate::command_handle::CommandHandle;
-use crate::types::robot_types::CommandIDConfig;
+use crate::types::robot_types::{CommandFilter, CommandIDConfig};
 
 #[derive(Default)]
 pub struct Network {
@@ -114,7 +114,14 @@ impl Network {
     #[cfg(not(feature = "async"))]
     pub fn spawn_udp_thread<R, S>(port: u16) -> (CommandHandle<R, S>, Arc<RwLock<S>>)
     where
-        R: Serialize + CommandIDConfig<u64> + Clone + Display + Send + Sync + 'static,
+        R: Serialize
+            + CommandIDConfig<u64>
+            + CommandFilter<S>
+            + Clone
+            + Display
+            + Send
+            + Sync
+            + 'static,
         S: DeserializeOwned
             + CommandIDConfig<u64>
             + Clone
@@ -169,7 +176,7 @@ impl Network {
                 #[cfg(feature = "debug")]
                 println!("{:?} >{}", start_time.elapsed(), response);
 
-                if let Some(data) = &mut cmd.command(response.clone(), duration) {
+                if let Some(data) = &mut cmd.command(&response, duration) {
                     data.set_command_id(response.command_id());
                     #[cfg(feature = "debug")]
                     println!("{:?} >{}", start_time.elapsed(), data);

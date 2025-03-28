@@ -431,7 +431,7 @@ impl ArmRealtimeBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
         let example = ArmState::<FRANKA_EMIKA_DOF>::default();
         self._move(closure(example, Duration::from_millis(1)).into())?;
         self.command_handle
-            .set_closure(move |state, duration| closure(state.into(), duration).into());
+            .set_closure(move |state, duration| closure((*state).into(), duration).into());
         Ok(())
     }
 
@@ -447,7 +447,7 @@ impl ArmRealtimeBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
         sleep(Duration::from_millis(2));
         self.command_handle.set_closure(move |state, duration| {
             state.error_result().unwrap();
-            closure(state.into(), duration).into()
+            closure((*state).into(), duration).into()
         });
         Ok(())
     }

@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-use super::robot_types::CommandIDConfig;
+use super::{
+    gripper_state::GripperStateInter,
+    robot_types::{CommandFilter, CommandIDConfig},
+};
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
 #[repr(C, packed)]
@@ -17,5 +20,11 @@ impl CommandIDConfig<u64> for GripperCommand {
     fn set_command_id(&mut self, _id: u64) {}
     fn command_id(&self) -> u64 {
         0
+    }
+}
+
+impl CommandFilter<GripperStateInter> for GripperCommand {
+    fn filter(self, _: &GripperStateInter) -> Self {
+        GripperCommand {}
     }
 }
