@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use libc::stat;
 use robot_behavior::{ControlType, MotionType};
 use serde::{Deserialize, Serialize};
 
@@ -71,7 +70,7 @@ impl CommandIDConfig<u64> for RobotCommand {
 
 impl CommandFilter<RobotStateInter> for MotionGeneratorCommand {
     fn filter(self, state: &RobotStateInter) -> Self {
-        let state: RobotState = state.clone().into();
+        let state: RobotState = (*state).into();
         let q_c = self.q_c;
         let dq_c = self.dq_c;
         let pose_o_to_ee_c = self.pose_o_to_ee_c;
