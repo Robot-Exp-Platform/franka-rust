@@ -37,7 +37,7 @@ fn main() -> RobotResult<()> {
         1.0,
     ]);
 
-    robot.move_to(MotionType::CartesianQuat(pose), 0.2)?;
+    robot.move_to(MotionType::CartesianQuat(pose), 0.4)?;
 
     Ok(())
 }

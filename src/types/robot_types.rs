@@ -632,4 +632,9 @@ mod tests {
         //     .is_ok()
         // );
     }
+
+    #[test]
+    fn type_size() {
+        println!("{}", LoadModelLibraryResponse::size());
+    }
 }

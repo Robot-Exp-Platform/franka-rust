@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use franka_rust::{
     FrankaRobot,
     types::robot_state::{RobotState, RobotStateInter},
@@ -7,7 +9,8 @@ use robot_behavior::RobotResult;
 fn main() -> RobotResult<()> {
     let mut robot = FrankaRobot::new("172.16.0.3");
 
-    let model = robot.model()?;
+    let path = Path::new("./model.so");
+    let model = robot.model_from_path(path)?;
     let robot_state: RobotState = RobotStateInter::default().into();
 
     println!("mass from state: {:?}", model.mass_from_state(&robot_state));

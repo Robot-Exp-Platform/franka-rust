@@ -194,6 +194,14 @@ impl FrankaRobot {
         let model = model::FrankaModel::new(model_path)?;
         Ok(model)
     }
+
+    pub fn model_from_path(&mut self, model_path: &Path) -> RobotResult<FrankaModel> {
+        if !model_path.exists() {
+            self.download_library(model_path)?;
+        }
+        let model = model::FrankaModel::new(model_path)?;
+        Ok(model)
+    }
 }
 
 impl RobotBehavior for FrankaRobot {
@@ -327,7 +335,7 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
             }
             sleep(Duration::from_millis(1));
         }
-        self._stop_move(())?;
+        let _ = self._stop_move(());
         self.is_moving = false;
         Ok(())
     }
@@ -386,7 +394,7 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
                 sleep(Duration::from_millis(1));
             }
         }
-        self._stop_move(())?;
+        let _ = self._stop_move(());
         self.is_moving = false;
         Ok(())
     }
