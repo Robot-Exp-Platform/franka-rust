@@ -25,7 +25,7 @@ fn main() -> RobotResult<()> {
     robot.set_joint_impedance([3000., 3000., 3000., 2500., 2500., 2000., 2000.].into())?;
     robot.set_cartesian_impedance([3000., 3000., 3000., 300., 300., 300.].into())?;
 
-    let state = robot.read_state()?;
+    let state = robot.read_franka_state()?;
     let initial_pose = array_to_isometry(&state.pose_o_to_ee);
     let position_d = initial_pose.translation.vector;
     let orientation_d = initial_pose.rotation;

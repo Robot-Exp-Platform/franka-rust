@@ -1,18 +1,24 @@
+use nalgebra as na;
 use pyo3::{
     Bound, PyResult,
     exceptions::PyException,
     pyclass, pymethods, pymodule,
     types::{PyModule, PyModuleMethods},
 };
-use robot_behavior::{ArmBehaviorExt, RobotException, ffi::PyArmState7};
+use robot_behavior::{ArmBehavior, ArmBehaviorExt, RobotException, ffi::PyArmState7};
 
-use crate::{FRANKA_EMIKA_DOF, FrankaGripper, FrankaRobot, types::robot_types::*};
+use crate::{
+    FRANKA_EMIKA_DOF, FrankaGripper, FrankaRobot, model::FrankaModel, types::robot_types::*,
+};
 
 #[pyclass(name = "FrankaRobot")]
 pub struct PyFrankaRobot(FrankaRobot);
 
 #[pyclass(name = "FrankaGripper")]
 pub struct PyFrankaGripper(FrankaGripper);
+
+#[pyclass(name = "RobotModel")]
+pub struct PyFrankaModel(FrankaModel);
 
 // #[pyclass(name = "RobotState")]
 // pub struct PyRobotState(RobotState);
@@ -90,17 +96,17 @@ impl PyFrankaRobot {
     //     Ok(PyRobotState(self.0.read_state().map_err(map_err)?))
     // }
 
-    fn arm_state(&mut self) -> PyResult<PyArmState7> {
-        self.0.arm_state().map_err(map_err).map(PyArmState7::from)
+    fn read_state(&mut self) -> PyResult<PyArmState7> {
+        self.0.read_state().map_err(map_err).map(PyArmState7::from)
     }
 
     fn set_default_behavior(&mut self) -> PyResult<()> {
         self.0.set_default_behavior().map_err(map_err)
     }
 
-    // fn model(&mut self) -> PyResult<Model> {
-    //     self.0.model().map_err(map_err)
-    // }
+    fn model(&mut self) -> PyResult<PyFrankaModel> {
+        Ok(PyFrankaModel(self.0.model().map_err(map_err)?))
+    }
 
     // fn move_to(&mut self, target: MotionType<FRANKA_EMIKA_DOF>, speed: f64) -> PyResult<()> {
     //     self.0.move_to(target, speed).map_err(map_err)
@@ -110,15 +116,20 @@ impl PyFrankaRobot {
         self.0.move_joint(&target, speed).map_err(map_err)
     }
 
-    // fn move_linear_with_quat(
-    //     &mut self,
-    //     target: &nalgebra::Isometry3<f64>,
-    //     speed: f64,
-    // ) -> PyResult<()> {
-    //     self.0
-    //         .move_linear_with_quat(target.into(), speed)
-    //         .map_err(map_err)
-    // }
+    fn move_linear_with_quat(
+        &mut self,
+        rotation_quat: [f64; 4],
+        translation: [f64; 3],
+        speed: f64,
+    ) -> PyResult<()> {
+        let target = na::Isometry3::from_parts(
+            na::Translation3::from(translation),
+            na::UnitQuaternion::new_normalize(rotation_quat.into()),
+        );
+        self.0
+            .move_linear_with_quat(&target, speed)
+            .map_err(map_err)
+    }
 
     fn move_linear_with_homo(&mut self, target: [f64; 16], speed: f64) -> PyResult<()> {
         self.0
@@ -174,10 +185,44 @@ impl PyFrankaGripper {
     // }
 }
 
+#[pymethods]
+impl PyFrankaModel {
+    #[new]
+    fn new(path: &str) -> PyResult<Self> {
+        Ok(PyFrankaModel(FrankaModel::new(path).map_err(map_err)?))
+    }
+
+    fn __repr__(&self) -> String {
+        "FrankaModel".to_string()
+    }
+
+    fn coriolis(
+        &self,
+        q: [f64; FRANKA_EMIKA_DOF],
+        dq: [f64; FRANKA_EMIKA_DOF],
+        m: f64,
+        x: [f64; 3],
+        i: [f64; 9],
+    ) -> PyResult<[f64; FRANKA_EMIKA_DOF]> {
+        Ok(self.0.coriolis(&q, &dq, &i, m, &x))
+    }
+
+    fn gravity(
+        &self,
+        q: [f64; FRANKA_EMIKA_DOF],
+        m: f64,
+        x: [f64; 3],
+        gravity: [f64; 3],
+    ) -> PyResult<[f64; FRANKA_EMIKA_DOF]> {
+        Ok(self.0.gravity(&q, m, &x, &gravity))
+    }
+}
+
 #[pymodule]
 fn franka_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyFrankaRobot>()?;
     m.add_class::<PyFrankaGripper>()?;
+    m.add_class::<PyFrankaModel>()?;
     m.add_class::<PyArmState7>()?;
     Ok(())
 }

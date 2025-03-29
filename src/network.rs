@@ -77,12 +77,12 @@ impl Network {
             #[cfg(feature = "debug")]
             println!("request :{:?}", request);
             stream.write_all(&request)?;
-            let mut buffer = Vec::new();
-            stream.read(&mut buffer)?;
+            let mut buffer = Vec::with_capacity(1e6 as usize);
+            let size = stream.read(&mut buffer)?;
 
             let res = bincode::deserialize(&buffer[..size_of::<S>()])
                 .map_err(|e| RobotException::DeserializeError(e.to_string()))?;
-            Ok((res, buffer[size_of::<S>()..].to_vec()))
+            Ok((res, buffer[size_of::<S>()..size].to_vec()))
         } else {
             Err(RobotException::NetworkError(
                 "No active tcp connection".to_string(),
