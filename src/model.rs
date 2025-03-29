@@ -58,12 +58,12 @@ impl fmt::Display for Frame {
 }
 
 /// Calculates poses of joints and dynamic properties of the robot.
-pub struct Model {
+pub struct FrankaModel {
     library: ModelLibrary,
 }
 
 #[allow(non_snake_case)]
-impl Model {
+impl FrankaModel {
     /// Creates a new Model instance from the shared object of the Model for offline usage.
     ///
     /// If you just want to use the model to control the Robot you should use
@@ -93,7 +93,7 @@ impl Model {
     ///
     /// How does the libfranka embed libm? They are not including <math.h> - Apparently it gets somehow included when using \<array> ¯\_(ツ)_/¯
     pub fn new<S: AsRef<Path>>(model_filename: S) -> RobotResult<Self> {
-        Ok(Model {
+        Ok(FrankaModel {
             library: ModelLibrary::new(model_filename.as_ref())?,
         })
     }

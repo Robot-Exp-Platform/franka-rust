@@ -4,7 +4,9 @@ use std::{
     time::Duration,
 };
 
-type ControlClosure<R, S> = Option<Box<dyn Fn(S, Duration) -> R + Send>>;
+use crate::types::robot_types::CommandFilter;
+
+type ControlClosure<R, S> = Option<Box<dyn Fn(&S, Duration) -> R + Send>>;
 
 #[derive(Clone, Default)]
 pub struct CommandHandle<R, S>
@@ -18,7 +20,7 @@ where
 
 impl<R, S> CommandHandle<R, S>
 where
-    R: Display + Clone + Send + Sync + 'static,
+    R: CommandFilter<S> + Display + Clone + Send + Sync + 'static,
     S: Display + Clone + Default + Send + Sync + 'static,
 {
     pub fn new() -> Self {
@@ -39,19 +41,19 @@ where
         target_lock.clone()
     }
 
-    pub fn set_closure<F: Fn(S, Duration) -> R + Send + 'static>(&self, closure: F) {
+    pub fn set_closure<F: Fn(&S, Duration) -> R + Send + 'static>(&self, closure: F) {
         let mut closure_lock = self.closure.lock().unwrap();
         *closure_lock = Some(Box::new(closure));
     }
 
-    pub fn run_closure(&self, state: S, duration: Duration) -> Option<R> {
+    pub fn run_closure(&self, state: &S, duration: Duration) -> Option<R> {
         let closure_lock = self.closure.lock().unwrap();
         (*closure_lock)
             .as_ref()
             .map(|closure| closure(state, duration))
     }
 
-    pub fn command(&self, state: S, duration: Duration) -> Option<R> {
+    pub fn command(&self, state: &S, duration: Duration) -> Option<R> {
         match (self.run_closure(state, duration), self.get_target()) {
             (Some(res), None) => Some(res),
             (None, Some(target)) => Some(target),
@@ -61,5 +63,6 @@ where
             }
             (None, None) => None,
         }
+        // .map(|res| res.filter(state))
     }
 }

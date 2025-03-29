@@ -18,7 +18,7 @@ use crate::{
     FRANKA_ROBOT_MAX_JOINT_ACC, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION,
     LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
     command_handle::CommandHandle,
-    model::{self, Model},
+    model::{self, FrankaModel},
     network::Network,
     types::{
         robot_command::RobotCommand,
@@ -142,12 +142,7 @@ impl FrankaRobot {
         self._set_fliters(data)?.into()
     }
 
-    pub fn read_state(&mut self) -> RobotResult<RobotState> {
-        let state = self.robot_state.read().unwrap();
-        Ok((*state).into())
-    }
-
-    pub fn arm_state(&mut self) -> RobotResult<ArmState<FRANKA_EMIKA_DOF>> {
+    pub fn read_franka_state(&mut self) -> RobotResult<RobotState> {
         let state = self.robot_state.read().unwrap();
         Ok((*state).into())
     }
@@ -182,7 +177,7 @@ impl FrankaRobot {
         Ok(())
     }
 
-    pub fn model(&mut self) -> RobotResult<Model> {
+    pub fn model(&mut self) -> RobotResult<FrankaModel> {
         let model_path = if cfg!(target_os = "linux") {
             "/tmp/model.so"
         } else if cfg!(target_os = "windows") {
@@ -196,7 +191,15 @@ impl FrankaRobot {
         if !model_path.exists() {
             self.download_library(model_path)?;
         }
-        let model = model::Model::new(model_path)?;
+        let model = model::FrankaModel::new(model_path)?;
+        Ok(model)
+    }
+
+    pub fn model_from_path(&mut self, model_path: &Path) -> RobotResult<FrankaModel> {
+        if !model_path.exists() {
+            self.download_library(model_path)?;
+        }
+        let model = model::FrankaModel::new(model_path)?;
         Ok(model)
     }
 }
@@ -289,7 +292,8 @@ impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
     }
 
     fn read_state(&mut self) -> RobotResult<ArmState<FRANKA_EMIKA_DOF>> {
-        unimplemented!()
+        let state = self.robot_state.read().unwrap();
+        Ok((*state).into())
     }
 }
 
@@ -331,7 +335,7 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
             }
             sleep(Duration::from_millis(1));
         }
-        self._stop_move(())?;
+        let _ = self._stop_move(());
         self.is_moving = false;
         Ok(())
     }
@@ -390,7 +394,7 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
                 sleep(Duration::from_millis(1));
             }
         }
-        self._stop_move(())?;
+        let _ = self._stop_move(());
         self.is_moving = false;
         Ok(())
     }
@@ -431,7 +435,7 @@ impl ArmRealtimeBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
         let example = ArmState::<FRANKA_EMIKA_DOF>::default();
         self._move(closure(example, Duration::from_millis(1)).into())?;
         self.command_handle
-            .set_closure(move |state, duration| closure(state.into(), duration).into());
+            .set_closure(move |state, duration| closure((*state).into(), duration).into());
         Ok(())
     }
 
@@ -447,7 +451,7 @@ impl ArmRealtimeBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
         sleep(Duration::from_millis(2));
         self.command_handle.set_closure(move |state, duration| {
             state.error_result().unwrap();
-            closure(state.into(), duration).into()
+            closure((*state).into(), duration).into()
         });
         Ok(())
     }

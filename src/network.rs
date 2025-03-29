@@ -12,7 +12,7 @@ use std::{
 use std::{net::UdpSocket, thread};
 
 use crate::command_handle::CommandHandle;
-use crate::types::robot_types::CommandIDConfig;
+use crate::types::robot_types::{CommandFilter, CommandIDConfig};
 
 #[derive(Default)]
 pub struct Network {
@@ -24,6 +24,14 @@ impl Network {
     pub fn new(tcp_ip: &str, tcp_port: u16) -> Self {
         let tcp_stream = TcpStream::connect(format!("{}:{}", tcp_ip, tcp_port)).ok();
 
+        if let Some(steam) = &tcp_stream {
+            steam
+                .set_read_timeout(Some(std::time::Duration::from_millis(10)))
+                .unwrap();
+            steam
+                .set_write_timeout(Some(std::time::Duration::from_millis(3)))
+                .unwrap();
+        }
         Network {
             tcp_stream,
             command_counter: Arc::new(Mutex::new(0)),
@@ -77,12 +85,22 @@ impl Network {
             #[cfg(feature = "debug")]
             println!("request :{:?}", request);
             stream.write_all(&request)?;
-            let mut buffer = Vec::new();
+            let mut buffer = vec![0_u8; size_of::<S>() + 4];
             stream.read(&mut buffer)?;
-
-            let res = bincode::deserialize(&buffer[..size_of::<S>()])
+            let res = bincode::deserialize(&buffer)
                 .map_err(|e| RobotException::DeserializeError(e.to_string()))?;
-            Ok((res, buffer[size_of::<S>()..].to_vec()))
+            let mut receive_buffer = Vec::new();
+            loop {
+                let mut buffer = vec![0_u8; 1024 * 5];
+                if let Ok(size) = stream.read(&mut buffer) {
+                    receive_buffer.append(&mut buffer[..size].to_vec());
+                    println!("size:{}", size);
+                } else {
+                    break;
+                }
+            }
+            println!("receive size:{}", receive_buffer.len());
+            Ok((res, receive_buffer))
         } else {
             Err(RobotException::NetworkError(
                 "No active tcp connection".to_string(),
@@ -114,7 +132,14 @@ impl Network {
     #[cfg(not(feature = "async"))]
     pub fn spawn_udp_thread<R, S>(port: u16) -> (CommandHandle<R, S>, Arc<RwLock<S>>)
     where
-        R: Serialize + CommandIDConfig<u64> + Clone + Display + Send + Sync + 'static,
+        R: Serialize
+            + CommandIDConfig<u64>
+            + CommandFilter<S>
+            + Clone
+            + Display
+            + Send
+            + Sync
+            + 'static,
         S: DeserializeOwned
             + CommandIDConfig<u64>
             + Clone
@@ -169,7 +194,7 @@ impl Network {
                 #[cfg(feature = "debug")]
                 println!("{:?} >{}", start_time.elapsed(), response);
 
-                if let Some(data) = &mut cmd.command(response.clone(), duration) {
+                if let Some(data) = &mut cmd.command(&response, duration) {
                     data.set_command_id(response.command_id());
                     #[cfg(feature = "debug")]
                     println!("{:?} >{}", start_time.elapsed(), data);
