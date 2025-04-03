@@ -12,13 +12,12 @@ fn main() -> RobotResult<()> {
     let rotational_stiffness: f64 = 10.;
     let stiffness = na::Matrix6::from_partial_diagonal(&combine_vec(
         &[translational_stiffness; 3],
-        &[2. * translational_stiffness.sqrt(); 3],
+        &[rotational_stiffness; 3],
     ));
     let damping = na::Matrix6::from_partial_diagonal(&combine_vec(
-        &[rotational_stiffness; 3],
+        &[2. * translational_stiffness.sqrt(); 3],
         &[2. * rotational_stiffness.sqrt(); 3],
     ));
-
     let mut robot = FrankaRobot::new("172.16.0.3");
     let model = robot.model()?;
     robot.set_collision_behavior(100.0.into())?;
@@ -35,6 +34,8 @@ fn main() -> RobotResult<()> {
         let jacobian = na::SMatrix::<f64, 6, 7>::from_column_slice(
             &model.zero_jacobian_from_arm_state(&Frame::EndEffector, &state),
         );
+        println!("coriolis: {}", coriolis);
+        println!("Jacobian: {:?}", jacobian);
         let dq: na::SVector<f64, 7> = state.joint_vel.unwrap().into();
         let transform = if let Some(Pose::Homo(pose)) = state.pose_o_to_ee {
             array_to_isometry(&pose)
@@ -63,7 +64,7 @@ fn main() -> RobotResult<()> {
         ControlType::Force(tau_d.into())
     })?;
 
-    sleep(Duration::from_secs(10));
+    sleep(Duration::from_secs(25));
 
     Ok(())
 }
