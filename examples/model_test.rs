@@ -1,26 +1,47 @@
-use std::path::Path;
-
 use franka_rust::{
-    FrankaRobot,
-    types::robot_state::{RobotState, RobotStateInter},
+    FRANKA_ROBOT_DEFAULT_JOINT,
+    model::{Frame, FrankaModel},
 };
 use robot_behavior::RobotResult;
+use strum::IntoEnumIterator;
 
 fn main() -> RobotResult<()> {
-    let mut robot = FrankaRobot::new("172.16.0.3");
+    let path = if cfg!(target_os = "linux") {
+        "/tmp/model.so"
+    } else if cfg!(target_os = "windows") {
+        "C:\\tmp\\model.dll"
+    } else {
+        "/tmp/model.dylib"
+    };
 
-    let path = Path::new("./model.so");
-    let model = robot.model_from_path(path)?;
-    let robot_state: RobotState = RobotStateInter::default().into();
+    let model = FrankaModel::new(path)?;
 
-    println!("mass from state: {:?}", model.mass_from_state(&robot_state));
-    println!(
-        "coriolis from state: {:?}",
-        model.coriolis_from_state(&robot_state)
-    );
-    println!(
-        "gravity from state: {:?}",
-        model.gravity_from_state(&robot_state, &[0.0, 0.0, -9.81])
-    );
+    let q = FRANKA_ROBOT_DEFAULT_JOINT;
+    let dq = [0.1; 7];
+    let mut pose = [0.; 16];
+    pose[0] = 1.0;
+    pose[5] = 1.0;
+    pose[10] = 1.0;
+
+    let m = 0.5;
+    let x = [0.1; 3];
+    let i = [0.1; 9];
+
+    for frame in Frame::iter() {
+        println!("{}>", frame);
+        println!("   pose: {:?}", model.pose(&frame, &q, &pose, &pose));
+        println!(
+            "   body: {:?}",
+            model.body_jacobian(&frame, &q, &pose, &pose)
+        );
+        println!(
+            "   zero: {:?}",
+            model.zero_jacobian(&frame, &q, &pose, &pose)
+        );
+    }
+    println!("\nmass: {:?}", model.mass(&q, &i, m, &x));
+    println!("coriolis: {:?}", model.coriolis(&q, &dq, &i, m, &x));
+    println!("gravity: {:?}", model.gravity(&q, m, &x, &[0., 0., -0.98]));
+
     Ok(())
 }

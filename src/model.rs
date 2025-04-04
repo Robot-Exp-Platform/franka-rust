@@ -2,11 +2,13 @@ use nalgebra::Matrix4;
 use robot_behavior::{ArmState, Pose, RobotResult};
 use std::fmt;
 use std::path::Path;
+use strum_macros::EnumIter;
 
 use crate::types::model_library::ModelLibrary;
 use crate::types::robot_state::RobotState;
 
 /// Enumerates the seven joints, the flange, and the end effector of a robot.
+#[derive(EnumIter, Debug, PartialEq)]
 pub enum Frame {
     Joint1,
     Joint2,
