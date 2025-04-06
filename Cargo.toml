@@ -1,6 +1,6 @@
 [package]
 name = "franka_rust"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 authors = ["Yixing <yanjizhou312@163.com>"]
 readme = "README.md"

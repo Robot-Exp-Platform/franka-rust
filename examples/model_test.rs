@@ -17,7 +17,7 @@ fn main() -> RobotResult<()> {
     let model = FrankaModel::new(path)?;
 
     let q = FRANKA_ROBOT_DEFAULT_JOINT;
-    let dq = [0.1; 7];
+    let dq = [0.; 7];
     let mut pose = [0.; 16];
     pose[0] = 1.0;
     pose[5] = 1.0;

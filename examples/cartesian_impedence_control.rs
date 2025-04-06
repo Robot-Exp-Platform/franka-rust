@@ -34,8 +34,6 @@ fn main() -> RobotResult<()> {
         let jacobian = na::SMatrix::<f64, 6, 7>::from_column_slice(
             &model.zero_jacobian_from_arm_state(&Frame::EndEffector, &state),
         );
-        println!("coriolis: {}", coriolis);
-        println!("Jacobian: {:?}", jacobian);
         let dq: na::SVector<f64, 7> = state.joint_vel.unwrap().into();
         let transform = if let Some(Pose::Homo(pose)) = state.pose_o_to_ee {
             array_to_isometry(&pose)
