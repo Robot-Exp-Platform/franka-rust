@@ -400,9 +400,9 @@ impl From<RobotStateInter> for ArmState<7> {
         );
         ArmState {
             joint: Some(val.q_d),
-            joint_vel: Some(val.dq_d),
+            joint_vel: Some(val.dq),
             joint_acc: None,
-            tau: Some(val.tau_J),
+            tau: Some(val.tau_J_d),
             pose_o_to_ee: Some(Pose::Homo(val.O_T_EE)),
             pose_f_to_ee: Some(Pose::Homo(val.F_T_EE)),
             pose_ee_to_k: Some(Pose::Homo(val.EE_T_K)),
@@ -520,7 +520,9 @@ impl Display for RobotStateInter {
     | q: {:?},
     | q_d: {:?},
     | dq_d: {:?},
-    | ddq_d: {:?},"#,
+    | ddq_d: {:?},
+    | tau: {:?},
+    | tau_j: {:?}"#,
             message_id,
             success_rate,
             errors,
@@ -528,6 +530,8 @@ impl Display for RobotStateInter {
             robot_state.q_d,
             robot_state.dq_d,
             robot_state.ddq_d,
+            robot_state.tau_j,
+            robot_state.tau_j_d
         )
     }
 }

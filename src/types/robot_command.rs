@@ -93,9 +93,7 @@ impl CommandFilter<RobotStateInter> for MotionGeneratorCommand {
             dq_c,
             pose_o_to_ee_c,
             dpose_o_to_ee_c,
-            elbow_c: self.elbow_c,
-            valid_elbow: self.valid_elbow,
-            motion_generation_finished: self.motion_generation_finished,
+            ..self
         }
     }
 }
@@ -103,7 +101,7 @@ impl CommandFilter<RobotStateInter> for MotionGeneratorCommand {
 impl CommandFilter<RobotStateInter> for ControllerCommand {
     fn filter(self, state: &RobotStateInter) -> Self {
         let tau_j_d = self.tau_j_d;
-        let tau_j = state.tau_J;
+        let tau_j = state.tau_J_d;
         let tau_j_d = franka_limit_rate_torques(&tau_j_d, &tau_j);
         ControllerCommand { tau_j_d }
     }
