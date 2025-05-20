@@ -124,7 +124,7 @@ pub fn franka_limit_rate_joint_positions(
     last_commanded_accelerations: &[f64; 7],
 ) -> [f64; 7] {
     if commanded_positions.iter().sum::<f64>() == 0.0 {
-        return commanded_positions.clone();
+        return *commanded_positions;
     }
     limit_rate_joint_positions(
         &MAX_JOINT_VELOCITY,
@@ -250,7 +250,7 @@ pub fn franka_limit_rate_torques(
     last_commanded_values: &[f64; 7],
 ) -> [f64; 7] {
     if commanded_values.iter().sum::<f64>() == 0.0 {
-        return commanded_values.clone();
+        return *commanded_values;
     }
     limit_rate_torques(&MAX_TORQUE_RATE, commanded_values, last_commanded_values)
 }
@@ -300,7 +300,7 @@ pub fn franka_limit_rate_joint_velocities(
     last_commanded_accelerations: &[f64; 7],
 ) -> [f64; 7] {
     if commanded_velocities.iter().sum::<f64>() == 0.0 {
-        return commanded_velocities.clone();
+        return *commanded_velocities;
     }
     limit_rate_joint_velocities(
         &MAX_JOINT_VELOCITY,
@@ -411,7 +411,7 @@ pub fn franka_limit_rate_cartesian_pose(
     last_ddpose_o_to_ee_c: &[f64; 6],
 ) -> [f64; 16] {
     if pose_o_to_ee_c.iter().sum::<f64>() == 0.0 {
-        return pose_o_to_ee_c.clone();
+        return *pose_o_to_ee_c;
     }
     limit_rate_cartesian_pose(
         MAX_TRANSLATIONAL_VELOCITY,
@@ -493,7 +493,7 @@ pub fn franka_limit_rate_cartesian_velocity(
     last_ddpose_o_to_ee_c: &[f64; 6],
 ) -> [f64; 6] {
     if dpose_o_to_ee_c.iter().sum::<f64>() == 0.0 {
-        return dpose_o_to_ee_c.clone();
+        return *dpose_o_to_ee_c;
     }
     limit_rate_cartesian_velocity(
         MAX_TRANSLATIONAL_VELOCITY,

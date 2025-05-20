@@ -130,8 +130,8 @@ impl From<MotionType<7>> for RobotCommand {
                     dq_c: joint_vel,
                     ..MotionGeneratorCommand::default()
                 },
-                MotionType::CartesianHomo(pose) => MotionGeneratorCommand {
-                    pose_o_to_ee_c: pose,
+                MotionType::Cartesian(pose) => MotionGeneratorCommand {
+                    pose_o_to_ee_c: pose.homo(),
                     ..MotionGeneratorCommand::default()
                 },
                 MotionType::CartesianVel(pose_vel) => MotionGeneratorCommand {
@@ -151,7 +151,7 @@ impl From<ControlType<7>> for RobotCommand {
             message_id: 0,
             motion: MotionGeneratorCommand::default(),
             control: match value {
-                ControlType::Force(tau) => ControllerCommand { tau_j_d: tau },
+                ControlType::Torque(tau) => ControllerCommand { tau_j_d: tau },
                 _ => ControllerCommand::default(),
             },
         }
@@ -167,13 +167,12 @@ impl Display for RobotCommand {
         write!(
             f,
             r#"robot command:
-    | message_id: {},
+    | message_id: {message_id},
     | motion:
-        | q_c: {:?},
-        | pose: {:?},
+        | q_c: {q:?},
+        | pose: {pose:?},
     | control:
-        | tau: {:?}"#,
-            message_id, q, pose, tau
+        | tau: {tau:?}"#
         )
     }
 }

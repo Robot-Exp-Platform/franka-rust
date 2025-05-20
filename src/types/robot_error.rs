@@ -218,7 +218,7 @@ impl fmt::Display for FrankaError {
                 "[Base acceleration invalid reading]the base acceleration O_ddP_O cannot be determined."
             }
         };
-        write!(f, "{}", description)
+        write!(f, "{description}")
     }
 }
 

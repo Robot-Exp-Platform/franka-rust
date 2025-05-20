@@ -5,7 +5,7 @@ use pyo3::{
     pyclass, pymethods, pymodule,
     types::{PyModule, PyModuleMethods},
 };
-use robot_behavior::{ArmBehavior, ArmBehaviorExt, RobotException, ffi::PyArmState7};
+use robot_behavior::{ArmBehavior, RobotException};
 
 use crate::{
     FRANKA_EMIKA_DOF, FrankaGripper, FrankaRobot, model::FrankaModel, types::robot_types::*,
@@ -96,9 +96,9 @@ impl PyFrankaRobot {
     //     Ok(PyRobotState(self.0.read_state().map_err(map_err)?))
     // }
 
-    fn read_state(&mut self) -> PyResult<PyArmState7> {
-        self.0.read_state().map_err(map_err).map(PyArmState7::from)
-    }
+    // fn read_state(&mut self) -> PyResult<PyArmState7> {
+    //     self.0.read_state().map_err(map_err).map(PyArmState7::from)
+    // }
 
     fn set_default_behavior(&mut self) -> PyResult<()> {
         self.0.set_default_behavior().map_err(map_err)
@@ -223,7 +223,6 @@ fn franka_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyFrankaRobot>()?;
     m.add_class::<PyFrankaGripper>()?;
     m.add_class::<PyFrankaModel>()?;
-    m.add_class::<PyArmState7>()?;
     Ok(())
 }
 

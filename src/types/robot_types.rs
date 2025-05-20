@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use robot_behavior::{ControlType, MotionType, RobotException, RobotResult};
+use robot_behavior::{ControlType, LoadState, MotionType, RobotException, RobotResult};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -360,6 +360,16 @@ pub struct SetLoadData {
     pub i_load: [f64; 9],
 }
 
+impl From<LoadState> for SetLoadData {
+    fn from(value: LoadState) -> Self {
+        SetLoadData {
+            m_load: value.m,
+            x_load: value.x,
+            i_load: value.i,
+        }
+    }
+}
+
 // ! SetFilters Command
 pub type SetFiltersRequest = Request<{ Command::SetFilters }, SetFiltersData>;
 pub type SetFiltersResponse = Response<{ Command::SetFilters }, GetterSetterStatus>;
@@ -585,7 +595,7 @@ impl<const N: usize> From<MotionType<N>> for MoveData {
             motion_generator_mode: match value {
                 MotionType::Joint(_) => MoveMotionGeneratorMode::JointPosition,
                 MotionType::JointVel(_) => MoveMotionGeneratorMode::JointVelocity,
-                MotionType::CartesianHomo(_) => MoveMotionGeneratorMode::CartesianPosition,
+                MotionType::Cartesian(_) => MoveMotionGeneratorMode::CartesianPosition,
                 MotionType::CartesianVel(_) => MoveMotionGeneratorMode::CartesianVelocity,
                 _ => MoveMotionGeneratorMode::JointPosition,
             },
@@ -599,7 +609,7 @@ impl<const N: usize> From<ControlType<N>> for MoveData {
     fn from(value: ControlType<N>) -> Self {
         MoveData {
             controller_mode: match value {
-                ControlType::Force(_) => MoveControllerMode::ExternalController,
+                ControlType::Torque(_) => MoveControllerMode::ExternalController,
                 _ => MoveControllerMode::JointImpedance,
             },
             motion_generator_mode: MoveMotionGeneratorMode::JointVelocity,

@@ -3,9 +3,11 @@
 mod gripper;
 // mod logger;
 mod command_handle;
+#[cfg(feature = "ffi")]
 pub mod ffi;
 pub mod model;
 mod network;
+pub mod once;
 mod params;
 mod robot;
 pub mod types;

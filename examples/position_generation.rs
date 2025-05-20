@@ -1,7 +1,7 @@
 use franka_rust::{
     FRANKA_ROBOT_DEFAULT_JOINT, FrankaRobot, types::robot_types::SetCollisionBehaviorData,
 };
-use robot_behavior::{ArmBehavior, MotionType, RobotResult};
+use robot_behavior::{ArmBehavior, ArmPreplannedMotion, MotionType, RobotResult};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaRobot::new("172.16.0.3");
@@ -18,7 +18,9 @@ fn main() -> RobotResult<()> {
         upper_force_thresholds_nominal: [20., 20., 20., 25., 25., 25.],
     })?;
 
-    robot.move_to(MotionType::Joint(FRANKA_ROBOT_DEFAULT_JOINT), 0.3)?;
+    robot
+        .with_speed(0.3)
+        .move_to(MotionType::Joint(FRANKA_ROBOT_DEFAULT_JOINT))?;
 
     Ok(())
 }

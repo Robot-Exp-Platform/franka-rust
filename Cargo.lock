@@ -602,6 +602,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4c7245a08504955605670dbf141fceab975f15ca21570696aebe9d2e71576bd"
 
 [[package]]
+name = "inventory"
+version = "0.3.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab08d7cd2c5897f2c949e5383ea7c7db03fb19130ffcfbf7eda795137ae3cb83"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -887,6 +896,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b3cff922bd51709b605d9ead9aa71031d81447142d828eb4a6eba76fe619f9b"
 
 [[package]]
+name = "pipe-trait"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1be1ec9e59f0360aefe84efa6f699198b685ab0d5718081e9f72aa2344289e2"
+
+[[package]]
 name = "pkg-config"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -980,6 +995,7 @@ checksum = "7f1c6c3591120564d64db2261bec5f910ae454f01def849b9c22835a84695e86"
 dependencies = [
  "cfg-if",
  "indoc",
+ "inventory",
  "libc",
  "memoffset",
  "once_cell",
@@ -1072,14 +1088,13 @@ dependencies = [
 
 [[package]]
 name = "robot_behavior"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b6aed404dff77ef5a4b0054cb81fb6637b1d5c4372f116c4b85553c3daf2ebe"
+version = "0.4.0"
 dependencies = [
  "libc",
  "nalgebra",
+ "paste",
+ "pipe-trait",
  "plotters",
- "pyo3",
  "serde",
  "serde_json",
  "serde_with",

@@ -1,31 +1,32 @@
-use nalgebra as na;
 use robot_behavior::{
-    ArmBehavior, ArmBehaviorExt, ArmRealtimeBehavior, ArmRealtimeBehaviorExt, ArmState,
-    ControlType, MotionType, Pose, RobotBehavior, RobotException, RobotResult,
-    utils::path_generate,
+    utils::path_generate::{self, cartesian_quat_simple_4th_curve},
+    *,
 };
 use std::{
+    f64::consts::FRAC_PI_2,
     fs::File,
     io::Write,
     path::Path,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
     thread::sleep,
     time::Duration,
 };
 
 use crate::{
-    FRANKA_EMIKA_DOF, FRANKA_ROBOT_MAX_CARTESIAN_ACC, FRANKA_ROBOT_MAX_CARTESIAN_VEL,
-    FRANKA_ROBOT_MAX_JOINT_ACC, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_VERSION,
-    LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
+    FRANKA_EMIKA_DOF, FRANKA_ROBOT_DEFAULT_JOINT, FRANKA_ROBOT_MAX_CARTESIAN_ACC,
+    FRANKA_ROBOT_MAX_CARTESIAN_VEL, FRANKA_ROBOT_MAX_JOINT, FRANKA_ROBOT_MAX_JOINT_ACC,
+    FRANKA_ROBOT_MAX_JOINT_JERK, FRANKA_ROBOT_MAX_JOINT_VEL, FRANKA_ROBOT_MAX_TORQUE,
+    FRANKA_ROBOT_MAX_TORQUE_RATE, FRANKA_ROBOT_MIN_JOINT, FRANKA_ROBOT_VERSION, LIBFRANKA_VERSION,
+    PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
     command_handle::CommandHandle,
     model::{self, FrankaModel},
     network::Network,
+    once::OverrideOnce,
     types::{
         robot_command::RobotCommand,
         robot_state::{RobotState, RobotStateInter},
         robot_types::*,
     },
-    utils::array_to_isometry,
 };
 
 pub struct FrankaRobot {
@@ -33,6 +34,12 @@ pub struct FrankaRobot {
     command_handle: CommandHandle<RobotCommand, RobotStateInter>,
     robot_state: Arc<RwLock<RobotStateInter>>,
     is_moving: bool,
+    coord: OverrideOnce<Coord>,
+    max_vel: OverrideOnce<[f64; FRANKA_EMIKA_DOF]>,
+    max_acc: OverrideOnce<[f64; FRANKA_EMIKA_DOF]>,
+    max_jerk: OverrideOnce<[f64; FRANKA_EMIKA_DOF]>,
+    max_cartesian_vel: OverrideOnce<f64>,
+    max_cartesian_acc: OverrideOnce<f64>,
 }
 
 macro_rules! cmd_fn {
@@ -54,6 +61,12 @@ impl FrankaRobot {
             command_handle,
             robot_state,
             is_moving: false,
+            coord: OverrideOnce::new(Coord::OCS),
+            max_vel: OverrideOnce::new(FRANKA_ROBOT_MAX_JOINT_VEL),
+            max_acc: OverrideOnce::new(FRANKA_ROBOT_MAX_JOINT_ACC),
+            max_jerk: OverrideOnce::new(FRANKA_ROBOT_MAX_JOINT_JERK),
+            max_cartesian_vel: OverrideOnce::new(FRANKA_ROBOT_MAX_CARTESIAN_VEL[0]),
+            max_cartesian_acc: OverrideOnce::new(FRANKA_ROBOT_MAX_CARTESIAN_ACC[0]),
         };
         robot.connect().unwrap();
         robot
@@ -205,8 +218,9 @@ impl FrankaRobot {
 }
 
 impl RobotBehavior for FrankaRobot {
+    type State = RobotState;
     fn version(&self) -> String {
-        format!("FrankaRobot v{}", LIBFRANKA_VERSION)
+        format!("FrankaRobot v{LIBFRANKA_VERSION}")
     }
 
     fn init(&mut self) -> RobotResult<()> {
@@ -252,53 +266,98 @@ impl RobotBehavior for FrankaRobot {
     fn clear_emergency_stop(&mut self) -> RobotResult<()> {
         unimplemented!()
     }
-}
 
-impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
-    fn move_to(&mut self, target: MotionType<FRANKA_EMIKA_DOF>, speed: f64) -> RobotResult<()> {
-        match target {
-            MotionType::Joint(target) => self.move_joint(&target, speed),
-            MotionType::CartesianQuat(target) => self.move_linear_with_quat(&target, speed),
-            _ => unimplemented!(),
-        }
-    }
-
-    fn move_to_async(
-        &mut self,
-        _target: MotionType<FRANKA_EMIKA_DOF>,
-        _speed: f64,
-    ) -> RobotResult<()> {
-        unimplemented!()
-    }
-
-    fn move_rel(&mut self, _rel: MotionType<FRANKA_EMIKA_DOF>) -> RobotResult<()> {
-        unimplemented!()
-    }
-
-    fn move_rel_async(&mut self, _rel: MotionType<FRANKA_EMIKA_DOF>) -> RobotResult<()> {
-        unimplemented!()
-    }
-
-    fn move_path(
-        &mut self,
-        _path: Vec<MotionType<FRANKA_EMIKA_DOF>>,
-        _speed: f64,
-    ) -> RobotResult<()> {
-        unimplemented!()
-    }
-
-    fn control_with(&mut self, _control: ControlType<FRANKA_EMIKA_DOF>) -> RobotResult<()> {
-        unimplemented!()
-    }
-
-    fn read_state(&mut self) -> RobotResult<ArmState<FRANKA_EMIKA_DOF>> {
+    fn read_state(&mut self) -> RobotResult<Self::State> {
         let state = self.robot_state.read().unwrap();
         Ok((*state).into())
     }
 }
 
-impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
-    fn move_joint(&mut self, target: &[f64; FRANKA_EMIKA_DOF], speed: f64) -> RobotResult<()> {
+impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
+    fn state(&mut self) -> RobotResult<ArmState<FRANKA_EMIKA_DOF>> {
+        let state = self.robot_state.read().unwrap();
+        Ok((*state).into())
+    }
+    fn set_load(&mut self, load: LoadState) -> RobotResult<()> {
+        self._set_load(load.into()).map(|_| ())
+    }
+    fn set_coord(&mut self, coord: Coord) -> RobotResult<()> {
+        self.coord.set(coord);
+        Ok(())
+    }
+    fn set_speed(&mut self, speed: f64) -> RobotResult<()> {
+        self.max_vel
+            .set(FRANKA_ROBOT_MAX_JOINT_VEL.map(|v| v * speed));
+        self.max_acc
+            .set(FRANKA_ROBOT_MAX_JOINT_ACC.map(|v| v * speed));
+        self.max_jerk
+            .set(FRANKA_ROBOT_MAX_JOINT_JERK.map(|v| v * speed));
+        self.max_cartesian_vel
+            .set(FRANKA_ROBOT_MAX_CARTESIAN_VEL[0] * speed);
+        self.max_cartesian_acc
+            .set(FRANKA_ROBOT_MAX_CARTESIAN_ACC[0] * speed);
+        Ok(())
+    }
+
+    fn with_coord(&mut self, coord: Coord) -> &mut Self {
+        self.coord.once(coord);
+        self
+    }
+    fn with_speed(&mut self, speed: f64) -> &mut Self {
+        self.max_vel
+            .once(FRANKA_ROBOT_MAX_JOINT_VEL.map(|v| v * speed));
+        self.max_acc
+            .once(FRANKA_ROBOT_MAX_JOINT_ACC.map(|v| v * speed));
+        self.max_jerk
+            .once(FRANKA_ROBOT_MAX_JOINT_JERK.map(|v| v * speed));
+        self.max_cartesian_vel
+            .once(FRANKA_ROBOT_MAX_CARTESIAN_VEL[0] * speed);
+        self.max_cartesian_acc
+            .once(FRANKA_ROBOT_MAX_CARTESIAN_ACC[0] * speed);
+        self
+    }
+    fn with_velocity(&mut self, joint_vel: &[f64; FRANKA_EMIKA_DOF]) -> &mut Self {
+        self.max_vel.once(*joint_vel);
+        self
+    }
+    fn with_acceleration(&mut self, joint_acc: &[f64; FRANKA_EMIKA_DOF]) -> &mut Self {
+        self.max_acc.once(*joint_acc);
+        self
+    }
+    fn with_jerk(&mut self, joint_jerk: &[f64; FRANKA_EMIKA_DOF]) -> &mut Self {
+        self.max_jerk.once(*joint_jerk);
+        self
+    }
+    fn with_cartesian_velocity(&mut self, cartesian_vel: f64) -> &mut Self {
+        self.max_cartesian_vel.once(cartesian_vel);
+        self
+    }
+}
+
+impl ArmParam<FRANKA_EMIKA_DOF> for FrankaRobot {
+    const DH: [[f64; 4]; FRANKA_EMIKA_DOF] = [
+        [0., 0.333, 0., 0.],
+        [0., 0., 0., -FRAC_PI_2],
+        [0., 0.316, 0., FRAC_PI_2],
+        [0., 0., 0.0825, FRAC_PI_2],
+        [0., 0.384, -0.0825, -FRAC_PI_2],
+        [0., 0., 0., FRAC_PI_2],
+        [0., 0., 0.088, FRAC_PI_2],
+    ];
+    const JOINT_DEFAULT: [f64; FRANKA_EMIKA_DOF] = FRANKA_ROBOT_DEFAULT_JOINT;
+    const JOINT_MIN: [f64; FRANKA_EMIKA_DOF] = FRANKA_ROBOT_MIN_JOINT;
+    const JOINT_MAX: [f64; FRANKA_EMIKA_DOF] = FRANKA_ROBOT_MAX_JOINT;
+    const JOINT_VEL_BOUND: [f64; FRANKA_EMIKA_DOF] = FRANKA_ROBOT_MAX_JOINT_VEL;
+    const JOINT_ACC_BOUND: [f64; FRANKA_EMIKA_DOF] = FRANKA_ROBOT_MAX_JOINT_ACC;
+    const JOINT_JERK_BOUND: [f64; FRANKA_EMIKA_DOF] = FRANKA_ROBOT_MAX_JOINT_JERK;
+    const CARTESIAN_VEL_BOUND: f64 = 1.7;
+    const CARTESIAN_ACC_BOUND: f64 = 13.0;
+    const TORQUE_BOUND: [f64; FRANKA_EMIKA_DOF] = FRANKA_ROBOT_MAX_TORQUE;
+    const TORQUE_DOT_BOUND: [f64; FRANKA_EMIKA_DOF] = FRANKA_ROBOT_MAX_TORQUE_RATE;
+}
+
+impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
+    fn move_joint(&mut self, target: &[f64; FRANKA_EMIKA_DOF]) -> RobotResult<()> {
         self.is_moving = true;
         self._move(MotionType::Joint(*target).into())?;
         sleep(Duration::from_millis(2));
@@ -306,15 +365,13 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
         let state = self.robot_state.read().unwrap();
         let joint = state.q_d;
         drop(state);
-        let mut v_max = FRANKA_ROBOT_MAX_JOINT_VEL;
-        let mut a_max = FRANKA_ROBOT_MAX_JOINT_ACC;
-        // let mut jeck = FRANKA_ROBOT_MAX_JOINT_JERK;
-        for i in 0..FRANKA_EMIKA_DOF {
-            v_max[i] *= speed;
-            a_max[i] *= speed;
-        }
 
-        let path_generate = path_generate::joint_simple_4th_curve(&joint, target, &v_max, &a_max);
+        let path_generate = path_generate::joint_simple_4th_curve(
+            &joint,
+            target,
+            self.max_vel.get(),
+            self.max_acc.get(),
+        );
 
         self.command_handle
             .set_closure(move |_, duration| MotionType::Joint(path_generate(duration)).into());
@@ -339,56 +396,52 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
         self.is_moving = false;
         Ok(())
     }
-
-    fn move_linear_with_quat(
-        &mut self,
-        target: &nalgebra::Isometry3<f64>,
-        speed: f64,
-    ) -> RobotResult<()> {
+    fn move_joint_async(&mut self, target: &[f64; FRANKA_EMIKA_DOF]) -> RobotResult<()> {
         self.is_moving = true;
-        self._move(
-            MotionType::<7>::CartesianHomo(target.to_homogeneous().as_slice().try_into().unwrap())
-                .into(),
-        )?;
+        self._move(MotionType::Joint(*target).into())?;
+        sleep(Duration::from_millis(2));
+
+        let state = self.robot_state.read().unwrap();
+        let joint = state.q_d;
+        drop(state);
+
+        let path_generate = path_generate::joint_simple_4th_curve(
+            &joint,
+            target,
+            self.max_vel.get(),
+            self.max_acc.get(),
+        );
+
+        self.command_handle
+            .set_closure(move |_, duration| MotionType::Joint(path_generate(duration)).into());
+        Ok(())
+    }
+    fn move_cartesian(&mut self, target: &Pose) -> RobotResult<()> {
+        self.is_moving = true;
+        self._move(MotionType::<7>::Cartesian(*target).into())?;
         sleep(Duration::from_millis(1));
 
         let state = self.robot_state.read().unwrap();
-        let arm_state: ArmState<FRANKA_EMIKA_DOF> = (*state).into();
+        let pose: Pose = state.O_T_EE.into();
         drop(state);
-        let pose = if let Some(Pose::Homo(pose)) = arm_state.pose_o_to_ee {
-            array_to_isometry(&pose)
-        } else {
-            unreachable!()
-        };
 
-        let v_max = FRANKA_ROBOT_MAX_CARTESIAN_VEL[0] * speed;
-        let a_max = FRANKA_ROBOT_MAX_CARTESIAN_ACC[0] * speed;
-
-        let path_generate =
-            path_generate::cartesian_quat_simple_4th_curve(pose, *target, v_max, a_max);
+        let path_generate = cartesian_quat_simple_4th_curve(
+            pose.quat(),
+            target.quat(),
+            *self.max_cartesian_vel.get(),
+            *self.max_cartesian_acc.get(),
+        );
 
         self.command_handle.set_closure(move |_, duration| {
-            MotionType::CartesianHomo(
-                path_generate(duration)
-                    .to_homogeneous()
-                    .as_slice()
-                    .try_into()
-                    .unwrap(),
-            )
-            .into()
+            MotionType::Cartesian(path_generate(duration).into()).into()
         });
 
         loop {
             let state = self.robot_state.read().unwrap();
-            let arm_state: ArmState<FRANKA_EMIKA_DOF> = (*state).into();
+            let pose: Pose = state.O_T_EE.into();
             drop(state);
-            let pose = if let Some(Pose::Homo(pose)) = arm_state.pose_o_to_ee {
-                array_to_isometry(&pose)
-            } else {
-                unreachable!()
-            };
 
-            if (target.translation.vector - pose.translation.vector).norm() < 0.01 {
+            if (*target / pose) < 0.01 {
                 break;
             } else {
                 sleep(Duration::from_millis(1));
@@ -398,103 +451,70 @@ impl ArmBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
         self.is_moving = false;
         Ok(())
     }
-
-    fn move_linear_with_homo(&mut self, target: &[f64; 16], speed: f64) -> RobotResult<()> {
-        self.move_linear_with_quat(&array_to_isometry(target), speed)
-    }
-
-    fn move_linear_with_euler(&mut self, target: &[f64; 6], speed: f64) -> RobotResult<()> {
-        let translation = na::Translation3::new(target[0], target[1], target[2]);
-        let rotation =
-            na::Unit::<na::Quaternion<f64>>::from_euler_angles(target[3], target[4], target[5]);
-        let target = na::Isometry3::from_parts(translation, rotation);
-        self.move_linear_with_quat(&target, speed)
-    }
-
-    fn move_path_prepare(&mut self, _path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
-        unimplemented!()
-    }
-
-    fn move_path_start(&mut self) -> RobotResult<()> {
-        unimplemented!()
-    }
-
-    fn move_path_prepare_from_file(&mut self, _path: &str) -> RobotResult<()> {
-        unimplemented!()
-    }
-}
-
-impl ArmRealtimeBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
-    fn move_with_closure<
-        FM: Fn(ArmState<FRANKA_EMIKA_DOF>, Duration) -> MotionType<FRANKA_EMIKA_DOF> + Send + 'static,
-    >(
-        &mut self,
-        closure: FM,
-    ) -> RobotResult<()> {
+    fn move_cartesian_async(&mut self, target: &Pose) -> RobotResult<()> {
         self.is_moving = true;
-        let example = ArmState::<FRANKA_EMIKA_DOF>::default();
-        self._move(closure(example, Duration::from_millis(1)).into())?;
-        self.command_handle
-            .set_closure(move |state, duration| closure((*state).into(), duration).into());
-        Ok(())
-    }
-
-    fn control_with_closure<
-        FC: Fn(ArmState<FRANKA_EMIKA_DOF>, Duration) -> ControlType<FRANKA_EMIKA_DOF> + Send + 'static,
-    >(
-        &mut self,
-        closure: FC,
-    ) -> RobotResult<()> {
-        self.is_moving = true;
-        let example = ArmState::<FRANKA_EMIKA_DOF>::default();
-        self._move(closure(example, Duration::from_millis(1)).into())?;
+        self._move(MotionType::<7>::Cartesian(*target).into())?;
         sleep(Duration::from_millis(1));
-        self.command_handle.set_closure(move |state, duration| {
-            state.error_result().unwrap();
-            closure((*state).into(), duration).into()
+
+        let state = self.robot_state.read().unwrap();
+        let pose: Pose = state.O_T_EE.into();
+        drop(state);
+
+        let path_generate = cartesian_quat_simple_4th_curve(
+            pose.quat(),
+            target.quat(),
+            *self.max_cartesian_vel.get(),
+            *self.max_cartesian_acc.get(),
+        );
+
+        self.command_handle.set_closure(move |_, duration| {
+            MotionType::Cartesian(path_generate(duration).into()).into()
         });
         Ok(())
     }
+}
 
-    fn move_to_target(&mut self) -> Arc<Mutex<Option<MotionType<FRANKA_EMIKA_DOF>>>> {
+impl ArmPreplannedMotion<FRANKA_EMIKA_DOF> for FrankaRobot {
+    fn move_path(&mut self, _path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
         unimplemented!()
     }
-
-    fn control_to_target(&mut self) -> Arc<Mutex<Option<ControlType<FRANKA_EMIKA_DOF>>>> {
+    fn move_path_async(&mut self, _path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
+        unimplemented!()
+    }
+    fn move_path_prepare(&mut self, _path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
+        unimplemented!()
+    }
+    fn move_path_start(&mut self, _start: MotionType<FRANKA_EMIKA_DOF>) -> RobotResult<()> {
         unimplemented!()
     }
 }
 
-impl ArmRealtimeBehaviorExt<FRANKA_EMIKA_DOF> for FrankaRobot {
-    fn move_joint_target(&mut self) -> Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> {
-        unimplemented!()
+impl ArmRealtimeControl<FRANKA_EMIKA_DOF> for FrankaRobot {
+    fn move_with_closure<FM>(&mut self, mut closure: FM) -> RobotResult<()>
+    where
+        FM: FnMut(ArmState<FRANKA_EMIKA_DOF>, Duration) -> (MotionType<FRANKA_EMIKA_DOF>, bool)
+            + Send
+            + 'static,
+    {
+        self.is_moving = true;
+        let example = ArmState::<FRANKA_EMIKA_DOF>::default();
+        self._move(closure(example, Duration::from_millis(1)).0.into())?;
+        self.command_handle
+            .set_closure(move |state, duration| closure((*state).into(), duration).0.into());
+        Ok(())
     }
 
-    fn move_joint_vel_target(&mut self) -> Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> {
-        unimplemented!()
-    }
-
-    fn move_joint_acc_target(&mut self) -> Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> {
-        unimplemented!()
-    }
-
-    fn move_cartesian_euler_target(&mut self) -> Arc<Mutex<Option<[f64; 6]>>> {
-        unimplemented!()
-    }
-
-    fn move_cartesian_quat_target(&mut self) -> Arc<Mutex<Option<na::Isometry3<f64>>>> {
-        unimplemented!()
-    }
-
-    fn move_cartesian_homo_target(&mut self) -> Arc<Mutex<Option<[f64; 16]>>> {
-        unimplemented!()
-    }
-
-    fn move_cartesian_vel_target(&mut self) -> Arc<Mutex<Option<[f64; 6]>>> {
-        unimplemented!()
-    }
-
-    fn control_tau_target(&mut self) -> Arc<Mutex<Option<[f64; FRANKA_EMIKA_DOF]>>> {
-        unimplemented!()
+    fn control_with_closure<FC>(&mut self, mut closure: FC) -> RobotResult<()>
+    where
+        FC: FnMut(ArmState<FRANKA_EMIKA_DOF>, Duration) -> (ControlType<FRANKA_EMIKA_DOF>, bool)
+            + Send
+            + 'static,
+    {
+        self.is_moving = true;
+        let example = ArmState::<FRANKA_EMIKA_DOF>::default();
+        self._move(closure(example, Duration::from_millis(1)).0.into())?;
+        self.command_handle
+            .set_closure(move |state, duration| closure((*state).into(), duration).0.into());
+        Ok(())
     }
 }

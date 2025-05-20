@@ -2,9 +2,9 @@
 
 [English](README.md) | [简体中文](README_cn.md)
 
-unofficial rust implementation of libfranka!
+unofficial `rust` implementation of `libfranka`!
 
-This library is part of the [Universal Robot Driver Project](https://github.com/Robot-Exp-Platform/libhans-rs)! We are committed to providing Rust driver support for more robotic platforms! **Unifying driver interfaces across different robot models, reducing the learning curve for robotics, and delivering more efficient robot control solutions!**
+This library is part of the [Universal Robot Driver Project](https://github.com/Robot-Exp-Platform/robot_behavior)! We are committed to providing Rust driver support for more robotic platforms! **Unifying driver interfaces across different robot models, reducing the learning curve for robotics, and delivering more efficient robot control solutions!**
 
 During implementation, we referenced both [libfranka](https://github.com/frankaemika/libfranka) and [libfranka-rs](https://github.com/marcbone/libfranka-rs). Special thanks to open-source contributors, especially [marcbone](https://github.com/marcbone) - their library provided significant assistance! This implementation is not intended to be a direct replica of the official approach, but rather follows a more **idiomatic Rust** methodology.
 

@@ -1,5 +1,5 @@
 use nalgebra::Matrix4;
-use robot_behavior::{ArmState, Pose, RobotResult};
+use robot_behavior::{ArmState, RobotResult};
 use std::fmt;
 use std::path::Path;
 use strum_macros::EnumIter;
@@ -271,29 +271,29 @@ impl FrankaModel {
         )
     }
 
-    pub fn zero_jacobian_from_arm_state(
-        &self,
-        frame: &Frame,
-        arm_state: &ArmState<7>,
-    ) -> [f64; 42] {
-        let pose_f_to_ee = if let Some(Pose::Homo(pose)) = arm_state.pose_o_to_ee {
-            pose
-        } else {
-            [0.; 16]
-        };
+    // pub fn zero_jacobian_from_arm_state(
+    //     &self,
+    //     frame: &Frame,
+    //     arm_state: &ArmState<7>,
+    // ) -> [f64; 42] {
+    //     let pose_f_to_ee = if let Some(Pose::Homo(pose)) = arm_state.pose_o_to_ee {
+    //         pose
+    //     } else {
+    //         [0.; 16]
+    //     };
 
-        let pose_ee_to_k = if let Some(Pose::Homo(pose)) = arm_state.pose_ee_to_k {
-            pose
-        } else {
-            [0.; 16]
-        };
-        self.zero_jacobian(
-            frame,
-            &arm_state.joint.unwrap(),
-            &pose_f_to_ee,
-            &pose_ee_to_k,
-        )
-    }
+    //     let pose_ee_to_k = if let Some(Pose::Homo(pose)) = arm_state.pose_ee_to_k {
+    //         pose
+    //     } else {
+    //         [0.; 16]
+    //     };
+    //     self.zero_jacobian(
+    //         frame,
+    //         &arm_state.joint.unwrap(),
+    //         &pose_f_to_ee,
+    //         &pose_ee_to_k,
+    //     )
+    // }
 
     /// Calculates the 7x7 mass matrix. Unit: [kg \times m^2].
     /// # Arguments

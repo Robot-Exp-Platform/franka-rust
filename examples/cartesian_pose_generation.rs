@@ -1,7 +1,5 @@
-use franka_rust::{
-    FrankaRobot, types::robot_types::SetCollisionBehaviorData, utils::array_to_isometry,
-};
-use robot_behavior::{ArmBehavior, MotionType, RobotResult};
+use franka_rust::{FrankaRobot, types::robot_types::SetCollisionBehaviorData};
+use robot_behavior::{ArmBehavior, ArmPreplannedMotion, MotionType, Pose, RobotResult};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaRobot::new("172.16.0.3");
@@ -18,7 +16,7 @@ fn main() -> RobotResult<()> {
         upper_force_thresholds_nominal: [20., 20., 20., 25., 25., 25.],
     })?;
 
-    let pose = array_to_isometry(&[
+    let pose = Pose::Homo([
         0.999988717111279,
         -0.0017158199764830543,
         0.0006070528432007165,
@@ -37,7 +35,7 @@ fn main() -> RobotResult<()> {
         1.0,
     ]);
 
-    robot.move_to(MotionType::CartesianQuat(pose), 0.4)?;
+    robot.with_speed(0.3).move_to(MotionType::Cartesian(pose))?;
 
     Ok(())
 }

@@ -4,7 +4,7 @@
 
 非官方 `libfranka` 的 `Rust` 实现！
 
-本库是[通用机器人驱动计划](https://github.com/Robot-Exp-Platform/libhans-rs)中的一员！我们立志于为更多的机器人平台提供 Rust 语言的驱动支持！**统一不同型号的机器人驱动接口，降低机器人学习成本，提供更高效的机器人控制方案！**
+本库是[通用机器人驱动计划](https://github.com/Robot-Exp-Platform/robot_behavior)中的一员！我们立志于为更多的机器人平台提供 Rust 语言的驱动支持！**统一不同型号的机器人驱动接口，降低机器人学习成本，提供更高效的机器人控制方案！**
 
 在实现过程中，参考了 [libfranka](https://github.com/frankaemika/libfranka) 实现和 [libfranka-rs](https://github.com/marcbone/libfranka-rs) 实现，感谢开源作者的贡献！尤其是[marcbone](https://github.com/marcbone),他是的库帮助了我很多！本库并不愿意成为对官方的实现方式的完全复现，而是考虑按照更加 **rustly** 的方式来实现。
 

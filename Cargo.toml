@@ -26,12 +26,15 @@ tokio = { version = "1.44", features = ["full"], optional = true }
 thread-priority = "1.2"
 libloading = "0.8"
 libc = "0.2"
-pyo3 = { version = "0.24", features = ["extension-module"] }
+pyo3 = { version = "0.24", optional = true, features = [
+    "extension-module",
+    "multiple-pymethods",
+] }
 strum = "0.27"
 strum_macros = "0.27"
 
 # robot_behavior = { path = "crates/robot_behavior" }
-robot_behavior = "0.2"
+robot_behavior = { version = "0.4.0", path = "crates/robot_behavior" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 sys-locale = "0.3"
@@ -40,3 +43,5 @@ sys-locale = "0.3"
 default = []
 async = ["tokio"]
 debug = []
+ffi = []
+to_py = ["pyo3", "ffi"]

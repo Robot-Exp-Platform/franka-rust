@@ -3,9 +3,9 @@
 
 use std::{thread::sleep, time::Duration};
 
-use franka_rust::{FrankaRobot, model::Frame, utils::array_to_isometry};
+use franka_rust::{FrankaRobot, utils::array_to_isometry};
 use nalgebra as na;
-use robot_behavior::{ArmRealtimeBehavior, ArmState, ControlType, Pose, RobotResult};
+use robot_behavior::{ArmRealtimeControl, ArmState, ControlType, Pose, RobotResult};
 
 fn main() -> RobotResult<()> {
     let translational_stiffness: f64 = 150.;
@@ -32,7 +32,8 @@ fn main() -> RobotResult<()> {
     robot.control_with_closure(move |state: ArmState<7>, _: Duration| {
         let coriolis: na::SVector<f64, 7> = model.coriolis_from_arm_state(&state).into();
         let jacobian = na::SMatrix::<f64, 6, 7>::from_column_slice(
-            &model.zero_jacobian_from_arm_state(&Frame::EndEffector, &state),
+            // &model.zero_jacobian_from_arm_state(&Frame::EndEffector, &state),
+            &[0.; 42],
         );
         let dq: na::SVector<f64, 7> = state.joint_vel.unwrap().into();
         let transform = if let Some(Pose::Homo(pose)) = state.pose_o_to_ee {
@@ -59,7 +60,7 @@ fn main() -> RobotResult<()> {
         let tau_task = jacobian.transpose() * (-stiffness * error - damping * (jacobian * dq));
         let tau_d = tau_task + coriolis;
 
-        ControlType::Force(tau_d.into())
+        (ControlType::Torque(tau_d.into()), false)
     })?;
 
     sleep(Duration::from_secs(25));
