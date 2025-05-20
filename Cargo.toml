@@ -1,6 +1,6 @@
 [package]
 name = "franka_rust"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 authors = ["Yixing <yanjizhou312@163.com>"]
 readme = "README.md"
@@ -33,8 +33,7 @@ pyo3 = { version = "0.24", optional = true, features = [
 strum = "0.27"
 strum_macros = "0.27"
 
-# robot_behavior = { path = "crates/robot_behavior" }
-robot_behavior = { version = "0.4.0", path = "crates/robot_behavior" }
+robot_behavior = { version = "0.4.1", path = "crates/robot_behavior" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 sys-locale = "0.3"

@@ -444,7 +444,7 @@ checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
 name = "franka_rust"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bincode",
  "bitflags 2.9.0",
@@ -1088,7 +1088,7 @@ dependencies = [
 
 [[package]]
 name = "robot_behavior"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "libc",
  "nalgebra",

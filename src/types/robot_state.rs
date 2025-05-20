@@ -404,7 +404,7 @@ impl From<RobotStateInter> for ArmState<7> {
             tau: Some(val.tau_J_d),
             pose_o_to_ee: Some(Pose::Homo(val.O_T_EE_c)),
             // pose_f_to_ee: Some(Pose::Homo(val.F_T_EE)),
-            // pose_ee_to_k: Some(Pose::Homo(val.EE_T_K)),
+            pose_ee_to_k: Some(Pose::Homo(val.EE_T_K)),
             cartesian_vel: None,
             load: Some(LoadState { m, x, i }),
         }
