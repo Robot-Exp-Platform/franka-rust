@@ -117,25 +117,29 @@ impl CommandFilter<RobotStateInter> for RobotCommand {
     }
 }
 
-impl From<MotionType<7>> for RobotCommand {
-    fn from(value: MotionType<7>) -> Self {
+impl From<(MotionType<7>, bool)> for RobotCommand {
+    fn from(value: (MotionType<7>, bool)) -> Self {
         RobotCommand {
             message_id: 0,
-            motion: match value {
+            motion: match value.0 {
                 MotionType::Joint(joint) => MotionGeneratorCommand {
                     q_c: joint,
+                    motion_generation_finished: value.1,
                     ..MotionGeneratorCommand::default()
                 },
                 MotionType::JointVel(joint_vel) => MotionGeneratorCommand {
                     dq_c: joint_vel,
+                    motion_generation_finished: value.1,
                     ..MotionGeneratorCommand::default()
                 },
                 MotionType::Cartesian(pose) => MotionGeneratorCommand {
                     pose_o_to_ee_c: pose.homo(),
+                    motion_generation_finished: value.1,
                     ..MotionGeneratorCommand::default()
                 },
                 MotionType::CartesianVel(pose_vel) => MotionGeneratorCommand {
                     dpose_o_to_ee_c: pose_vel,
+                    motion_generation_finished: value.1,
                     ..MotionGeneratorCommand::default()
                 },
                 _ => MotionGeneratorCommand::default(),
@@ -145,12 +149,12 @@ impl From<MotionType<7>> for RobotCommand {
     }
 }
 
-impl From<ControlType<7>> for RobotCommand {
-    fn from(value: ControlType<7>) -> Self {
+impl From<(ControlType<7>, bool)> for RobotCommand {
+    fn from(value: (ControlType<7>, bool)) -> Self {
         RobotCommand {
             message_id: 0,
             motion: MotionGeneratorCommand::default(),
-            control: match value {
+            control: match value.0 {
                 ControlType::Torque(tau) => ControllerCommand { tau_j_d: tau },
                 _ => ControllerCommand::default(),
             },

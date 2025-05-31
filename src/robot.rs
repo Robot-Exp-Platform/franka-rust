@@ -332,6 +332,24 @@ impl ArmBehavior<FRANKA_EMIKA_DOF> for FrankaRobot {
         self.max_cartesian_vel.once(cartesian_vel);
         self
     }
+    fn with_cartesian_acceleration(&mut self, cartesian_acc: f64) -> &mut Self {
+        self.max_cartesian_acc.once(cartesian_acc);
+        self
+    }
+    fn with_cartesian_jerk(&mut self, _cartesian_jerk: f64) -> &mut Self {
+        self
+    }
+    fn with_rotation_velocity(&mut self, rotation_vel: f64) -> &mut Self {
+        self.max_cartesian_vel.once(rotation_vel);
+        self
+    }
+    fn with_rotation_acceleration(&mut self, rotation_acc: f64) -> &mut Self {
+        self.max_cartesian_acc.once(rotation_acc);
+        self
+    }
+    fn with_rotation_jerk(&mut self, _rotation_jerk: f64) -> &mut Self {
+        self
+    }
 }
 
 impl ArmParam<FRANKA_EMIKA_DOF> for FrankaRobot {
@@ -358,23 +376,7 @@ impl ArmParam<FRANKA_EMIKA_DOF> for FrankaRobot {
 
 impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
     fn move_joint(&mut self, target: &[f64; FRANKA_EMIKA_DOF]) -> RobotResult<()> {
-        self.is_moving = true;
-        self._move(MotionType::Joint(*target).into())?;
-        sleep(Duration::from_millis(2));
-
-        let state = self.robot_state.read().unwrap();
-        let joint = state.q_d;
-        drop(state);
-
-        let path_generate = path_generate::joint_simple_4th_curve(
-            &joint,
-            target,
-            self.max_vel.get(),
-            self.max_acc.get(),
-        );
-
-        self.command_handle
-            .set_closure(move |_, duration| MotionType::Joint(path_generate(duration)).into());
+        self.move_joint_async(target)?;
 
         loop {
             let state = self.robot_state.read().unwrap();
@@ -412,29 +414,23 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
             self.max_acc.get(),
         );
 
-        self.command_handle
-            .set_closure(move |_, duration| MotionType::Joint(path_generate(duration)).into());
+        let target = *target;
+
+        self.command_handle.set_closure(move |state, duration| {
+            let q_d = state.q_d;
+            (
+                MotionType::Joint(path_generate(duration)),
+                target
+                    .iter()
+                    .zip(q_d.iter())
+                    .fold(false, |acc, (t, j)| acc || (t - j).abs() > 0.01),
+            )
+                .into()
+        });
         Ok(())
     }
     fn move_cartesian(&mut self, target: &Pose) -> RobotResult<()> {
-        self.is_moving = true;
-        self._move(MotionType::<7>::Cartesian(*target).into())?;
-        sleep(Duration::from_millis(1));
-
-        let state = self.robot_state.read().unwrap();
-        let pose: Pose = state.O_T_EE.into();
-        drop(state);
-
-        let path_generate = cartesian_quat_simple_4th_curve(
-            pose.quat(),
-            target.quat(),
-            *self.max_cartesian_vel.get(),
-            *self.max_cartesian_acc.get(),
-        );
-
-        self.command_handle.set_closure(move |_, duration| {
-            MotionType::Cartesian(path_generate(duration).into()).into()
-        });
+        self.move_cartesian_async(target)?;
 
         loop {
             let state = self.robot_state.read().unwrap();
@@ -467,19 +463,52 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
             *self.max_cartesian_acc.get(),
         );
 
-        self.command_handle.set_closure(move |_, duration| {
-            MotionType::Cartesian(path_generate(duration).into()).into()
+        let target = *target;
+
+        self.command_handle.set_closure(move |state, duration| {
+            (
+                MotionType::Cartesian(path_generate(duration).into()),
+                (target / Into::<Pose>::into(state.O_T_EE)) < 0.01,
+            )
+                .into()
         });
         Ok(())
     }
 }
 
 impl ArmPreplannedMotion<FRANKA_EMIKA_DOF> for FrankaRobot {
-    fn move_path(&mut self, _path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
-        unimplemented!()
+    fn move_path(&mut self, path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
+        self.move_path_async(path)?;
+
+        loop {
+            let state = self.robot_state.read().unwrap();
+            let vel = state.dq_d;
+            drop(state);
+
+            if vel.into_iter().sum::<f64>() < 0.01 {
+                break;
+            } else {
+                sleep(Duration::from_millis(1));
+            }
+        }
+
+        self.is_moving = false;
+        Ok(())
     }
-    fn move_path_async(&mut self, _path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
-        unimplemented!()
+    fn move_path_async(&mut self, path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
+        self.is_moving = true;
+
+        self.move_to(path[0])?;
+        let mut path = path.into_iter();
+
+        self.command_handle.set_closure(move |_, _| {
+            if let Some(next) = path.next() {
+                (next, false).into()
+            } else {
+                (MotionType::Stop, true).into()
+            }
+        });
+        Ok(())
     }
     fn move_path_prepare(&mut self, _path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
         unimplemented!()
@@ -500,7 +529,7 @@ impl ArmRealtimeControl<FRANKA_EMIKA_DOF> for FrankaRobot {
         let example = ArmState::<FRANKA_EMIKA_DOF>::default();
         self._move(closure(example, Duration::from_millis(1)).0.into())?;
         self.command_handle
-            .set_closure(move |state, duration| closure((*state).into(), duration).0.into());
+            .set_closure(move |state, duration| closure((*state).into(), duration).into());
         Ok(())
     }
 
@@ -514,7 +543,7 @@ impl ArmRealtimeControl<FRANKA_EMIKA_DOF> for FrankaRobot {
         let example = ArmState::<FRANKA_EMIKA_DOF>::default();
         self._move(closure(example, Duration::from_millis(1)).0.into())?;
         self.command_handle
-            .set_closure(move |state, duration| closure((*state).into(), duration).0.into());
+            .set_closure(move |state, duration| closure((*state).into(), duration).into());
         Ok(())
     }
 }
