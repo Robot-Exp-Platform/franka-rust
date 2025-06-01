@@ -414,7 +414,7 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
         self.command_handle.set_closure(move |state, duration| {
             let finished = target
                 .iter()
-                .zip(state.q_d.into_iter())
+                .zip(state.q_d)
                 .fold(true, |acc, (t, j)| acc && (t - j).abs() < 0.01);
             (MotionType::Joint(path_generate(duration)), finished).into()
         });
