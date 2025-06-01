@@ -68,7 +68,8 @@ impl FrankaRobot {
             max_cartesian_vel: OverrideOnce::new(FRANKA_ROBOT_MAX_CARTESIAN_VEL[0]),
             max_cartesian_acc: OverrideOnce::new(FRANKA_ROBOT_MAX_CARTESIAN_ACC[0]),
         };
-        robot.set_speed(0.1).connect().unwrap();
+        robot.connect().unwrap();
+        let _ = robot.set_speed(0.1);
 
         robot
     }
