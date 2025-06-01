@@ -52,7 +52,7 @@ impl ModelLibrary {
             let lib = Library::new(model_filename)
                 .map_err(|e| RobotException::ModelException(e.to_string()))?;
 
-            return Ok(ModelLibrary { lib, _libm });
+            Ok(ModelLibrary { lib, _libm })
         }
         #[cfg(not(target_os = "linux"))]
         unsafe {
