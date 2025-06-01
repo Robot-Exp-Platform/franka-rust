@@ -22,7 +22,7 @@ pub struct Network {
 
 impl Network {
     pub fn new(tcp_ip: &str, tcp_port: u16) -> Self {
-        let tcp_stream = TcpStream::connect(format!("{}:{}", tcp_ip, tcp_port)).ok();
+        let tcp_stream = TcpStream::connect(format!("{tcp_ip}:{tcp_port}")).ok();
 
         if let Some(steam) = &tcp_stream {
             steam
@@ -86,7 +86,7 @@ impl Network {
             println!("request :{:?}", request);
             stream.write_all(&request)?;
             let mut buffer = vec![0_u8; size_of::<S>() + 4];
-            stream.read(&mut buffer)?;
+            stream.read_exact(&mut buffer)?;
             let res = bincode::deserialize(&buffer)
                 .map_err(|e| RobotException::DeserializeError(e.to_string()))?;
             let mut receive_buffer = Vec::new();
@@ -94,7 +94,7 @@ impl Network {
                 let mut buffer = vec![0_u8; 1024 * 5];
                 if let Ok(size) = stream.read(&mut buffer) {
                     receive_buffer.append(&mut buffer[..size].to_vec());
-                    println!("size:{}", size);
+                    println!("size:{size}");
                 } else {
                     break;
                 }
@@ -155,7 +155,7 @@ impl Network {
         {
             if !is_firewall_rule_active(port) {
                 let (title, fix_step, cleanup_info) = get_localized_message(port);
-                eprintln!("\n{}\n\n{}\n\n{}\n", title, fix_step, cleanup_info);
+                eprintln!("\n{title}\n\n{fix_step}\n\n{cleanup_info}\n");
                 std::process::exit(1);
             }
         }
@@ -306,8 +306,7 @@ fn is_firewall_rule_active(port: u16) -> bool {
     use std::process::Command;
 
     let command = format!(
-        "Get-NetFirewallRule -DisplayName 'LibFranka_UDP_{}' -ErrorAction SilentlyContinue | Where-Object {{ $_.Enabled -eq 'True' }}",
-        port
+        "Get-NetFirewallRule -DisplayName 'LibFranka_UDP_{port}' -ErrorAction SilentlyContinue | Where-Object {{ $_.Enabled -eq 'True' }}",
     );
 
     let output = Command::new("powershell")
@@ -332,16 +331,13 @@ fn get_localized_message(port: u16) -> (String, String, String) {
             r#"
 1. 右键开始菜单 → 选择 [Windows PowerShell (管理员)]
 2. 执行以下命令 (已复制到剪贴板):
-   New-NetFirewallRule -DisplayName 'LibFranka_UDP_{}' -Direction Inbound -Protocol UDP -LocalPort {} -Action Allow
+   New-NetFirewallRule -DisplayName 'LibFranka_UDP_{port}' -Direction Inbound -Protocol UDP -LocalPort {port} -Action Allow
 3. 按回车 → 完成后关闭窗口
 4. 重新启动本程序
-            "#,
-            port, port
+            "#
         );
-        let cleanup_info = format!(
-            "后续清理: 执行命令 Remove-NetFirewallRule -DisplayName 'RoboLib_UDP_{}'",
-            port
-        );
+        let cleanup_info =
+            format!("后续清理: 执行命令 Remove-NetFirewallRule -DisplayName 'RoboLib_UDP_{port}'");
         (title, fix_step, cleanup_info)
     } else {
         // 英文提示 (默认)
@@ -350,16 +346,13 @@ fn get_localized_message(port: u16) -> (String, String, String) {
             r#"
 1. Right-click Start Menu → Select [Windows PowerShell (Admin)]
 2. Run this command (copied to clipboard):
-   New-NetFirewallRule -DisplayName 'LibFranka_UDP_{}' -Direction Inbound -Protocol UDP -LocalPort {} -Action Allow
+   New-NetFirewallRule -DisplayName 'LibFranka_UDP_{port}' -Direction Inbound -Protocol UDP -LocalPort {port} -Action Allow
 3. Press Enter → Close window after success
 4. Restart this application
             "#,
-            port, port
         );
-        let cleanup_info = format!(
-            "Cleanup later: Run Remove-NetFirewallRule -DisplayName 'RoboLib_UDP_{}'",
-            port
-        );
+        let cleanup_info =
+            format!("Cleanup later: Run Remove-NetFirewallRule -DisplayName 'RoboLib_UDP_{port}'");
         (title, fix_step, cleanup_info)
     }
 }

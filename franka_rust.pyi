@@ -1,11 +1,5 @@
-class PyArmState7:
-    """ 7自由度机械臂状态
-    """
-    
-    def echo() -> str:
-        ...
-
-class FrankaRobot:
+from robot_behavior import *
+class FrankaRobot(Arm, ArmPreplannedMotion, ArmPreplannedMotionImpl, ArmPreplannedMotionExt, ArmRealtimeControl, ArmRealtimeControlExt):
     """ 
     # Franka 机器人
     """
@@ -115,44 +109,6 @@ class FrankaRobot:
             i_load: list[float; 9] 负载惯性
         """
         ...
-        
-    def arm_state(self) -> PyArmState7:
-        """ 
-        # FrankaRobot
-        ## 机械臂状态
-        Returns:
-            PyArmState7 机械臂状态
-        """
-        ...
-    
-    def move_joint(self, target: list[float], speed: float) -> None:
-        """
-        # FrankaRobot
-        ## 关节空间运动
-        初始位置为 [0., -PI / 4., 0., -3. * PI / 4., 0., PI / 2., PI / 4.]
-        Args:
-            target: list[float; 7] 目标关节角度
-            speed: float 运动速度比
-        """
-        ...
-        
-    def move_linear_with_homo(self, target: list[float], speed: float) -> None:
-        """
-        # FrankaRobot
-        ## 基于齐次变换矩阵的笛卡尔空间运动(按列排布的齐次变换矩阵转为的向量)
-        初始位置为 
-        [0.999988717111279, -0.0017158199764830543, 0.0006070528432007165, 0.0,
-        -0.0017159793580267732, -0.9999888667416037, 0.0002621238143371493, 0.0,
-        0.0006066080065316006, -0.00026316761376355145, -0.9999997813847427, 0.0,
-        0.30648819513520104, -0.0005332618190956864, 0.48708322693240846, 1.0]
-    ]
-        """
-        
-    def move_linear_with_ruler(self, target: list[float], speed: float) -> None:
-        """
-        # FrankaRobot
-        ## 基于欧拉角的笛卡尔空间运动
-        """
         
 class FrankaGripper:
     """

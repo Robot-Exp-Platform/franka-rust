@@ -93,9 +93,7 @@ impl CommandFilter<RobotStateInter> for MotionGeneratorCommand {
             dq_c,
             pose_o_to_ee_c,
             dpose_o_to_ee_c,
-            elbow_c: self.elbow_c,
-            valid_elbow: self.valid_elbow,
-            motion_generation_finished: self.motion_generation_finished,
+            ..self
         }
     }
 }
@@ -103,7 +101,7 @@ impl CommandFilter<RobotStateInter> for MotionGeneratorCommand {
 impl CommandFilter<RobotStateInter> for ControllerCommand {
     fn filter(self, state: &RobotStateInter) -> Self {
         let tau_j_d = self.tau_j_d;
-        let tau_j = state.tau_J;
+        let tau_j = state.tau_J_d;
         let tau_j_d = franka_limit_rate_torques(&tau_j_d, &tau_j);
         ControllerCommand { tau_j_d }
     }
@@ -119,25 +117,29 @@ impl CommandFilter<RobotStateInter> for RobotCommand {
     }
 }
 
-impl From<MotionType<7>> for RobotCommand {
-    fn from(value: MotionType<7>) -> Self {
+impl From<(MotionType<7>, bool)> for RobotCommand {
+    fn from(value: (MotionType<7>, bool)) -> Self {
         RobotCommand {
             message_id: 0,
-            motion: match value {
+            motion: match value.0 {
                 MotionType::Joint(joint) => MotionGeneratorCommand {
                     q_c: joint,
+                    motion_generation_finished: value.1,
                     ..MotionGeneratorCommand::default()
                 },
                 MotionType::JointVel(joint_vel) => MotionGeneratorCommand {
                     dq_c: joint_vel,
+                    motion_generation_finished: value.1,
                     ..MotionGeneratorCommand::default()
                 },
-                MotionType::CartesianHomo(pose) => MotionGeneratorCommand {
-                    pose_o_to_ee_c: pose,
+                MotionType::Cartesian(pose) => MotionGeneratorCommand {
+                    pose_o_to_ee_c: pose.homo(),
+                    motion_generation_finished: value.1,
                     ..MotionGeneratorCommand::default()
                 },
                 MotionType::CartesianVel(pose_vel) => MotionGeneratorCommand {
                     dpose_o_to_ee_c: pose_vel,
+                    motion_generation_finished: value.1,
                     ..MotionGeneratorCommand::default()
                 },
                 _ => MotionGeneratorCommand::default(),
@@ -147,13 +149,13 @@ impl From<MotionType<7>> for RobotCommand {
     }
 }
 
-impl From<ControlType<7>> for RobotCommand {
-    fn from(value: ControlType<7>) -> Self {
+impl From<(ControlType<7>, bool)> for RobotCommand {
+    fn from(value: (ControlType<7>, bool)) -> Self {
         RobotCommand {
             message_id: 0,
             motion: MotionGeneratorCommand::default(),
-            control: match value {
-                ControlType::Force(tau) => ControllerCommand { tau_j_d: tau },
+            control: match value.0 {
+                ControlType::Torque(tau) => ControllerCommand { tau_j_d: tau },
                 _ => ControllerCommand::default(),
             },
         }
@@ -169,13 +171,12 @@ impl Display for RobotCommand {
         write!(
             f,
             r#"robot command:
-    | message_id: {},
+    | message_id: {message_id},
     | motion:
-        | q_c: {:?},
-        | pose: {:?},
+        | q_c: {q:?},
+        | pose: {pose:?},
     | control:
-        | tau: {:?}"#,
-            message_id, q, pose, tau
+        | tau: {tau:?}"#
         )
     }
 }

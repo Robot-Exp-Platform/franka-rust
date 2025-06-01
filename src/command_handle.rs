@@ -6,7 +6,7 @@ use std::{
 
 use crate::types::robot_types::CommandFilter;
 
-type ControlClosure<R, S> = Option<Box<dyn Fn(&S, Duration) -> R + Send>>;
+type ControlClosure<R, S> = Option<Box<dyn FnMut(&S, Duration) -> R + Send>>;
 
 #[derive(Clone, Default)]
 pub struct CommandHandle<R, S>
@@ -41,15 +41,15 @@ where
         target_lock.clone()
     }
 
-    pub fn set_closure<F: Fn(&S, Duration) -> R + Send + 'static>(&self, closure: F) {
+    pub fn set_closure<F: FnMut(&S, Duration) -> R + Send + 'static>(&self, closure: F) {
         let mut closure_lock = self.closure.lock().unwrap();
         *closure_lock = Some(Box::new(closure));
     }
 
     pub fn run_closure(&self, state: &S, duration: Duration) -> Option<R> {
-        let closure_lock = self.closure.lock().unwrap();
+        let mut closure_lock = self.closure.lock().unwrap();
         (*closure_lock)
-            .as_ref()
+            .as_mut()
             .map(|closure| closure(state, duration))
     }
 
@@ -63,6 +63,6 @@ where
             }
             (None, None) => None,
         }
-        // .map(|res| res.filter(state))
+        .map(|res| res.filter(state))
     }
 }
