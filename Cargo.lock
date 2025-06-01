@@ -1089,6 +1089,8 @@ dependencies = [
 [[package]]
 name = "robot_behavior"
 version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9ee26c84b894262d3c05caeb24ed3c68dc1e691c4143de27524aadc3203ed0c"
 dependencies = [
  "libc",
  "nalgebra",
