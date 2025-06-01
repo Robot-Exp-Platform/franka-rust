@@ -384,14 +384,12 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
             let state = self.robot_state.read().unwrap();
             let joint = state.q_d;
             drop(state);
-            let mut is_done = true;
-            for i in 0..FRANKA_EMIKA_DOF {
-                if (joint[i] - target[i]).abs() > 0.01 {
-                    is_done = false;
-                    break;
-                }
-            }
-            if is_done {
+
+            if target
+                .iter()
+                .zip(joint.into_iter())
+                .fold(true, |acc, (t, j)| acc && (t - j).abs() < 0.01)
+            {
                 break;
             }
             sleep(Duration::from_millis(1));
@@ -408,26 +406,17 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
         let state = self.robot_state.read().unwrap();
         let joint = state.q_d;
         drop(state);
-
-        let path_generate = path_generate::joint_simple_4th_curve(
-            &joint,
-            target,
-            self.max_vel.get(),
-            self.max_acc.get(),
-        );
-
         let target = *target;
 
+        let (v_max, a_max, j_max) = (self.max_vel.get(), self.max_acc.get(), self.max_jerk.get());
+        let path_generate = path_generate::joint_s_curve(&joint, &target, v_max, a_max, j_max);
+
         self.command_handle.set_closure(move |state, duration| {
-            let q_d = state.q_d;
-            (
-                MotionType::Joint(path_generate(duration)),
-                target
-                    .iter()
-                    .zip(q_d.iter())
-                    .fold(false, |acc, (t, j)| acc || (t - j).abs() > 0.01),
-            )
-                .into()
+            let finished = target
+                .iter()
+                .zip(state.q_d.into_iter())
+                .fold(true, |acc, (t, j)| acc && (t - j).abs() < 0.01);
+            (MotionType::Joint(path_generate(duration)), finished).into()
         });
         Ok(())
     }
@@ -454,18 +443,14 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
         self._move(MotionType::<7>::Cartesian(*target).into())?;
         sleep(Duration::from_millis(1));
 
+        let target = *target;
         let state = self.robot_state.read().unwrap();
         let pose: Pose = state.O_T_EE.into();
         drop(state);
 
-        let path_generate = cartesian_quat_simple_4th_curve(
-            pose.quat(),
-            target.quat(),
-            *self.max_cartesian_vel.get(),
-            *self.max_cartesian_acc.get(),
-        );
-
-        let target = *target;
+        let (v_max, a_max) = (self.max_cartesian_vel.get(), self.max_cartesian_acc.get());
+        let path_generate =
+            cartesian_quat_simple_4th_curve(pose.quat(), target.quat(), *v_max, *a_max);
 
         self.command_handle.set_closure(move |state, duration| {
             (
