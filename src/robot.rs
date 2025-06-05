@@ -388,7 +388,7 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
 
             let finished = target
                 .iter()
-                .zip(joint.into_iter())
+                .zip(joint)
                 .fold(true, |acc, (t, j)| acc && ((t - j).abs() < 1E-3));
             let finished = finished && joint_vel.into_iter().sum::<f64>() < 0.01;
 
@@ -423,7 +423,7 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
         self.command_handle.set_closure(move |state, duration| {
             let finished = target
                 .iter()
-                .zip(state.q_d.into_iter())
+                .zip(state.q_d)
                 .fold(true, |acc, (t, j)| acc && ((t - j).abs() < 1E-3));
             let finished = finished && state.dq_d.into_iter().sum::<f64>() < 0.01;
             (MotionType::Joint(path_generate(duration)), finished).into()
