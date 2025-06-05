@@ -46,6 +46,11 @@ where
         *closure_lock = Some(Box::new(closure));
     }
 
+    pub fn remove_closure(&self) {
+        let mut closure_lock = self.closure.lock().unwrap();
+        *closure_lock = None;
+    }
+
     pub fn run_closure(&self, state: &S, duration: Duration) -> Option<R> {
         let mut closure_lock = self.closure.lock().unwrap();
         (*closure_lock)

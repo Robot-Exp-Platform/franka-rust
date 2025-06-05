@@ -165,6 +165,7 @@ impl From<(ControlType<7>, bool)> for RobotCommand {
 impl Display for RobotCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let message_id = self.message_id;
+        let motion_generation_finished = self.motion.motion_generation_finished;
         let q = self.motion.q_c;
         let pose = self.motion.pose_o_to_ee_c;
         let tau = self.control.tau_j_d;
@@ -172,6 +173,7 @@ impl Display for RobotCommand {
             f,
             r#"robot command:
     | message_id: {message_id},
+    | finished: {motion_generation_finished},
     | motion:
         | q_c: {q:?},
         | pose: {pose:?},

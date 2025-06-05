@@ -67,6 +67,25 @@ impl Network {
         }
     }
 
+    // pub fn tcp_blocking_recv<S>(&mut self) -> RobotResult<S>
+    // where
+    //     S: DeserializeOwned + CommandIDConfig<u32> + Debug,
+    // {
+    //     if let Some(stream) = &mut self.tcp_stream {
+    //         let mut buffer = vec![0_u8; size_of::<S>() + 4];
+    //         println!("tcp blocking recv");
+    //         stream.read_exact(&mut buffer)?;
+
+    //         let response = bincode::deserialize(&buffer);
+    //         println!("tcp recv {:?}", response);
+    //         response.map_err(|e| RobotException::DeserializeError(e.to_string()))
+    //     } else {
+    //         Err(RobotException::NetworkError(
+    //             "No active tcp connection".to_string(),
+    //         ))
+    //     }
+    // }
+
     pub fn tcp_send_and_recv_buffer<R, S>(&mut self, request: &mut R) -> RobotResult<(S, Vec<u8>)>
     where
         R: Serialize + CommandIDConfig<u32> + Debug,

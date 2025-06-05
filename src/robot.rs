@@ -383,18 +383,26 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
         loop {
             let state = self.robot_state.read().unwrap();
             let joint = state.q_d;
+            let joint_vel = state.dq_d;
             drop(state);
 
-            if target
+            let finished = target
                 .iter()
                 .zip(joint.into_iter())
-                .fold(true, |acc, (t, j)| acc && (t - j).abs() < 0.01)
-            {
+                .fold(true, |acc, (t, j)| acc && ((t - j).abs() < 1E-3));
+            let finished = finished && joint_vel.into_iter().sum::<f64>() < 0.01;
+
+            sleep(Duration::from_millis(1));
+            if finished {
+                self.command_handle.remove_closure();
+                // let _ = self.network.tcp_blocking_recv::<MoveResponse>();
                 break;
             }
-            sleep(Duration::from_millis(1));
         }
+        // let _ = self.network.tcp_blocking_recv::<MoveResponse>();
         let _ = self._stop_move(());
+        println!("Joint move finished");
+        // let _ = self._automatic_error_recovery(());
         self.is_moving = false;
         Ok(())
     }
@@ -410,12 +418,14 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
 
         let (v_max, a_max, j_max) = (self.max_vel.get(), self.max_acc.get(), self.max_jerk.get());
         let path_generate = path_generate::joint_s_curve(&joint, &target, v_max, a_max, j_max);
+        // let path_generate = path_generate::joint_trapezoid(&joint, &target, v_max, a_max);
 
         self.command_handle.set_closure(move |state, duration| {
             let finished = target
                 .iter()
                 .zip(state.q_d.into_iter())
-                .fold(true, |acc, (t, j)| acc && (t - j).abs() < 0.01);
+                .fold(true, |acc, (t, j)| acc && ((t - j).abs() < 1E-3));
+            let finished = finished && state.dq_d.into_iter().sum::<f64>() < 0.01;
             (MotionType::Joint(path_generate(duration)), finished).into()
         });
         Ok(())

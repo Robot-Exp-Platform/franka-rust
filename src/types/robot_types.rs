@@ -5,10 +5,11 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::f64::consts::PI;
+use std::fmt;
 use std::marker::ConstParamTy;
 use std::time::Duration;
 
-#[derive(ConstParamTy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
+#[derive(Debug, ConstParamTy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
 pub enum Command {
     Connect,
@@ -41,7 +42,7 @@ pub struct Request<const C: Command, D: Clone + Copy> {
     pub data: D,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[repr(C, packed)]
 pub struct Response<const C: Command, S> {
     pub header: CommandHeader<C>,
@@ -105,6 +106,14 @@ pub struct ConnectStatus {
 // ! Move Command
 pub type MoveRequest = Request<{ Command::Move }, MoveData>;
 pub type MoveResponse = Response<{ Command::Move }, MoveStatus>;
+
+impl fmt::Debug for MoveResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MoveResponse")
+            .field("status", &self.status)
+            .finish()
+    }
+}
 
 #[derive(Debug, Default, Serialize_repr, Copy, Clone)]
 #[repr(u32)]
