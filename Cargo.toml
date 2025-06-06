@@ -39,8 +39,9 @@ robot_behavior = { version = "0.4.5", path = "crates/robot_behavior" }
 sys-locale = "0.3"
 
 [features]
-default = []
+default = ["unfinished"]
 async = ["tokio"]
 debug = []
 ffi = []
 to_py = ["pyo3", "ffi"]
+unfinished = []

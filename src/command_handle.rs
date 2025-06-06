@@ -46,6 +46,7 @@ where
         *closure_lock = Some(Box::new(closure));
     }
 
+    #[allow(unused)]
     pub fn remove_closure(&self) {
         let mut closure_lock = self.closure.lock().unwrap();
         *closure_lock = None;

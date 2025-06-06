@@ -199,7 +199,6 @@ impl Network {
 
             #[cfg(feature = "debug")]
             let start_time = std::time::Instant::now();
-            let mut duration = Duration::from_millis(0);
 
             let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
             // udp_socket
@@ -213,7 +212,7 @@ impl Network {
                 #[cfg(feature = "debug")]
                 println!("{:?} >{}", start_time.elapsed(), response);
 
-                if let Some(data) = &mut cmd.command(&response, duration) {
+                if let Some(data) = &mut cmd.command(&response, Duration::from_millis(1)) {
                     data.set_command_id(response.command_id());
                     #[cfg(feature = "debug")]
                     println!("{:?} >{}", start_time.elapsed(), data);
@@ -222,9 +221,6 @@ impl Network {
                     if send_size != size_of::<R>() {
                         eprintln!("udp send error");
                     }
-                    duration += Duration::from_millis(1);
-                } else {
-                    duration = Duration::from_millis(0);
                 }
 
                 *res.write().unwrap() = response;
