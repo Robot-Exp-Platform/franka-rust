@@ -24,6 +24,7 @@ use crate::{
     once::OverrideOnce,
     types::{
         robot_command::RobotCommand,
+        robot_state::*,
         robot_state::{RobotState, RobotStateInter},
         robot_types::*,
     },
@@ -383,26 +384,18 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
 
         loop {
             let state = self.robot_state.read().unwrap();
-            let joint = state.q_d;
-            let joint_vel = state.dq_d;
+            let finished = state.motion_generator_mode == MotionGeneratorMode::Idle;
             drop(state);
 
-            let finished = target
-                .iter()
-                .zip(joint)
-                .fold(true, |acc, (t, j)| acc && ((t - j).abs() < 1E-3));
-            let finished = finished && joint_vel.into_iter().sum::<f64>() < 0.01;
-
-            sleep(Duration::from_millis(1));
             if finished {
                 self.command_handle.remove_closure();
-                // let _ = self.network.tcp_blocking_recv::<MoveResponse>();
+                let _ = self.network.tcp_blocking_recv::<MoveResponse>();
                 break;
             }
+            sleep(Duration::from_millis(1));
         }
-        // let _ = self.network.tcp_blocking_recv::<MoveResponse>();
-        let _ = self._stop_move(());
-        println!("Joint move finished");
+        // let _ = self._stop_move(());
+        // println!("Joint move finished");
         // let _ = self._automatic_error_recovery(());
         self.is_moving = false;
         Ok(())
@@ -436,14 +429,15 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
 
         loop {
             let state = self.robot_state.read().unwrap();
-            let pose: Pose = state.O_T_EE.into();
+            let finished = state.motion_generator_mode == MotionGeneratorMode::Idle;
             drop(state);
 
-            if (*target / pose) < 0.01 {
+            if finished {
+                self.command_handle.remove_closure();
+                let _ = self.network.tcp_blocking_recv::<MoveResponse>();
                 break;
-            } else {
-                sleep(Duration::from_millis(1));
             }
+            sleep(Duration::from_millis(1));
         }
         let _ = self._stop_move(());
         self.is_moving = false;
@@ -483,6 +477,7 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
             let state = self.robot_state.read().unwrap();
             let joint = state.q_d;
             let joint_vel = state.dq_d;
+
             drop(state);
 
             let finished = target

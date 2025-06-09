@@ -10,7 +10,7 @@ use super::{
     robot_types::CommandIDConfig,
 };
 
-#[derive(Debug, Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
+#[derive(Debug, Default, Serialize_repr, Deserialize_repr, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum MotionGeneratorMode {
     #[default]
@@ -22,7 +22,7 @@ pub enum MotionGeneratorMode {
     None,
 }
 
-#[derive(Debug, Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
+#[derive(Debug, Default, Serialize_repr, Deserialize_repr, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum ControllerMode {
     #[default]
@@ -32,7 +32,7 @@ pub enum ControllerMode {
     Other,
 }
 
-#[derive(Debug, Default, Serialize_repr, Deserialize_repr, Clone, Copy)]
+#[derive(Debug, Default, Serialize_repr, Deserialize_repr, PartialEq, Clone, Copy)]
 #[repr(u8)]
 pub enum RobotMode {
     Other,

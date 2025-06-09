@@ -39,7 +39,7 @@ robot_behavior = { version = "0.4.5", path = "crates/robot_behavior" }
 sys-locale = "0.3"
 
 [features]
-default = ["unfinished"]
+default = []
 async = ["tokio"]
 debug = []
 ffi = []
