@@ -1,5 +1,4 @@
 use robot_behavior::{RobotException, RobotResult};
-#[cfg(not(feature = "async"))]
 use robot_behavior::{is_hardware_realtime, set_realtime_priority};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
@@ -8,7 +7,6 @@ use std::{
     net::TcpStream,
     sync::{Arc, Mutex, RwLock},
 };
-#[cfg(not(feature = "async"))]
 use std::{net::UdpSocket, thread};
 
 use crate::command_handle::CommandHandle;
@@ -67,18 +65,15 @@ impl Network {
         }
     }
 
-    #[cfg(not(feature = "unfinished"))]
     pub fn tcp_blocking_recv<S>(&mut self) -> RobotResult<S>
     where
         S: DeserializeOwned + CommandIDConfig<u32> + Debug,
     {
         if let Some(stream) = &mut self.tcp_stream {
             let mut buffer = vec![0_u8; size_of::<S>() + 4];
-            println!("tcp blocking recv");
             stream.read_exact(&mut buffer)?;
 
             let response = bincode::deserialize(&buffer);
-            println!("tcp recv {response:?}");
             response.map_err(|e| RobotException::DeserializeError(e.to_string()))
         } else {
             Err(RobotException::NetworkError(
@@ -128,28 +123,6 @@ impl Network {
         }
     }
 
-    // /// 检查是否有可接收的 tcp 数据,如果有，则解析为对应的类型，如果没有，直接退出
-    // pub fn tcp_recv<S>(&mut self) -> RobotResult<Option<S>>
-    // where
-    //     S: DeserializeOwned + CommandIDConfig,
-    // {
-    //     if let Some(stream) = &mut self.tcp_stream {
-    //         let mut buffer = [0; 1024];
-    //         let size = stream.read(&mut buffer)?;
-    //         if size == 0 {
-    //             return Ok(None);
-    //         }
-    //         bincode::deserialize(&buffer[..size])
-    //             .map(|data| Some(data))
-    //             .map_err(|e| RobotException::DeserializeError(e.to_string()))
-    //     } else {
-    //         Err(RobotException::NetworkError(
-    //             "No active tcp connection".to_string(),
-    //         ))
-    //     }
-    // }
-
-    #[cfg(not(feature = "async"))]
     pub fn spawn_udp_thread<R, S>(port: u16) -> (CommandHandle<R, S>, Arc<RwLock<S>>)
     where
         R: Serialize
@@ -228,92 +201,6 @@ impl Network {
             }
         });
         (cmd_handle, res_handle)
-    }
-
-    #[cfg(feature = "async")]
-    pub fn spawn_udp_thread<R, S>(port: u16) -> (Arc<ArrayQueue<R>>, Arc<RwLock<S>>)
-    where
-        R: Serialize + CommandIDConfig<u64> + Send + Sync + std::fmt::Debug + 'static,
-        S: DeserializeOwned + CommandIDConfig<u64> + Default + Send + Sync + 'static,
-    {
-        #[cfg(target_os = "windows")]
-        {
-            if !is_firewall_rule_active(port) {
-                let (title, fix_step, cleanup_info) = get_localized_message(port);
-                eprintln!("\n{}\n\n{}\n\n{}\n", title, fix_step, cleanup_info);
-                std::process::exit(1);
-            }
-        }
-        // 创建共享队列
-        let (request_queue, response_queue) = (
-            Arc::new(ArrayQueue::<R>::new(1)),
-            Arc::new(RwLock::new(S::default())),
-        );
-
-        // 克隆用于闭包捕获
-        let req_queue = request_queue.clone();
-        let res_queue = response_queue.clone();
-
-        // 启动异步任务
-        tokio::spawn(async move {
-            // 绑定 UDP 端口
-            let socket = match UdpSocket::bind(format!("0.0.0.0:{}", port)) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("[UDP] Bind failed: {}", e);
-                    return;
-                }
-            };
-
-            let mut buffer = vec![0u8; size_of::<S>()];
-            let start_time = std::time::Instant::now();
-
-            loop {
-                // 异步接收数据
-                let (size, addr) = match socket.recv_from(&mut buffer) {
-                    Ok(res) => res,
-                    Err(e) => {
-                        eprintln!("[UDP] Receive error: {}", e);
-                        continue;
-                    }
-                };
-
-                // 反序列化处理
-                let response = match bincode::deserialize::<S>(&buffer[..size]) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        eprintln!("[Deserialize] Error: {}", e);
-                        continue;
-                    }
-                };
-
-                // 处理请求队列
-                if let Some(mut request) = req_queue.pop() {
-                    request.set_command_id(response.command_id());
-                    let serialized = match bincode::serialize(&request) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            eprintln!("[Serialize] Error: {}", e);
-                            return;
-                        }
-                    };
-
-                    match socket.send_to(&serialized, addr) {
-                        Ok(_) => {
-                            println!("{:?} > UDP response sent", start_time.elapsed());
-                        }
-                        Err(e) => {
-                            eprintln!("[UDP] Send error: {}", e);
-                        }
-                    }
-                }
-
-                // 更新响应状态
-                *res_queue.write().unwrap() = response;
-            }
-        });
-
-        (request_queue, response_queue)
     }
 }
 

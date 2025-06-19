@@ -73,6 +73,7 @@ impl CommandFilter<RobotStateInter> for MotionGeneratorCommand {
         let state: RobotState = (*state).into();
         let q_c = self.q_c;
         let dq_c = self.dq_c;
+
         let pose_o_to_ee_c = self.pose_o_to_ee_c;
         let dpose_o_to_ee_c = self.dpose_o_to_ee_c;
         let q_c = franka_limit_rate_joint_positions(&q_c, &state.q_d, &state.dq_d, &state.ddq_d);
@@ -88,6 +89,50 @@ impl CommandFilter<RobotStateInter> for MotionGeneratorCommand {
             &state.ddpose_o_to_ee_c,
             &state.ddpose_o_to_ee_c,
         );
+
+        // let mut dq_c_ = [0.0; 7];
+        // let mut ddq_c_ = [0.0; 7];
+        // let mut dddq_c_ = [0.0; 7];
+        // let mut dq_d_ = [0.0; 7];
+        // let mut ddq_d_ = [0.0; 7];
+        // let mut dddq_d_ = [0.0; 7];
+        // for i in 0..7 {
+        //     dq_c_[i] = (q_c[i] - state.q_d[i]) / 1.0E-3;
+        //     // dq_c_[i] = dq_c[i];
+        //     ddq_c_[i] = (dq_c_[i] - state.dq_d[i]) / 1.0E-3;
+        //     dddq_c_[i] = (ddq_c_[i] - state.ddq_d[i]) / 1.0E-3;
+        //     dq_d_[i] = (self.q_c[i] - state.q_d[i]) / 1.0E-3;
+        //     // dq_d_[i] = self.dq_c[i];
+        //     ddq_d_[i] = (dq_d_[i] - state.dq_d[i]) / 1.0E-3;
+        //     dddq_d_[i] = (ddq_d_[i] - state.ddq_d[i]) / 1.0E-3;
+        // }
+
+        // let self_qc = self.q_c;
+        // for i in 0..7 {
+        //     if (q_c[i] - self_qc[i]).abs() > 1E-9 {
+        //         println!(
+        //             "MotionGeneratorCommand q_c changed from {:?} to {:?}",
+        //             self_qc, q_c
+        //         );
+        //         println!(
+        //             "State_c: q={:?}, dq={:?}, ddq={:?}, dddq={:?}",
+        //             q_c, dq_c_, ddq_c_, dddq_c_
+        //         );
+        //         println!(
+        //             "State_d: q={:?}, dq={:?}, ddq={:?}, dddq={:?}",
+        //             self_qc, dq_d_, ddq_d_, dddq_d_
+        //         );
+        //         println!("");
+        //         break;
+        //     }
+        // }
+        // if self_qc != q_c {
+        //     println!(
+        //         "MotionGeneratorCommand q_c changed from {:?} to {:?}",
+        //         self_qc, q_c
+        //     );
+        // }
+
         MotionGeneratorCommand {
             q_c,
             dq_c,
