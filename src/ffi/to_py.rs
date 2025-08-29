@@ -1,11 +1,9 @@
-use nalgebra as na;
-use pyo3::{
-    Bound, PyResult,
-    exceptions::PyException,
-    pyclass, pymethods, pymodule,
-    types::{PyModule, PyModuleMethods},
+use pyo3::{PyResult, exceptions::PyException, pyclass, pymethods, types::PyAnyMethods};
+use robot_behavior::{
+    RobotException, behavior::*, py_arm_behavior, py_arm_param, py_arm_preplanned_motion,
+    py_arm_preplanned_motion_ext, py_arm_preplanned_motion_impl, py_arm_real_time_control,
+    py_arm_real_time_control_ext, py_robot_behavior,
 };
-use robot_behavior::{ArmBehavior, RobotException};
 
 use crate::{
     FRANKA_EMIKA_DOF, FrankaGripper, FrankaRobot, model::FrankaModel, types::robot_types::*,
@@ -83,23 +81,6 @@ impl PyFrankaRobot {
         self.0.set_ne_to_ee(pose.into()).map_err(map_err)
     }
 
-    fn set_load(&mut self, m_load: f64, x_load: [f64; 3], i_load: [f64; 9]) -> PyResult<()> {
-        let data = SetLoadData {
-            m_load,
-            x_load,
-            i_load,
-        };
-        self.0.set_load(data).map_err(map_err)
-    }
-
-    // fn read_state(&mut self) -> PyResult<PyRobotState> {
-    //     Ok(PyRobotState(self.0.read_state().map_err(map_err)?))
-    // }
-
-    // fn read_state(&mut self) -> PyResult<PyArmState7> {
-    //     self.0.read_state().map_err(map_err).map(PyArmState7::from)
-    // }
-
     fn set_default_behavior(&mut self) -> PyResult<()> {
         self.0.set_default_behavior().map_err(map_err)
     }
@@ -107,51 +88,16 @@ impl PyFrankaRobot {
     fn model(&mut self) -> PyResult<PyFrankaModel> {
         Ok(PyFrankaModel(self.0.model().map_err(map_err)?))
     }
-
-    // fn move_to(&mut self, target: MotionType<FRANKA_EMIKA_DOF>, speed: f64) -> PyResult<()> {
-    //     self.0.move_to(target, speed).map_err(map_err)
-    // }
-
-    fn move_joint(&mut self, target: [f64; FRANKA_EMIKA_DOF], speed: f64) -> PyResult<()> {
-        self.0.move_joint(&target, speed).map_err(map_err)
-    }
-
-    fn move_linear_with_quat(
-        &mut self,
-        rotation_quat: [f64; 4],
-        translation: [f64; 3],
-        speed: f64,
-    ) -> PyResult<()> {
-        let target = na::Isometry3::from_parts(
-            na::Translation3::from(translation),
-            na::UnitQuaternion::new_normalize(rotation_quat.into()),
-        );
-        self.0
-            .move_linear_with_quat(&target, speed)
-            .map_err(map_err)
-    }
-
-    fn move_linear_with_homo(&mut self, target: [f64; 16], speed: f64) -> PyResult<()> {
-        self.0
-            .move_linear_with_homo(&target, speed)
-            .map_err(map_err)
-    }
-
-    fn move_linear_with_euler(&mut self, target: [f64; 6], speed: f64) -> PyResult<()> {
-        self.0
-            .move_linear_with_euler(&target, speed)
-            .map_err(map_err)
-    }
-
-    // fn control_with_closure<
-    //     FC: Fn(ArmState<FRANKA_EMIKA_DOF>, Duration) -> ControlType<FRANKA_EMIKA_DOF> + Send + 'static,
-    // >(
-    //     &mut self,
-    //     closure: FC,
-    // ) -> PyResult<()> {
-    //     self.0.control_with_closure(closure).map_err(map_err)
-    // }
 }
+
+py_robot_behavior!(PyFrankaRobot(FrankaRobot));
+py_arm_behavior!(PyFrankaRobot<{7}>(FrankaRobot));
+py_arm_param!(PyFrankaRobot<{7}>(FrankaRobot));
+py_arm_preplanned_motion!(PyFrankaRobot<{7}>(FrankaRobot));
+py_arm_preplanned_motion_impl!(PyFrankaRobot<{7}>(FrankaRobot));
+py_arm_preplanned_motion_ext!(PyFrankaRobot<{7}>(FrankaRobot));
+py_arm_real_time_control!(PyFrankaRobot<{7}>(FrankaRobot));
+py_arm_real_time_control_ext!(PyFrankaRobot<{7}>(FrankaRobot));
 
 #[pymethods]
 impl PyFrankaGripper {
@@ -216,14 +162,6 @@ impl PyFrankaModel {
     ) -> PyResult<[f64; FRANKA_EMIKA_DOF]> {
         Ok(self.0.gravity(&q, m, &x, &gravity))
     }
-}
-
-#[pymodule]
-fn franka_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<PyFrankaRobot>()?;
-    m.add_class::<PyFrankaGripper>()?;
-    m.add_class::<PyFrankaModel>()?;
-    Ok(())
 }
 
 fn map_err(e: RobotException) -> pyo3::PyErr {

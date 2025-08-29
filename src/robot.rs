@@ -139,14 +139,14 @@ impl FrankaRobot {
         self._set_ne_to_ee(data)?.into()
     }
 
-    /// # set_load
-    /// **Sets the load of the robot.**
-    /// The transformation matrix is represented as a vectorized 4x4 matrix in column-major format.
-    /// This is not for setting end effector parameters, which have to be set in the administrator's
-    /// interface.
-    pub fn set_load(&mut self, data: SetLoadData) -> RobotResult<()> {
-        self._set_load(data)?.into()
-    }
+    // /// # set_load
+    // /// **Sets the load of the robot.**
+    // /// The transformation matrix is represented as a vectorized 4x4 matrix in column-major format.
+    // /// This is not for setting end effector parameters, which have to be set in the administrator's
+    // /// interface.
+    // pub fn set_load(&mut self, data: SetLoadData) -> RobotResult<()> {
+    //     self._set_load(data)?.into()
+    // }
 
     #[deprecated(note = "please use `low_pass_filter` instead")]
     pub fn set_filters(&mut self, data: SetFiltersData) -> RobotResult<()> {
@@ -217,7 +217,7 @@ impl FrankaRobot {
 
 impl RobotBehavior for FrankaRobot {
     type State = RobotState;
-    fn version(&self) -> String {
+    fn version() -> String {
         format!("FrankaRobot v{LIBFRANKA_VERSION}")
     }
 
@@ -535,3 +535,5 @@ impl ArmRealtimeControl<FRANKA_EMIKA_DOF> for FrankaRobot {
         Ok(())
     }
 }
+
+impl ArmRealtimeControlExt<FRANKA_EMIKA_DOF> for FrankaRobot {}

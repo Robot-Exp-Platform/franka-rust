@@ -16,3 +16,12 @@ pub mod utils;
 pub use gripper::FrankaGripper;
 pub use params::*;
 pub use robot::FrankaRobot;
+
+#[cfg(feature = "to_py")]
+#[pyo3::pymodule]
+mod franka_rust {
+    #[pymodule_export]
+    use super::ffi::to_py::{PyFrankaGripper, PyFrankaModel, PyFrankaRobot};
+    #[pymodule_export]
+    use robot_behavior::{LoadState, PyArmState, PyControlType, PyMotionType, PyPose};
+}

@@ -10,6 +10,10 @@ description = "Rust bindings for the Franka Emika Panda robot"
 categories = ["science::robotics"]
 keywords = ["franka", "emika", "panda", "libfranka"]
 
+[lib]
+name = "franka_rust"
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 pyo3 = { version = "0.25", optional = true, features = [
     "extension-module",
@@ -22,7 +26,7 @@ bitflags = "2.9"
 num-traits = "0.2"
 num-derive = "0.4"
 thiserror = "2.0"
-nalgebra = "0.34"
+nalgebra = { version = "0.34", features = ["serde-serialize"] }
 bincode = { version = "1.3" }
 crossbeam-channel = "0.5"
 crossbeam = "0.8"
@@ -32,12 +36,14 @@ libc = "0.2"
 strum = "0.27"
 strum_macros = "0.27"
 
-robot_behavior = { version = "0.4.7" }
+robot_behavior = { path = "../robot_behavior", version = "0.4.7" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 sys-locale = "0.3"
 
 [features]
-default = []
+default = ["to_py"]
 debug = []
 ffi = []
+to_py = ["pyo3", "ffi", "robot_behavior/to_py"]
+to_cxx = ["ffi", "robot_behavior/to_cxx"]

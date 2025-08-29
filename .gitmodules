@@ -1,3 +1,0 @@
-[submodule "crates/robot_behavior"]
-	path = crates/robot_behavior
-	url = git@github.com:Robot-Exp-Platform/robot_behavior.git
