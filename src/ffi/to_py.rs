@@ -2,15 +2,20 @@ use pyo3::{PyResult, exceptions::PyException, pyclass, pymethods, types::PyAnyMe
 use robot_behavior::{
     RobotException, behavior::*, py_arm_behavior, py_arm_param, py_arm_preplanned_motion,
     py_arm_preplanned_motion_ext, py_arm_preplanned_motion_impl, py_arm_real_time_control,
-    py_arm_real_time_control_ext, py_robot_behavior,
+    py_arm_real_time_control_ext, py_arm_streaming_handle, py_arm_streaming_motion,
+    py_robot_behavior,
 };
 
 use crate::{
-    FRANKA_EMIKA_DOF, FrankaGripper, FrankaRobot, model::FrankaModel, types::robot_types::*,
+    FRANKA_EMIKA_DOF, FrankaGripper, FrankaRobot, model::FrankaModel, robot::FrankaHandle,
+    types::robot_types::*,
 };
 
 #[pyclass(name = "FrankaRobot")]
 pub struct PyFrankaRobot(FrankaRobot);
+
+#[pyclass(name = "FrankaHandle")]
+pub struct PyFrankaHandle(FrankaHandle);
 
 #[pyclass(name = "FrankaGripper")]
 pub struct PyFrankaGripper(FrankaGripper);
@@ -90,12 +95,23 @@ impl PyFrankaRobot {
     }
 }
 
+#[pymethods]
+impl PyFrankaHandle {}
+
+impl From<FrankaHandle> for PyFrankaHandle {
+    fn from(handle: FrankaHandle) -> Self {
+        PyFrankaHandle(handle)
+    }
+}
+
 py_robot_behavior!(PyFrankaRobot(FrankaRobot));
 py_arm_behavior!(PyFrankaRobot<{7}>(FrankaRobot));
 py_arm_param!(PyFrankaRobot<{7}>(FrankaRobot));
 py_arm_preplanned_motion!(PyFrankaRobot<{7}>(FrankaRobot));
 py_arm_preplanned_motion_impl!(PyFrankaRobot<{7}>(FrankaRobot));
 py_arm_preplanned_motion_ext!(PyFrankaRobot<{7}>(FrankaRobot));
+py_arm_streaming_handle!(PyFrankaHandle<{7}>(FrankaHandle));
+py_arm_streaming_motion!(PyFrankaRobot<{7}>(FrankaRobot) -> PyFrankaHandle);
 py_arm_real_time_control!(PyFrankaRobot<{7}>(FrankaRobot));
 py_arm_real_time_control_ext!(PyFrankaRobot<{7}>(FrankaRobot));
 

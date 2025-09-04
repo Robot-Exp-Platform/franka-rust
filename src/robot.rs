@@ -7,7 +7,7 @@ use std::{
     fs::File,
     io::Write,
     path::Path,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     thread::sleep,
     time::Duration,
 };
@@ -19,7 +19,7 @@ use crate::{
     FRANKA_ROBOT_MAX_TORQUE_RATE, FRANKA_ROBOT_MIN_JOINT, FRANKA_ROBOT_VERSION, LIBFRANKA_VERSION,
     PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
     command_handle::CommandHandle,
-    model::{self, FrankaModel},
+    model::FrankaModel,
     network::Network,
     once::OverrideOnce,
     types::{robot_command::RobotCommand, robot_state::*, robot_types::*},
@@ -202,7 +202,7 @@ impl FrankaRobot {
         if !model_path.exists() {
             self.download_library(model_path)?;
         }
-        let model = model::FrankaModel::new(model_path)?;
+        let model = FrankaModel::new(model_path)?;
         Ok(model)
     }
 
@@ -210,7 +210,7 @@ impl FrankaRobot {
         if !model_path.exists() {
             self.download_library(model_path)?;
         }
-        let model = model::FrankaModel::new(model_path)?;
+        let model = FrankaModel::new(model_path)?;
         Ok(model)
     }
 }
@@ -505,6 +505,52 @@ impl ArmPreplannedMotion<FRANKA_EMIKA_DOF> for FrankaRobot {
         unimplemented!()
     }
 }
+
+pub struct FrankaHandle {
+    command_handle: CommandHandle<RobotCommand, RobotStateInter>,
+    last_motion: Option<MotionType<FRANKA_EMIKA_DOF>>,
+    last_control: Option<ControlType<FRANKA_EMIKA_DOF>>,
+}
+
+impl ArmStreamingHandle<FRANKA_EMIKA_DOF> for FrankaHandle {
+    fn move_to(&mut self, target: MotionType<FRANKA_EMIKA_DOF>) -> RobotResult<()> {
+        self.command_handle.set_target((target, false));
+        Ok(())
+    }
+    fn control_with(&mut self, control: ControlType<FRANKA_EMIKA_DOF>) -> RobotResult<()> {
+        self.command_handle.set_target((control, false));
+        Ok(())
+    }
+
+    fn last_control(&self) -> Option<ControlType<FRANKA_EMIKA_DOF>> {
+        self.last_control.clone()
+    }
+    fn last_motion(&self) -> Option<MotionType<FRANKA_EMIKA_DOF>> {
+        self.last_motion.clone()
+    }
+}
+
+impl ArmStreamingMotion<FRANKA_EMIKA_DOF> for FrankaRobot {
+    type Handle = FrankaHandle;
+    fn start_streaming(&mut self) -> RobotResult<Self::Handle> {
+        Ok(FrankaHandle {
+            command_handle: self.command_handle.clone(),
+            last_motion: None,
+            last_control: None,
+        })
+    }
+    fn end_streaming(&mut self) -> RobotResult<()> {
+        self.stop()
+    }
+    fn move_to_target(&mut self) -> Arc<Mutex<Option<MotionType<FRANKA_EMIKA_DOF>>>> {
+        unimplemented!()
+    }
+    fn control_with_target(&mut self) -> Arc<Mutex<Option<ControlType<FRANKA_EMIKA_DOF>>>> {
+        unimplemented!()
+    }
+}
+
+impl Realtime for FrankaRobot {}
 
 impl ArmRealtimeControl<FRANKA_EMIKA_DOF> for FrankaRobot {
     fn move_with_closure<FM>(&mut self, mut closure: FM) -> RobotResult<()>
