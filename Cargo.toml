@@ -24,6 +24,7 @@ cxx = { version = "1.0", optional = true }
 nalgebra = { version = "0.34", features = ["serde-serialize"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_repr = "0.1"
+serde_json = "1.0.143"
 serde-big-array = "0.5.1"
 bitflags = "2.9"
 num-traits = "0.2"

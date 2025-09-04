@@ -533,6 +533,13 @@ impl ArmStreamingHandle<FRANKA_EMIKA_DOF> for FrankaHandle {
 impl ArmStreamingMotion<FRANKA_EMIKA_DOF> for FrankaRobot {
     type Handle = FrankaHandle;
     fn start_streaming(&mut self) -> RobotResult<Self::Handle> {
+        self.is_moving = true;
+        self._move(MotionType::Joint([0.0; 7]).into())?;
+        sleep(Duration::from_millis(2));
+        let state = self.robot_state.read().unwrap();
+        self.command_handle
+            .set_target((MotionType::Joint(state.q_d), false));
+
         Ok(FrankaHandle {
             command_handle: self.command_handle.clone(),
             last_motion: None,
