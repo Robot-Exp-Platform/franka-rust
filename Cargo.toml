@@ -12,7 +12,7 @@ keywords = ["franka", "emika", "panda", "libfranka"]
 
 [lib]
 name = "franka_rust"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 robot_behavior = "0.4.8"
@@ -39,12 +39,16 @@ libc = "0.2"
 strum = "0.27"
 strum_macros = "0.27"
 
+[build-dependencies]
+cxx-build = "1.0"
+
+
 [target.'cfg(target_os = "windows")'.dependencies]
 sys-locale = "0.3"
 
 [features]
-default = ["to_py"]
+default = ["to_cxx"]
 debug = []
 ffi = []
 to_py = ["pyo3", "ffi", "robot_behavior/to_py"]
-to_cxx = ["ffi", "robot_behavior/to_cxx"]
+to_cxx = ["cxx", "ffi", "robot_behavior/to_cxx"]

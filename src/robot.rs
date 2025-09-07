@@ -523,10 +523,10 @@ impl ArmStreamingHandle<FRANKA_EMIKA_DOF> for FrankaHandle {
     }
 
     fn last_control(&self) -> Option<ControlType<FRANKA_EMIKA_DOF>> {
-        self.last_control.clone()
+        self.last_control
     }
     fn last_motion(&self) -> Option<MotionType<FRANKA_EMIKA_DOF>> {
-        self.last_motion.clone()
+        self.last_motion
     }
 }
 
