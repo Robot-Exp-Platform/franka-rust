@@ -400,7 +400,16 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
         let state = self.robot_state.read().unwrap();
         let joint = state.q_d;
         drop(state);
-        let target = *target;
+        let target = match self.coord.get() {
+            Coord::Shot => {
+                let mut result = [0.0; FRANKA_EMIKA_DOF];
+                for i in 0..FRANKA_EMIKA_DOF {
+                    result[i] = joint[i] + target[i];
+                }
+                result
+            }
+            _ => *target,
+        };
 
         let (v_max, a_max, j_max) = (self.max_vel.get(), self.max_acc.get(), self.max_jerk.get());
         let (path_generate, t_max) =
@@ -444,6 +453,12 @@ impl ArmPreplannedMotionImpl<FRANKA_EMIKA_DOF> for FrankaRobot {
         let pose: Pose = state.O_T_EE.into();
         drop(state);
 
+        let target = match self.coord.get() {
+            Coord::Shot => pose * target,
+            &Coord::Interial => Pose::Position(pose.position()) * target,
+            _ => target,
+        };
+
         let (v_max, a_max) = (self.max_cartesian_vel.get(), self.max_cartesian_acc.get());
         let (path_generate, t_max) =
             cartesian_quat_simple_4th_curve(pose.quat(), target.quat(), *v_max, *a_max);
@@ -484,13 +499,16 @@ impl ArmPreplannedMotion<FRANKA_EMIKA_DOF> for FrankaRobot {
     }
     fn move_path_async(&mut self, path: Vec<MotionType<FRANKA_EMIKA_DOF>>) -> RobotResult<()> {
         self.is_moving = true;
+        let coord = self.coord.get().to_owned();
+        let state = self.state()?;
+        self.with_coord(coord);
 
         self.move_to(path[0])?;
         let last = path.last().cloned().unwrap_or(MotionType::Stop);
         let mut path = path.into_iter();
         self.command_handle.set_closure(move |_, _| {
             if let Some(next) = path.next() {
-                (next, false)
+                (next.with_coord(&coord, &state), false)
             } else {
                 (last, true)
             }

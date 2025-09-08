@@ -47,7 +47,7 @@ cxx-build = "1.0"
 sys-locale = "0.3"
 
 [features]
-default = ["to_cxx"]
+default = []
 debug = []
 ffi = []
 to_py = ["pyo3", "ffi", "robot_behavior/to_py"]
