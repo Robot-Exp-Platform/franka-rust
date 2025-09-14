@@ -43,6 +43,9 @@ mod franka_rust {
 
         #[Self = "FrankaRobot"]
         fn attach(ip: &str) -> Box<FrankaRobot>;
+        #[Self = "FrankaRobot"]
+        fn create() -> Box<FrankaRobot>;
+        fn connect(&mut self, ip: &str);
 
         #[Self = "FrankaRobot"]
         fn version() -> String;
@@ -150,6 +153,12 @@ pub use franka_rust::*;
 impl FrankaRobot {
     pub fn attach(ip: &str) -> Box<Self> {
         Box::new(FrankaRobot(crate::FrankaRobot::new(ip)))
+    }
+    pub fn create() -> Box<Self> {
+        Box::new(FrankaRobot(crate::FrankaRobot::default()))
+    }
+    pub fn connect(&mut self, ip: &str) {
+        self.0.connect(ip);
     }
 }
 

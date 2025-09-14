@@ -1,3 +1,4 @@
+#[derive(Default)]
 pub struct OverrideOnce<T> {
     once: Option<T>,
     default: T,

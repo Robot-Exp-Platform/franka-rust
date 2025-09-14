@@ -25,6 +25,7 @@ use crate::{
     types::{robot_command::RobotCommand, robot_state::*, robot_types::*},
 };
 
+#[derive(Default)]
 pub struct FrankaRobot {
     network: Network,
     command_handle: CommandHandle<RobotCommand, RobotStateInter>,
@@ -64,10 +65,27 @@ impl FrankaRobot {
             max_cartesian_vel: OverrideOnce::new(FRANKA_ROBOT_MAX_CARTESIAN_VEL[0]),
             max_cartesian_acc: OverrideOnce::new(FRANKA_ROBOT_MAX_CARTESIAN_ACC[0]),
         };
-        robot.connect().unwrap();
+        robot.connect_().unwrap();
         let _ = robot.set_speed(0.1);
 
         robot
+    }
+
+    pub fn connect(&mut self, ip: &str) {
+        let (command_handle, robot_state) = Network::spawn_udp_thread(PORT_ROBOT_UDP);
+        self.network = Network::new(ip, PORT_ROBOT_COMMAND);
+        self.command_handle = command_handle;
+        self.robot_state = robot_state;
+        self.is_moving = false;
+        self.coord = OverrideOnce::new(Coord::OCS);
+        self.max_vel = OverrideOnce::new(FRANKA_ROBOT_MAX_JOINT_VEL);
+        self.max_acc = OverrideOnce::new(FRANKA_ROBOT_MAX_JOINT_ACC);
+        self.max_jerk = OverrideOnce::new(FRANKA_ROBOT_MAX_JOINT_JERK);
+        self.max_cartesian_vel = OverrideOnce::new(FRANKA_ROBOT_MAX_CARTESIAN_VEL[0]);
+        self.max_cartesian_acc = OverrideOnce::new(FRANKA_ROBOT_MAX_CARTESIAN_ACC[0]);
+
+        self.connect_().unwrap();
+        let _ = self.set_speed(0.1);
     }
 
     cmd_fn!(_connect, { Command::Connect }; data: ConnectData; ConnectStatus);
@@ -84,7 +102,7 @@ impl FrankaRobot {
     cmd_fn!(_stop_move, { Command::StopMove }; data: (); GetterSetterStatus);
     cmd_fn!(_get_cartesian_limit, { Command::GetCartesianLimit }; data: GetCartesianLimitData; GetCartesianLimitStatus);
 
-    fn connect(&mut self) -> RobotResult<()> {
+    fn connect_(&mut self) -> RobotResult<()> {
         let result = self._connect(ConnectData {
             version: FRANKA_ROBOT_VERSION,
             udp_port: PORT_ROBOT_UDP,
