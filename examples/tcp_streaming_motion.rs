@@ -1,11 +1,11 @@
-use franka_rust::FrankaRobot;
+use franka_rust::FrankaEmika;
 use robot_behavior::{MotionType, behavior::*};
 use serde_json;
 use std::io::Read;
 use std::net::TcpListener;
 
 fn main() {
-    let mut robot = FrankaRobot::new("172.16.0.2");
+    let mut robot = FrankaEmika::new("172.16.0.2");
     let tcp_listener = TcpListener::bind("127.0.0.1:8080").unwrap();
     let (mut stream, _addr) = tcp_listener.accept().unwrap();
 

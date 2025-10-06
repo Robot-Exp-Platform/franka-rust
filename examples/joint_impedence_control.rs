@@ -1,5 +1,5 @@
 use franka_rust::{
-    FrankaRobot,
+    FrankaEmika,
     types::{robot_state::RobotState, robot_types::SetCollisionBehaviorData},
 };
 use nalgebra as na;
@@ -7,7 +7,7 @@ use robot_behavior::{ControlType, RobotResult, behavior::*};
 use std::{thread::sleep, time::Duration};
 
 fn main() -> RobotResult<()> {
-    let mut robot = FrankaRobot::new("172.16.0.3");
+    let mut robot = FrankaEmika::new("172.16.0.3");
     robot.set_default_behavior()?;
     robot.set_collision_behavior(SetCollisionBehaviorData {
         lower_torque_thresholds_acceleration: [10.0; 7],

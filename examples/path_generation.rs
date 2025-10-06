@@ -1,11 +1,11 @@
-use franka_rust::FrankaRobot;
+use franka_rust::FrankaEmika;
 use robot_behavior::{ArmPreplannedMotionExt, RobotResult};
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 
 fn main() -> RobotResult<()> {
-    let mut robot = FrankaRobot::new("172.16.0.3");
+    let mut robot = FrankaEmika::new("172.16.0.3");
     robot.set_default_behavior()?;
     let file_path = "/home/robot-lab-user/WYN/franka_exp_TOPP_ASL/data/test_acc_jerk_compare_A10J300_20250615/interpolation_output5_jerk.csv";
 

@@ -1,8 +1,8 @@
 use franka_rust::{
-    FRANKA_ROBOT_DEFAULT_JOINT,
+    FrankaEmika,
     model::{Frame, FrankaModel},
 };
-use robot_behavior::RobotResult;
+use robot_behavior::{ArmParam, RobotResult};
 use strum::IntoEnumIterator;
 
 fn main() -> RobotResult<()> {
@@ -16,7 +16,7 @@ fn main() -> RobotResult<()> {
 
     let model = FrankaModel::new(path)?;
 
-    let q = FRANKA_ROBOT_DEFAULT_JOINT;
+    let q = FrankaEmika::JOINT_DEFAULT;
     let dq = [0.; 7];
     let mut pose = [0.; 16];
     pose[0] = 1.0;

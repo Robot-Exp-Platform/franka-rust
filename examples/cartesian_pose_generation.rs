@@ -1,8 +1,8 @@
-use franka_rust::{FrankaRobot, types::robot_types::SetCollisionBehaviorData};
+use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
 use robot_behavior::{ArmBehavior, ArmPreplannedMotion, MotionType, Pose, RobotResult};
 
 fn main() -> RobotResult<()> {
-    let mut robot = FrankaRobot::new("172.16.0.3");
+    let mut robot = FrankaEmika::new("172.16.0.3");
     robot.set_default_behavior()?;
 
     robot.set_collision_behavior(SetCollisionBehaviorData {

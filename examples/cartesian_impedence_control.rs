@@ -3,7 +3,7 @@
 
 use std::{thread::sleep, time::Duration};
 
-use franka_rust::{FrankaRobot, model::Frame, utils::array_to_isometry};
+use franka_rust::{FrankaEmika, model::Frame, utils::array_to_isometry};
 use nalgebra as na;
 use robot_behavior::{ArmRealtimeControl, ArmState, ControlType, Pose, RobotResult};
 
@@ -18,7 +18,7 @@ fn main() -> RobotResult<()> {
         &[2. * translational_stiffness.sqrt(); 3],
         &[2. * rotational_stiffness.sqrt(); 3],
     ));
-    let mut robot = FrankaRobot::new("172.16.0.3");
+    let mut robot = FrankaEmika::new("172.16.0.3");
     let model = robot.model()?;
     robot.set_collision_behavior(100.0.into())?;
     robot.set_joint_impedance([3000., 3000., 3000., 2500., 2500., 2000., 2000.].into())?;

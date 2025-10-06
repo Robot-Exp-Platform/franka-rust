@@ -50,5 +50,6 @@ sys-locale = "0.3"
 default = []
 debug = []
 ffi = []
+conservative_constraint = []
 to_py = ["pyo3", "ffi", "robot_behavior/to_py"]
 to_cxx = ["cxx", "ffi", "robot_behavior/to_cxx"]
