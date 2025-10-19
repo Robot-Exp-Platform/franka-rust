@@ -47,3 +47,7 @@ impl ArmParam<FRANKA_DOF> for FrankaEmika {
     const TORQUE_BOUND: [f64; FRANKA_DOF] = [87., 87., 87., 87., 12., 12., 12.];
     const TORQUE_DOT_BOUND: [f64; FRANKA_DOF] = [1000., 1000., 1000., 1000., 1000., 1000., 1000.];
 }
+
+impl RobotFile for FrankaEmika {
+    const URDF: &'static str = "";
+}

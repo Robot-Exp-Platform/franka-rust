@@ -236,7 +236,7 @@ where
     }
 }
 
-impl<T: FrankaType> RobotBehavior for FrankaRobot<T> {
+impl<T: FrankaType> Robot for FrankaRobot<T> {
     type State = RobotState;
     fn version() -> String {
         format!("FrankaRobot v{LIBFRANKA_VERSION}")
@@ -292,7 +292,7 @@ impl<T: FrankaType> RobotBehavior for FrankaRobot<T> {
     }
 }
 
-impl<T: FrankaType> ArmBehavior<FRANKA_DOF> for FrankaRobot<T>
+impl<T: FrankaType> Arm<FRANKA_DOF> for FrankaRobot<T>
 where
     Self: ArmParam<FRANKA_DOF>,
 {
