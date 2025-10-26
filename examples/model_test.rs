@@ -28,7 +28,7 @@ fn main() -> RobotResult<()> {
     let i = [0.1; 9];
 
     for frame in Frame::iter() {
-        println!("{}>", frame);
+        println!("{frame}>");
         println!("   pose: {:?}", model.pose(&frame, &q, &pose, &pose));
         println!(
             "   body: {:?}",

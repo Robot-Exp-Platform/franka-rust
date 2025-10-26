@@ -590,9 +590,9 @@ impl From<GetterSetterStatus> for RobotResult<()> {
             GetterSetterStatus::InvalidArgumentRejected => Err(RobotException::InvalidInstruction(
                 "command rejected: invalid argument".to_string(),
             )),
-            _ => Err(RobotException::CommandException(
-                "command failed".to_string(),
-            )),
+            GetterSetterStatus::CommandRejectedDueToActivatedSafetyFunctions => Err(
+                RobotException::CommandException("command failed".to_string()),
+            ),
         }
     }
 }
@@ -619,7 +619,7 @@ impl<const N: usize> From<ControlType<N>> for MoveData {
         MoveData {
             controller_mode: match value {
                 ControlType::Torque(_) => MoveControllerMode::ExternalController,
-                _ => MoveControllerMode::JointImpedance,
+                ControlType::Zero => MoveControllerMode::JointImpedance,
             },
             motion_generator_mode: MoveMotionGeneratorMode::JointVelocity,
             maximum_path_deviation: MoveDeviation::default(),
@@ -642,7 +642,7 @@ mod tests {
         if let Err(e) = bincode::deserialize::<ConnectResponse>(&[
             0u8, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 0, 0, 5, 0,
         ]) {
-            println!("{:?}", e);
+            println!("{e:?}");
         }
         // assert!(
         //     bincode::deserialize::<ConnectResponse>(&[

@@ -53,7 +53,7 @@ pub enum FrankaError {
     CartesianMotionGeneratorStartElbowInvalid,
     /// The torque set by the external controller is discontinuous.
     ForceControllerDesiredForceToleranceViolation,
-    /// The start elbow sign was inconsistent.  
+    /// The start elbow sign was inconsistent.
     /// Applies only to motions started from Desk.
     StartElbowSignInconsistent,
     /// Minimum network communication quality could not be held during a motion.
@@ -72,7 +72,7 @@ pub enum FrankaError {
     CartesianPositionMotionGeneratorInvalidFrame,
     /// The torque set by the external controller is discontinuous.
     ControllerTorqueDiscontinuity,
-    /// The robot is overloaded for the required motion.  
+    /// The robot is overloaded for the required motion.\
     /// Applies only to motions started from Desk.
     JointP2PInsufficientTorqueForPlanning,
     /// The measured torque signal is out of the safe range.

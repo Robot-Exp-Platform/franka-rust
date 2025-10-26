@@ -201,7 +201,7 @@ impl From<(ControlType<7>, bool)> for RobotCommand {
             motion: MotionGeneratorCommand::default(),
             control: match value.0 {
                 ControlType::Torque(tau) => ControllerCommand { tau_j_d: tau },
-                _ => ControllerCommand::default(),
+                ControlType::Zero => ControllerCommand::default(),
             },
         }
     }
@@ -216,14 +216,14 @@ impl Display for RobotCommand {
         let tau = self.control.tau_j_d;
         write!(
             f,
-            r#"robot command:
+            r"robot command:
     | message_id: {message_id},
     | finished: {motion_generation_finished},
     | motion:
         | q_c: {q:?},
         | pose: {pose:?},
     | control:
-        | tau: {tau:?}"#
+        | tau: {tau:?}"
         )
     }
 }
@@ -463,6 +463,6 @@ mod test {
     #[test]
     fn display_robot_command() {
         let command = RobotCommand::default();
-        println!("{}", command);
+        println!("{command}");
     }
 }

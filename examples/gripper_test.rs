@@ -21,6 +21,6 @@ fn main() -> RobotResult<()> {
     println!("Object grasped, try read state");
 
     let state = gripper.read_state()?;
-    println!("Gripper state: {:?}", state);
+    println!("Gripper state: {state:?}");
     Ok(())
 }

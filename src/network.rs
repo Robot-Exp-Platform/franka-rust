@@ -231,13 +231,13 @@ fn get_localized_message(port: u16) -> (String, String, String) {
         // 中文提示
         let title = "⚠️ 网络配置要求".to_string();
         let fix_step = format!(
-            r#"
+            r"
 1. 右键开始菜单 → 选择 [Windows PowerShell (管理员)]
 2. 执行以下命令 (已复制到剪贴板):
    New-NetFirewallRule -DisplayName 'LibFranka_UDP_{port}' -Direction Inbound -Protocol UDP -LocalPort {port} -Action Allow
 3. 按回车 → 完成后关闭窗口
 4. 重新启动本程序
-            "#
+            "
         );
         let cleanup_info =
             format!("后续清理: 执行命令 Remove-NetFirewallRule -DisplayName 'RoboLib_UDP_{port}'");
@@ -246,13 +246,13 @@ fn get_localized_message(port: u16) -> (String, String, String) {
         // 英文提示 (默认)
         let title = "⚠️ Network Configuration Required".to_string();
         let fix_step = format!(
-            r#"
+            r"
 1. Right-click Start Menu → Select [Windows PowerShell (Admin)]
 2. Run this command (copied to clipboard):
    New-NetFirewallRule -DisplayName 'LibFranka_UDP_{port}' -Direction Inbound -Protocol UDP -LocalPort {port} -Action Allow
 3. Press Enter → Close window after success
 4. Restart this application
-            "#,
+            ",
         );
         let cleanup_info =
             format!("Cleanup later: Run Remove-NetFirewallRule -DisplayName 'RoboLib_UDP_{port}'");

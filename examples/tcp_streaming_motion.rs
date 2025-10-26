@@ -1,6 +1,5 @@
 use franka_rust::FrankaEmika;
 use robot_behavior::{MotionType, behavior::*};
-use serde_json;
 use std::io::Read;
 use std::net::TcpListener;
 

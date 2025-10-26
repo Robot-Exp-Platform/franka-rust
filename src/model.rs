@@ -134,7 +134,7 @@ impl FrankaModel {
                 tmp.iter()
                     .enumerate()
                     .for_each(|(i, &x)| stiffness_f_t_ee[i] = x);
-                self.library.ee(q, &stiffness_f_t_ee, &mut output)
+                self.library.ee(q, &stiffness_f_t_ee, &mut output);
             }
         }
         output
@@ -191,7 +191,7 @@ impl FrankaModel {
                     .enumerate()
                     .for_each(|(i, &x)| stiffness_f_t_ee[i] = x);
                 self.library
-                    .body_jacobian_ee(q, &stiffness_f_t_ee, &mut output)
+                    .body_jacobian_ee(q, &stiffness_f_t_ee, &mut output);
             }
         }
         output
@@ -249,7 +249,7 @@ impl FrankaModel {
                     .enumerate()
                     .for_each(|(i, &x)| stiffness_f_t_ee[i] = x);
                 self.library
-                    .zero_jacobian_ee(q, &stiffness_f_t_ee, &mut output)
+                    .zero_jacobian_ee(q, &stiffness_f_t_ee, &mut output);
             }
         }
         output

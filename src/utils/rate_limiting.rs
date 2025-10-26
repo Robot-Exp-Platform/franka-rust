@@ -87,7 +87,7 @@ pub static MAX_ELBOW_VELOCITY: f64 =
 /// * `last_commanded_velocities` - Commanded joint velocities of the previous time step.
 /// * `last_commanded_accelerations` - Commanded joint accelerations of the previous time step.
 /// # Panics
-/// * if commanded_positions are infinite or NaN.
+/// * if `commanded_positions` are infinite or NaN.
 /// # Return
 /// Rate-limited vector of desired joint positions.
 pub fn limit_rate_joint_positions(
@@ -99,9 +99,9 @@ pub fn limit_rate_joint_positions(
     last_commanded_velocities: &[f64; 7],
     last_commanded_accelerations: &[f64; 7],
 ) -> [f64; 7] {
-    commanded_positions
-        .iter()
-        .for_each(|x| assert!(x.is_finite()));
+    for x in commanded_positions {
+        assert!(x.is_finite());
+    }
     let mut limited_commanded_positions = [0.; 7];
     for i in 0..7 {
         limited_commanded_positions[i] = limit_rate_position(
@@ -148,7 +148,7 @@ pub fn franka_limit_rate_joint_positions(
 /// * `last_commanded_velocity` - Commanded joint velocity of the previous time step.
 /// * `last_commanded_acceleration` - Commanded joint acceleration of the previous time step.
 /// # Panics
-/// * if commanded_values are infinite or NaN.
+/// * if `commanded_values` are infinite or NaN.
 /// # Return
 /// Rate-limited desired joint position.
 pub fn limit_rate_position(
@@ -183,7 +183,7 @@ pub fn limit_rate_position(
 /// * `last_commanded_velocity` - Commanded joint velocity of the previous time step.
 /// * `last_commanded_acceleration` - Commanded joint acceleration of the previous time step.
 /// # Panics
-/// * if commanded_values are infinite or NaN.
+/// * if `commanded_values` are infinite or NaN.
 /// # Return
 /// Rate-limited desired joint velocity.
 fn limit_rate_velocity(
@@ -224,7 +224,7 @@ fn limit_rate_velocity(
 /// * `commanded_values` - Commanded values of the current time step.
 /// * `last_commanded_values` - Commanded values of the previous time step.
 /// # Panics
-/// * if commanded_values are infinite or NaN.
+/// * if `commanded_values` are infinite or NaN.
 /// # Return
 /// Rate-limited vector of desired values.
 pub fn limit_rate_torques(
@@ -232,7 +232,9 @@ pub fn limit_rate_torques(
     commanded_values: &[f64; 7],
     last_commanded_values: &[f64; 7],
 ) -> [f64; 7] {
-    commanded_values.iter().for_each(|x| assert!(x.is_finite()));
+    for x in commanded_values {
+        assert!(x.is_finite());
+    }
     let mut limited_values = [0.; 7];
     for i in 0..7 {
         let commanded_derivative = (commanded_values[i] - last_commanded_values[i]) / DELTA_T;
@@ -266,7 +268,7 @@ pub fn franka_limit_rate_torques(
 /// * `last_commanded_velocities` - Commanded joint velocities of the previous time step.
 /// * `last_commanded_accelerations` - Commanded joint accelerations of the previous time step.
 /// # Panics
-/// * if commanded_velocities are infinite or NaN.
+/// * if `commanded_velocities` are infinite or NaN.
 /// # Return
 /// Rate-limited vector of desired joint velocities.
 pub fn limit_rate_joint_velocities(
@@ -277,9 +279,9 @@ pub fn limit_rate_joint_velocities(
     last_commanded_velocities: &[f64; 7],
     last_commanded_accelerations: &[f64; 7],
 ) -> [f64; 7] {
-    commanded_velocities
-        .iter()
-        .for_each(|x| assert!(x.is_finite()));
+    for x in commanded_velocities {
+        assert!(x.is_finite());
+    }
     let mut limited_commanded_velocities = [0.; 7];
     for i in 0..7 {
         limited_commanded_velocities[i] = limit_rate_velocity(
@@ -327,7 +329,7 @@ pub fn franka_limit_rate_joint_velocities(
 /// * `last_O_dP_EE_c` - Commanded end effector twist of the previous time step.
 /// * `last_O_ddP_EE_c` - Commanded end effector acceleration of the previous time step.
 /// # Panics
-/// * if an element of O_T_EE_c is infinite or NaN.
+/// * if an element of `O_T_EE_c` is infinite or NaN.
 /// # Return
 /// Rate-limited desired pose.
 #[allow(non_snake_case, clippy::too_many_arguments)]
@@ -343,7 +345,9 @@ pub fn limit_rate_cartesian_pose(
     last_O_dP_EE_c: &[f64; 6],
     last_O_ddP_EE_c: &[f64; 6],
 ) -> [f64; 16] {
-    O_T_EE_c.iter().for_each(|x| assert!(x.is_finite()));
+    for x in O_T_EE_c {
+        assert!(x.is_finite());
+    }
     assert!(is_homogeneous_from_slice(O_T_EE_c));
 
     let commanded_pose = array_to_isometry(O_T_EE_c);
@@ -441,7 +445,7 @@ pub fn franka_limit_rate_cartesian_pose(
 /// * `last_O_dP_EE_c` - Commanded end effector twist of the previous time step.
 /// * `last_O_ddP_EE_c` - Commanded end effector acceleration of the previous time step.
 /// # Panics
-/// * if an element of O_dP_EE_c is infinite or NaN.
+/// * if an element of `O_dP_EE_c` is infinite or NaN.
 /// # Return
 /// Rate-limited desired end effector twist.
 #[allow(non_snake_case, clippy::too_many_arguments)]
@@ -456,7 +460,9 @@ pub fn limit_rate_cartesian_velocity(
     last_O_dP_EE_c: &[f64; 6],
     last_O_ddP_EE_c: &[f64; 6],
 ) -> [f64; 6] {
-    O_dP_EE_c.iter().for_each(|x| assert!(x.is_finite()));
+    for x in O_dP_EE_c {
+        assert!(x.is_finite());
+    }
     let dx: Matrix6x1<f64> = Matrix6x1::from_column_slice(O_dP_EE_c);
     let last_dx = Matrix6x1::from_column_slice(last_O_dP_EE_c);
     let last_ddx = Matrix6x1::from_column_slice(last_O_ddP_EE_c);

@@ -56,10 +56,9 @@ impl Display for GripperStateInter {
         let message_id = self.message_id;
         write!(
             f,
-            r#"gripper state:
-    | message_id: {},
-    | width: {}, max_width: {}, is_grasped: {}, temperature: {}"#,
-            message_id,
+            r"gripper state:
+    | message_id: {message_id},
+    | width: {}, max_width: {}, is_grasped: {}, temperature: {}",
             gripper_state.width,
             gripper_state.max_width,
             gripper_state.is_grasped,
@@ -81,6 +80,6 @@ mod tests {
             is_grasped: true,
             temperature: 30,
         };
-        println!("{}", gripper_state);
+        println!("{gripper_state}");
     }
 }

@@ -19,7 +19,7 @@ fn main() -> RobotResult<()> {
         let line = line?;
         let values: Vec<f64> = line
             .split(',')
-            .map(|s| s.trim().parse().unwrap_or_else(|_| 0.0)) // 处理解析错误
+            .map(|s| s.trim().parse().unwrap_or(0.0)) // 处理解析错误
             .collect();
 
         if values.len() == 7 {
@@ -29,8 +29,7 @@ fn main() -> RobotResult<()> {
             data.push(row);
         } else {
             eprintln!(
-                "Warning: Line does not contain exactly 7 values and will be skipped: {}",
-                line
+                "Warning: Line does not contain exactly 7 values and will be skipped: {line}",
             );
         }
     }
