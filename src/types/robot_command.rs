@@ -133,13 +133,7 @@ impl CommandFilter<RobotStateInter> for MotionGeneratorCommand {
         //     );
         // }
 
-        MotionGeneratorCommand {
-            q_c,
-            dq_c,
-            pose_o_to_ee_c,
-            dpose_o_to_ee_c,
-            ..self
-        }
+        MotionGeneratorCommand { q_c, dq_c, pose_o_to_ee_c, dpose_o_to_ee_c, ..self }
     }
 }
 
@@ -293,9 +287,7 @@ mod test {
                 valid_elbow: true,
                 motion_generation_finished: true,
             },
-            control: ControllerCommandPacked {
-                tau_J_d: [6.6666; 7],
-            },
+            control: ControllerCommandPacked { tau_J_d: [6.6666; 7] },
         };
         let robot_command = RobotCommand {
             message_id: 1,
@@ -308,9 +300,7 @@ mod test {
                 valid_elbow: true,
                 motion_generation_finished: true,
             },
-            control: ControllerCommand {
-                tau_j_d: [6.6666; 7],
-            },
+            control: ControllerCommand { tau_j_d: [6.6666; 7] },
         };
 
         assert_eq!(
@@ -448,9 +438,7 @@ mod test {
                 valid_elbow: false,
                 motion_generation_finished: false,
             },
-            control: ControllerCommand {
-                tau_j_d: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            },
+            control: ControllerCommand { tau_j_d: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
         };
 
         println!(

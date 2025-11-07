@@ -1,6 +1,6 @@
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
-use robot_behavior::behavior::*;
+use robot_behavior::{DhParam, behavior::*, mdh_param};
 
 use crate::{FRANKA_DOF, FrankaRobot, robot::FrankaType};
 
@@ -11,16 +11,7 @@ impl FrankaType for _FrankaEmika {}
 
 pub type FrankaEmika = FrankaRobot<_FrankaEmika>;
 
-impl ArmParam<FRANKA_DOF> for FrankaEmika {
-    const DH: [[f64; 4]; FRANKA_DOF] = [
-        [0., 0.333, 0., 0.],
-        [0., 0., 0., -FRAC_PI_2],
-        [0., 0.316, 0., FRAC_PI_2],
-        [0., 0., 0.0825, FRAC_PI_2],
-        [0., 0.384, -0.0825, -FRAC_PI_2],
-        [0., 0., 0., FRAC_PI_2],
-        [0., 0., 0.088, FRAC_PI_2],
-    ];
+impl ArmParam<FRANKA_DOF> for _FrankaEmika {
     const JOINT_DEFAULT: [f64; FRANKA_DOF] = [
         0.,
         -FRAC_PI_4,
@@ -46,6 +37,18 @@ impl ArmParam<FRANKA_DOF> for FrankaEmika {
     const ROTATION_JERK_BOUND: f64 = 12500.;
     const TORQUE_BOUND: [f64; FRANKA_DOF] = [87., 87., 87., 87., 12., 12., 12.];
     const TORQUE_DOT_BOUND: [f64; FRANKA_DOF] = [1000., 1000., 1000., 1000., 1000., 1000., 1000.];
+}
+
+impl ArmForwardKinematics<FRANKA_DOF> for FrankaEmika {
+    const DH: [DhParam; FRANKA_DOF] = [
+        mdh_param!(0., 0.333, 0., 0.),
+        mdh_param!(0., 0., 0., -FRAC_PI_2),
+        mdh_param!(0., 0.316, 0., FRAC_PI_2),
+        mdh_param!(0., 0., 0.0825, FRAC_PI_2),
+        mdh_param!(0., 0.384, -0.0825, -FRAC_PI_2),
+        mdh_param!(0., 0., 0., FRAC_PI_2),
+        mdh_param!(0., 0., 0.088, FRAC_PI_2),
+    ];
 }
 
 impl RobotFile for FrankaEmika {

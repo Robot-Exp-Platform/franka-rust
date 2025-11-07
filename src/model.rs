@@ -95,9 +95,7 @@ impl FrankaModel {
     ///
     /// How does the libfranka embed libm? They are not including <math.h> - Apparently it gets somehow included when using \<array> ¯\_(ツ)_/¯
     pub fn new<S: AsRef<Path>>(model_filename: S) -> RobotResult<Self> {
-        Ok(FrankaModel {
-            library: ModelLibrary::new(model_filename.as_ref())?,
-        })
+        Ok(FrankaModel { library: ModelLibrary::new(model_filename.as_ref())? })
     }
     /// Gets the 4x4 pose matrix for the given frame in base frame.
     ///

@@ -62,12 +62,7 @@ impl FrankaGripper {
     }
 
     pub fn grasp(&mut self, width: f64, speed: f64, force: f64) -> RobotResult<bool> {
-        let data = GraspData {
-            width,
-            epsilon: (0.01, 0.01),
-            speed,
-            force,
-        };
+        let data = GraspData { width, epsilon: (0.01, 0.01), speed, force };
         self._grasp(data)?.into()
     }
 

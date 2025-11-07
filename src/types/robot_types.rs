@@ -144,11 +144,7 @@ pub struct MoveDeviation {
 
 impl Default for MoveDeviation {
     fn default() -> Self {
-        MoveDeviation {
-            translation: 10.,
-            rotation: 3.12,
-            elbow: 2. * PI,
-        }
+        MoveDeviation { translation: 10., rotation: 3.12, elbow: 2. * PI }
     }
 }
 
@@ -272,9 +268,7 @@ pub struct SetJointImpedanceData {
 
 impl Default for SetJointImpedanceData {
     fn default() -> Self {
-        SetJointImpedanceData {
-            k_theta: [3000., 3000., 3000., 2500., 2500., 2000., 2000.],
-        }
+        SetJointImpedanceData { k_theta: [3000., 3000., 3000., 2500., 2500., 2000., 2000.] }
     }
 }
 
@@ -298,9 +292,7 @@ pub struct SetCartesianImpedanceData {
 
 impl Default for SetCartesianImpedanceData {
     fn default() -> Self {
-        SetCartesianImpedanceData {
-            k_x: [3000., 3000., 3000., 300., 300., 300.],
-        }
+        SetCartesianImpedanceData { k_x: [3000., 3000., 3000., 300., 300., 300.] }
     }
 }
 
@@ -333,9 +325,7 @@ pub struct SetEEToKData {
 
 impl From<[f64; 16]> for SetEEToKData {
     fn from(value: [f64; 16]) -> Self {
-        SetEEToKData {
-            pose_ee_to_k: value,
-        }
+        SetEEToKData { pose_ee_to_k: value }
     }
 }
 
@@ -351,9 +341,7 @@ pub struct SetNEToEEData {
 
 impl From<[f64; 16]> for SetNEToEEData {
     fn from(value: [f64; 16]) -> Self {
-        SetNEToEEData {
-            pose_ne_to_ee: value,
-        }
+        SetNEToEEData { pose_ne_to_ee: value }
     }
 }
 
@@ -371,11 +359,7 @@ pub struct SetLoadData {
 
 impl From<LoadState> for SetLoadData {
     fn from(value: LoadState) -> Self {
-        SetLoadData {
-            m_load: value.m,
-            x_load: value.x,
-            i_load: value.i,
-        }
+        SetLoadData { m_load: value.m, x_load: value.x, i_load: value.i }
     }
 }
 
@@ -462,10 +446,7 @@ impl Default for LoadModelLibraryData {
         } else {
             LoadModelLibrarySystem::Linux
         };
-        LoadModelLibraryData {
-            architecture: arch,
-            system: sys,
-        }
+        LoadModelLibraryData { architecture: arch, system: sys }
     }
 }
 
@@ -511,20 +492,14 @@ impl<'de, const C: Command> Deserialize<'de> for CommandHeader<C> {
         }
 
         let helper = CommandHeaderInternal::deserialize(deserializer)?;
-        Ok(CommandHeader {
-            command_id: helper.command_id,
-            size: helper.size,
-        })
+        Ok(CommandHeader { command_id: helper.command_id, size: helper.size })
     }
 }
 
 impl<const C: Command, D: Clone + Copy> From<D> for Request<C, D> {
     fn from(data: D) -> Self {
         Request {
-            header: CommandHeader {
-                command_id: 0,
-                size: Self::size() as u32,
-            },
+            header: CommandHeader { command_id: 0, size: Self::size() as u32 },
             data,
         }
     }
@@ -533,10 +508,7 @@ impl<const C: Command, D: Clone + Copy> From<D> for Request<C, D> {
 impl<const C: Command, S> From<S> for Response<C, S> {
     fn from(status: S) -> Self {
         Response {
-            header: CommandHeader {
-                command_id: 0,
-                size: Self::size() as u32,
-            },
+            header: CommandHeader { command_id: 0, size: Self::size() as u32 },
             status,
         }
     }

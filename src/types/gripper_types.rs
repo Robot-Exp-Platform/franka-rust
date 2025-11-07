@@ -133,20 +133,14 @@ impl<'de, const C: Command> Deserialize<'de> for CommandHeader<C> {
         }
 
         let helper = CommandHeaderHelper::deserialize(deserializer)?;
-        Ok(CommandHeader {
-            command_id: helper.command_id,
-            size: helper.size,
-        })
+        Ok(CommandHeader { command_id: helper.command_id, size: helper.size })
     }
 }
 
 impl<const C: Command, D> From<D> for Request<C, D> {
     fn from(data: D) -> Self {
         Request {
-            header: CommandHeader {
-                command_id: 0,
-                size: Self::size() as u32,
-            },
+            header: CommandHeader { command_id: 0, size: Self::size() as u32 },
             data,
         }
     }
@@ -155,10 +149,7 @@ impl<const C: Command, D> From<D> for Request<C, D> {
 impl<const C: Command, S> From<S> for Response<C, S> {
     fn from(status: S) -> Self {
         Response {
-            header: CommandHeader {
-                command_id: 0,
-                size: Self::size() as u32,
-            },
+            header: CommandHeader { command_id: 0, size: Self::size() as u32 },
             status,
         }
     }

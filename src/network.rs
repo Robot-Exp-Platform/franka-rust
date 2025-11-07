@@ -30,10 +30,7 @@ impl Network {
                 .set_write_timeout(Some(std::time::Duration::from_millis(3)))
                 .unwrap();
         }
-        Network {
-            tcp_stream,
-            command_counter: Arc::new(Mutex::new(0)),
-        }
+        Network { tcp_stream, command_counter: Arc::new(Mutex::new(0)) }
     }
 
     /// 发送并阻塞接收 tcp 指令

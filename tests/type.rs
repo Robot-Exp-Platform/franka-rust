@@ -48,15 +48,8 @@ mod gripper_tests {
         println!(
             "ConnectRequestWithHeader serialize as bytes: {:?}",
             bincode::serialize(&ConnectRequestWithHeader {
-                header: CommandHeader {
-                    command: Command::Connect,
-                    command_id: 0,
-                    size: 14,
-                },
-                request: ConnectRequest {
-                    version: 3,
-                    udp_port: 1338,
-                },
+                header: CommandHeader { command: Command::Connect, command_id: 0, size: 14 },
+                request: ConnectRequest { version: 3, udp_port: 1338 },
             })
             .unwrap()
         );
@@ -69,14 +62,8 @@ mod gripper_tests {
         println!(
             "Self ConnectRequest serialize as bytes: {:?}",
             bincode::serialize(&types::gripper_types::ConnectRequest {
-                header: types::gripper_types::CommandHeader {
-                    command_id: 0,
-                    size: 8,
-                },
-                data: types::gripper_types::ConnectData {
-                    version: 1,
-                    udp_port: 2,
-                },
+                header: types::gripper_types::CommandHeader { command_id: 0, size: 8 },
+                data: types::gripper_types::ConnectData { version: 1, udp_port: 2 },
             })
         );
     }
@@ -95,14 +82,8 @@ mod robot_test {
         println!(
             "Self ConnectRequest serialize as bytes: {:?}",
             bincode::serialize(&types::robot_types::ConnectRequest {
-                header: types::robot_types::CommandHeader {
-                    command_id: 0,
-                    size: 8,
-                },
-                data: types::robot_types::ConnectData {
-                    version: 1,
-                    udp_port: 2,
-                },
+                header: types::robot_types::CommandHeader { command_id: 0, size: 8 },
+                data: types::robot_types::ConnectData { version: 1, udp_port: 2 },
             })
         );
     }

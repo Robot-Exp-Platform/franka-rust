@@ -49,9 +49,11 @@ macro_rules! cmd_fn {
     };
 }
 
+impl<T: FrankaType> FrankaRobot<T> {}
+
 impl<T: FrankaType> FrankaRobot<T>
 where
-    Self: ArmParam<FRANKA_DOF>,
+    FrankaRobot<T>: ArmParam<7>,
 {
     pub fn new(ip: &str) -> Self {
         let (command_handle, robot_state) = Network::spawn_udp_thread(PORT_ROBOT_UDP);
@@ -106,10 +108,8 @@ where
     cmd_fn!(_get_cartesian_limit, { Command::GetCartesianLimit }; data: GetCartesianLimitData; GetCartesianLimitStatus);
 
     fn connect_(&mut self) -> RobotResult<()> {
-        let result = self._connect(ConnectData {
-            version: FRANKA_ROBOT_VERSION,
-            udp_port: PORT_ROBOT_UDP,
-        })?;
+        let result =
+            self._connect(ConnectData { version: FRANKA_ROBOT_VERSION, udp_port: PORT_ROBOT_UDP })?;
         if let ConnectStatusEnum::Success = result.status {
             Ok(())
         } else {
@@ -292,9 +292,9 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
     }
 }
 
-impl<T: FrankaType> Arm<FRANKA_DOF> for FrankaRobot<T>
+impl<T: FrankaType> Arm<7> for FrankaRobot<T>
 where
-    Self: ArmParam<FRANKA_DOF>,
+    FrankaRobot<T>: ArmParam<7>,
 {
     fn state(&mut self) -> RobotResult<ArmState<FRANKA_DOF>> {
         let state = self.robot_state.read().unwrap();
@@ -369,9 +369,29 @@ where
     }
 }
 
-impl<T: FrankaType> ArmPreplannedMotionImpl<FRANKA_DOF> for FrankaRobot<T>
+impl<T: FrankaType> ArmParam<7> for FrankaRobot<T>
 where
-    Self: ArmParam<FRANKA_DOF>,
+    T: ArmParam<7>,
+{
+    const JOINT_DEFAULT: [f64; FRANKA_DOF] = T::JOINT_DEFAULT;
+    const JOINT_MIN: [f64; FRANKA_DOF] = T::JOINT_MIN;
+    const JOINT_MAX: [f64; FRANKA_DOF] = T::JOINT_MAX;
+    const JOINT_VEL_BOUND: [f64; FRANKA_DOF] = T::JOINT_VEL_BOUND;
+    const JOINT_ACC_BOUND: [f64; FRANKA_DOF] = T::JOINT_ACC_BOUND;
+    const JOINT_JERK_BOUND: [f64; FRANKA_DOF] = T::JOINT_JERK_BOUND;
+    const CARTESIAN_VEL_BOUND: f64 = T::CARTESIAN_VEL_BOUND;
+    const CARTESIAN_ACC_BOUND: f64 = T::CARTESIAN_ACC_BOUND;
+    const CARTESIAN_JERK_BOUND: f64 = T::CARTESIAN_JERK_BOUND;
+    const ROTATION_VEL_BOUND: f64 = T::ROTATION_VEL_BOUND;
+    const ROTATION_ACC_BOUND: f64 = T::ROTATION_ACC_BOUND;
+    const ROTATION_JERK_BOUND: f64 = T::ROTATION_JERK_BOUND;
+    const TORQUE_BOUND: [f64; FRANKA_DOF] = T::TORQUE_BOUND;
+    const TORQUE_DOT_BOUND: [f64; FRANKA_DOF] = T::TORQUE_DOT_BOUND;
+}
+
+impl<T: FrankaType> ArmPreplannedMotionImpl<7> for FrankaRobot<T>
+where
+    FrankaRobot<T>: ArmParam<7>,
 {
     fn move_joint(&mut self, target: &[f64; FRANKA_DOF]) -> RobotResult<()> {
         self.move_joint_async(target)?;
@@ -401,7 +421,7 @@ where
         let joint = state.q_d;
         drop(state);
         let target = match self.coord.get() {
-            Coord::Shot => {
+            Coord::Relative => {
                 let mut result = [0.0; FRANKA_DOF];
                 for i in 0..FRANKA_DOF {
                     result[i] = joint[i] + target[i];
@@ -454,8 +474,8 @@ where
         drop(state);
 
         let target = match self.coord.get() {
-            Coord::Shot => pose * target,
-            &Coord::Interial => Pose::Position(pose.position()) * target,
+            Coord::Relative => pose * target,
+            &Coord::Inertial => Pose::Position(pose.position()) * target,
             _ => target,
         };
 
@@ -476,9 +496,9 @@ where
     }
 }
 
-impl<T: FrankaType> ArmPreplannedMotion<FRANKA_DOF> for FrankaRobot<T>
+impl<T: FrankaType> ArmPreplannedMotion<7> for FrankaRobot<T>
 where
-    Self: ArmParam<FRANKA_DOF>,
+    Self: ArmParam<7>,
 {
     fn move_path(&mut self, path: Vec<MotionType<FRANKA_DOF>>) -> RobotResult<()> {
         self.move_path_async(path)?;
@@ -551,9 +571,9 @@ impl ArmStreamingHandle<FRANKA_DOF> for FrankaHandle {
     }
 }
 
-impl<T: FrankaType> ArmStreamingMotion<FRANKA_DOF> for FrankaRobot<T>
+impl<T: FrankaType> ArmStreamingMotion<7> for FrankaRobot<T>
 where
-    Self: ArmParam<FRANKA_DOF>,
+    Self: ArmParam<7>,
 {
     type Handle = FrankaHandle;
     fn start_streaming(&mut self) -> RobotResult<Self::Handle> {
@@ -583,9 +603,9 @@ where
 
 impl<T: FrankaType> Realtime for FrankaRobot<T> {}
 
-impl<T: FrankaType> ArmRealtimeControl<FRANKA_DOF> for FrankaRobot<T>
+impl<T: FrankaType> ArmRealtimeControl<7> for FrankaRobot<T>
 where
-    Self: ArmParam<FRANKA_DOF>,
+    Self: ArmParam<7>,
 {
     fn move_with_closure<FM>(&mut self, mut closure: FM) -> RobotResult<()>
     where

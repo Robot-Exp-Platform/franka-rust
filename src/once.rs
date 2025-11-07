@@ -6,10 +6,7 @@ pub struct OverrideOnce<T> {
 
 impl<T> OverrideOnce<T> {
     pub fn new(default: T) -> Self {
-        Self {
-            once: None,
-            default,
-        }
+        Self { once: None, default }
     }
 
     pub fn set(&mut self, default: T) {

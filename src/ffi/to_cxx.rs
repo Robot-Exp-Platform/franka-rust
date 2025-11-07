@@ -315,30 +315,24 @@ impl<const N: usize> From<CxxMotionType> for MotionType<N> {
 impl<const N: usize> From<MotionType<N>> for CxxMotionType {
     fn from(motion: MotionType<N>) -> Self {
         match motion {
-            MotionType::Joint(v) => CxxMotionType {
-                mode: CxxMotionTypeMode::Joint,
-                values: v.to_vec(),
-            },
-            MotionType::JointVel(v) => CxxMotionType {
-                mode: CxxMotionTypeMode::JointVel,
-                values: v.to_vec(),
-            },
-            MotionType::Cartesian(v) => CxxMotionType {
-                mode: CxxMotionTypeMode::Cartesian,
-                values: v.into(),
-            },
-            MotionType::CartesianVel(v) => CxxMotionType {
-                mode: CxxMotionTypeMode::CartesianVel,
-                values: v.to_vec(),
-            },
-            MotionType::Position(v) => CxxMotionType {
-                mode: CxxMotionTypeMode::Position,
-                values: v.to_vec(),
-            },
-            MotionType::PositionVel(v) => CxxMotionType {
-                mode: CxxMotionTypeMode::PositionVel,
-                values: v.to_vec(),
-            },
+            MotionType::Joint(v) => {
+                CxxMotionType { mode: CxxMotionTypeMode::Joint, values: v.to_vec() }
+            }
+            MotionType::JointVel(v) => {
+                CxxMotionType { mode: CxxMotionTypeMode::JointVel, values: v.to_vec() }
+            }
+            MotionType::Cartesian(v) => {
+                CxxMotionType { mode: CxxMotionTypeMode::Cartesian, values: v.into() }
+            }
+            MotionType::CartesianVel(v) => {
+                CxxMotionType { mode: CxxMotionTypeMode::CartesianVel, values: v.to_vec() }
+            }
+            MotionType::Position(v) => {
+                CxxMotionType { mode: CxxMotionTypeMode::Position, values: v.to_vec() }
+            }
+            MotionType::PositionVel(v) => {
+                CxxMotionType { mode: CxxMotionTypeMode::PositionVel, values: v.to_vec() }
+            }
             MotionType::Stop => CxxMotionType {
                 mode: CxxMotionTypeMode::Position, // Use Position as a placeholder for Stop
                 values: vec![],
@@ -360,24 +354,16 @@ impl<const N: usize> From<CxxControlType> for ControlType<N> {
 impl<const N: usize> From<ControlType<N>> for CxxControlType {
     fn from(control: ControlType<N>) -> Self {
         match control {
-            ControlType::Zero => CxxControlType {
-                mode: CxxControlTypeMode::Zero,
-                values: vec![],
-            },
-            ControlType::Torque(v) => CxxControlType {
-                mode: CxxControlTypeMode::Torque,
-                values: v.to_vec(),
-            },
+            ControlType::Zero => CxxControlType { mode: CxxControlTypeMode::Zero, values: vec![] },
+            ControlType::Torque(v) => {
+                CxxControlType { mode: CxxControlTypeMode::Torque, values: v.to_vec() }
+            }
         }
     }
 }
 
 impl From<CxxLoadState> for LoadState {
     fn from(cxx: CxxLoadState) -> Self {
-        LoadState {
-            m: cxx.m,
-            x: cxx.x,
-            i: cxx.i,
-        }
+        LoadState { m: cxx.m, x: cxx.x, i: cxx.i }
     }
 }
