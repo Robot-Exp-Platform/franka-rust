@@ -34,7 +34,7 @@ fn main() -> RobotResult<()> {
         }
     }
 
-    robot.move_joint_path(data).unwrap();
+    robot.move_joint_traj(data).unwrap();
 
     Ok(())
 }

@@ -389,7 +389,7 @@ where
     const TORQUE_DOT_BOUND: [f64; FRANKA_DOF] = T::TORQUE_DOT_BOUND;
 }
 
-impl<T: FrankaType> ArmPreplannedMotionImpl<7> for FrankaRobot<T>
+impl<T: FrankaType> ArmPreplannedMotion<7> for FrankaRobot<T>
 where
     FrankaRobot<T>: ArmParam<7>,
 {
@@ -496,12 +496,12 @@ where
     }
 }
 
-impl<T: FrankaType> ArmPreplannedMotion<7> for FrankaRobot<T>
+impl<T: FrankaType> ArmPreplannedPath<7> for FrankaRobot<T>
 where
     Self: ArmParam<7>,
 {
-    fn move_path(&mut self, path: Vec<MotionType<FRANKA_DOF>>) -> RobotResult<()> {
-        self.move_path_async(path)?;
+    fn move_traj(&mut self, path: Vec<MotionType<FRANKA_DOF>>) -> RobotResult<()> {
+        self.move_traj_async(path)?;
 
         loop {
             let state = self.robot_state.read().unwrap();
@@ -520,7 +520,7 @@ where
         self.is_moving = false;
         Ok(())
     }
-    fn move_path_async(&mut self, path: Vec<MotionType<FRANKA_DOF>>) -> RobotResult<()> {
+    fn move_traj_async(&mut self, path: Vec<MotionType<FRANKA_DOF>>) -> RobotResult<()> {
         self.is_moving = true;
         let coord = self.coord.get().to_owned();
         let state = self.state()?;
@@ -538,12 +538,6 @@ where
             .into()
         });
         Ok(())
-    }
-    fn move_path_prepare(&mut self, _path: Vec<MotionType<FRANKA_DOF>>) -> RobotResult<()> {
-        unimplemented!()
-    }
-    fn move_path_start(&mut self, _start: MotionType<FRANKA_DOF>) -> RobotResult<()> {
-        unimplemented!()
     }
 }
 
