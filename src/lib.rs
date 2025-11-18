@@ -7,8 +7,7 @@ mod gripper;
 mod command_handle;
 #[cfg(feature = "ffi")]
 pub mod ffi;
-pub mod franka_emika;
-pub mod franka_fr3;
+pub mod franka;
 pub mod model;
 mod network;
 pub mod once;
@@ -17,8 +16,7 @@ mod robot;
 pub mod types;
 pub mod utils;
 
-pub use franka_emika::*;
-pub use franka_fr3::*;
+pub use franka::*;
 pub use gripper::FrankaGripper;
 pub use params::*;
 pub use robot::FrankaRobot;
