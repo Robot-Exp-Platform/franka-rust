@@ -52,5 +52,5 @@ impl ArmForwardKinematics<FRANKA_DOF> for FrankaEmika {
 }
 
 impl RobotFile for FrankaEmika {
-    const URDF: &'static str = "";
+    const URDF: &'static str = "franka_panda/panda.urdf";
 }
