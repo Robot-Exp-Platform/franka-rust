@@ -187,9 +187,9 @@ impl Network {
 
                 let response: S = match bincode::deserialize(&buffer[..size]) {
                     Ok(resp) => resp,
-                    Err(err) => {
+                    Err(_err) => {
                         #[cfg(feature = "debug")]
-                        eprintln!("bincode deserialize error: {:?}", err);
+                        eprintln!("bincode deserialize error: {:?}", _err);
                         // 尝试按 JSON 格式解析并输出，便于调试非 bincode 的数据
                         if let Ok(json_val) =
                             serde_json::from_slice::<serde_json::Value>(&buffer[..size])
