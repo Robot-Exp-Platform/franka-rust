@@ -23,9 +23,9 @@ impl Network {
         let tcp_stream = TcpStream::connect(format!("{tcp_ip}:{tcp_port}")).ok();
 
         if let Some(steam) = &tcp_stream {
-            steam
-                .set_read_timeout(Some(std::time::Duration::from_millis(10)))
-                .unwrap();
+            // steam
+            //     .set_read_timeout(Some(std::time::Duration::from_millis(10)))
+            //     .unwrap();
             steam
                 .set_write_timeout(Some(std::time::Duration::from_millis(3)))
                 .unwrap();
@@ -177,9 +177,33 @@ impl Network {
             //     .unwrap();
             let mut buffer = vec![0u8; size_of::<S>() * 5];
             loop {
-                let (size, addr) = udp_socket.recv_from(&mut buffer).unwrap();
+                let (size, addr) = match udp_socket.recv_from(&mut buffer) {
+                    Ok(res) => res,
+                    Err(_) => {
+                        // 超时继续循环
+                        continue;
+                    }
+                };
 
-                let response: S = bincode::deserialize(&buffer[..size]).unwrap();
+                let response: S = match bincode::deserialize(&buffer[..size]) {
+                    Ok(resp) => resp,
+                    Err(err) => {
+                        #[cfg(feature = "debug")]
+                        eprintln!("bincode deserialize error: {:?}", err);
+                        // 尝试按 JSON 格式解析并输出，便于调试非 bincode 的数据
+                        if let Ok(json_val) =
+                            serde_json::from_slice::<serde_json::Value>(&buffer[..size])
+                        {
+                            eprintln!("Received non-bincode message (as JSON): {}", json_val);
+                        } else {
+                            eprintln!(
+                                "Received non-bincode message raw bytes: {:?}",
+                                &buffer[..size]
+                            );
+                        }
+                        continue;
+                    }
+                };
                 #[cfg(feature = "debug")]
                 println!("{:?} >{}", start_time.elapsed(), response);
 
