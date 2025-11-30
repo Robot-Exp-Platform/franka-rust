@@ -1,4 +1,4 @@
-use franka_rust::FrankaEmika;
+use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
 use robot_behavior::{MotionType, RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
@@ -13,7 +13,7 @@ fn main() -> RobotResult<()> {
         upper_force_thresholds_acceleration: [10.0, 10.0, 10.0, 12.5, 12.5, 12.5],
         lower_force_thresholds_nominal: [10.0, 10.0, 10.0, 12.5, 12.5, 12.5],
         upper_force_thresholds_nominal: [10.0, 10.0, 10.0, 12.5, 12.5, 12.5],
-    });
+    })?;
 
     for _ in 0..5 {
         println!("Executing motion.");
@@ -35,7 +35,7 @@ fn main() -> RobotResult<()> {
             } else {
                 (MotionType::JointVel(velocities), false)
             }
-        });
+        })?;
 
         robot.waiting_for_finish()?;
     }

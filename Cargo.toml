@@ -50,7 +50,7 @@ cxx-build = "1.0"
 sys-locale = "0.3"
 
 [features]
-default = []
+default = ["debug"]
 debug = []
 ffi = []
 conservative_constraint = []

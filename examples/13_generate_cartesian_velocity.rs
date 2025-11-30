@@ -1,5 +1,7 @@
-use franka_rust::FrankaEmika;
-use robot_behavior::{RobotResult, behavior::*};
+use std::{thread::sleep, time::Duration};
+
+use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
+use robot_behavior::{MotionType, RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -13,10 +15,10 @@ fn main() -> RobotResult<()> {
         upper_force_thresholds_acceleration: [40.0, 40.0, 40.0, 35.0, 35.0, 35.0],
         lower_force_thresholds_nominal: [30.0, 30.0, 30.0, 25.0, 25.0, 25.0],
         upper_force_thresholds_nominal: [40.0, 40.0, 40.0, 35.0, 35.0, 35.0],
-    });
+    })?;
 
     let mut time = Duration::ZERO;
-    robot.move_with_closure(move |state, dt| {
+    robot.move_with_closure(move |_, dt| {
         time += dt;
 
         let time_ = time.as_secs_f64();
@@ -29,8 +31,10 @@ fn main() -> RobotResult<()> {
         let output = [velocity_x, 0.0, velocity_z, 0.0, 0.0, 0.0];
 
         let is_finished = time >= Duration::from_secs(8);
-        (MotionType::CartesianVelocity(output), is_finished)
-    });
+        (MotionType::CartesianVel(output), is_finished)
+    })?;
+
+    sleep(Duration::from_secs(6));
 
     Ok(())
 }

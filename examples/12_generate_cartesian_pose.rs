@@ -1,7 +1,10 @@
-use std::f64::consts::{FRAC_PI_4, PI};
+use std::{
+    f64::consts::{FRAC_PI_4, PI},
+    thread::sleep,
+    time::Duration,
+};
 
-use bincode::de;
-use franka_rust::FrankaEmika;
+use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
 use robot_behavior::{MotionType, Pose, RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
@@ -16,7 +19,7 @@ fn main() -> RobotResult<()> {
         upper_force_thresholds_acceleration: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0],
         lower_force_thresholds_nominal: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0],
         upper_force_thresholds_nominal: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0],
-    });
+    })?;
 
     let mut time = Duration::ZERO;
     let mut initial_position = Pose::Homo([0.; 16]);
@@ -37,7 +40,9 @@ fn main() -> RobotResult<()> {
 
         let is_finished = time >= Duration::from_secs(10);
         (MotionType::Cartesian(Pose::Homo(new_pose)), is_finished)
-    });
+    })?;
+
+    sleep(Duration::from_secs(6));
 
     Ok(())
 }

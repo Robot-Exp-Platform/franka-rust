@@ -1,7 +1,7 @@
-use std::{f64::consts::PI, time::Duration};
+use std::{f64::consts::PI, thread::sleep, time::Duration};
 
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{RobotResult, behavior::*};
+use robot_behavior::{MotionType, RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -15,10 +15,10 @@ fn main() -> RobotResult<()> {
         upper_force_thresholds_acceleration: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0],
         lower_force_thresholds_nominal: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0],
         upper_force_thresholds_nominal: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0],
-    });
+    })?;
 
     let mut time = Duration::ZERO;
-    let initial_position = [0.; 7];
+    let mut initial_position = [0.; 7];
     robot.move_with_closure(move |state, dt| {
         if time == Duration::ZERO {
             initial_position = state.joint.unwrap();
@@ -39,7 +39,9 @@ fn main() -> RobotResult<()> {
         let is_finished = time > Duration::from_secs(5);
 
         (MotionType::Joint(output), is_finished)
-    });
+    })?;
+
+    sleep(Duration::from_secs(6));
 
     Ok(())
 }

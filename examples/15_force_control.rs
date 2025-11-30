@@ -1,4 +1,4 @@
-use franka_rust::FrankaEmika;
+use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
 use robot_behavior::RobotResult;
 
 fn main() -> RobotResult<()> {
@@ -13,7 +13,7 @@ fn main() -> RobotResult<()> {
         upper_force_thresholds_acceleration: [100.0; 6],
         lower_force_thresholds_nominal: [100.0; 6],
         upper_force_thresholds_nominal: [100.0; 6],
-    });
+    })?;
 
     // Eigen::VectorXd initial_tau_ext(7);
     // Eigen::VectorXd tau_error_integral(7);
