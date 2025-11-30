@@ -1,5 +1,5 @@
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{Arm, ArmPreplannedMotion, MotionType, Pose, RobotResult};
+use robot_behavior::{ArmPreplannedMotion, MotionType, Pose, RobotResult};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -35,7 +35,7 @@ fn main() -> RobotResult<()> {
         1.0,
     ]);
 
-    robot.with_speed(0.3).move_to(MotionType::Cartesian(pose))?;
+    robot.move_to(MotionType::Cartesian(pose))?;
 
     Ok(())
 }

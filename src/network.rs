@@ -109,9 +109,9 @@ impl Network {
             let res = bincode::deserialize(&buffer)
                 .map_err(|e| RobotException::DeserializeError(e.to_string()))?;
             let mut receive_buffer = Vec::new();
+            let mut size_max = 0;
             loop {
                 let mut buffer = vec![0_u8; 1024 * 5];
-                let mut size_max = 0;
                 if let Ok(size) = stream.read(&mut buffer) {
                     receive_buffer.append(&mut buffer[..size].to_vec());
                     if size < size_max {

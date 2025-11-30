@@ -77,7 +77,7 @@ where
             max_cartesian_acc: OverrideOnce::new(Self::CARTESIAN_ACC_BOUND),
         };
         robot.connect_().unwrap();
-        let _ = robot.set_speed(0.1);
+        let _ = robot.set_scale(0.1);
 
         robot
     }
@@ -96,7 +96,7 @@ where
         self.max_cartesian_acc = OverrideOnce::new(Self::CARTESIAN_ACC_BOUND);
 
         self.connect_().unwrap();
-        let _ = self.set_speed(0.1);
+        let _ = self.set_scale(0.1);
     }
 
     cmd_fn!(_connect, { Command::Connect }; data: ConnectData; ConnectStatus);
@@ -271,6 +271,26 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
     fn is_moving(&mut self) -> bool {
         let state = self.robot_state.read().unwrap();
         state.motion_generator_mode != MotionGeneratorMode::Idle
+            || state.controller_mode != ControllerMode::Other
+    }
+
+    fn waiting_for_finish(&mut self) -> RobotResult<()> {
+        loop {
+            let state = self.robot_state.read().unwrap();
+            state.error_result()?;
+            let finished = state.motion_generator_mode == MotionGeneratorMode::Idle
+                && state.controller_mode == ControllerMode::Other;
+            drop(state);
+
+            if finished {
+                self.command_handle.remove_closure();
+                let _ = self.network.tcp_blocking_recv::<MoveResponse>();
+                break;
+            }
+            sleep(Duration::from_millis(1));
+        }
+        self.is_moving = false;
+        Ok(())
     }
 
     fn stop(&mut self) -> RobotResult<()> {
@@ -314,14 +334,14 @@ where
         self.coord.set(coord);
         Ok(())
     }
-    fn set_speed(&mut self, speed: f64) -> RobotResult<()> {
-        self.max_vel.set(Self::JOINT_VEL_BOUND.map(|v| v * speed));
-        self.max_acc.set(Self::JOINT_ACC_BOUND.map(|v| v * speed));
-        self.max_jerk.set(Self::JOINT_JERK_BOUND.map(|v| v * speed));
+    fn set_scale(&mut self, scale: f64) -> RobotResult<()> {
+        self.max_vel.set(Self::JOINT_VEL_BOUND.map(|v| v * scale));
+        self.max_acc.set(Self::JOINT_ACC_BOUND.map(|v| v * scale));
+        self.max_jerk.set(Self::JOINT_JERK_BOUND.map(|v| v * scale));
         self.max_cartesian_vel
-            .set(Self::CARTESIAN_VEL_BOUND * speed);
+            .set(Self::CARTESIAN_VEL_BOUND * scale);
         self.max_cartesian_acc
-            .set(Self::CARTESIAN_ACC_BOUND * speed);
+            .set(Self::CARTESIAN_ACC_BOUND * scale);
         Ok(())
     }
 
@@ -329,15 +349,15 @@ where
         self.coord.once(coord);
         self
     }
-    fn with_speed(&mut self, speed: f64) -> &mut Self {
-        self.max_vel.once(Self::JOINT_VEL_BOUND.map(|v| v * speed));
-        self.max_acc.once(Self::JOINT_ACC_BOUND.map(|v| v * speed));
+    fn with_scale(&mut self, scale: f64) -> &mut Self {
+        self.max_vel.once(Self::JOINT_VEL_BOUND.map(|v| v * scale));
+        self.max_acc.once(Self::JOINT_ACC_BOUND.map(|v| v * scale));
         self.max_jerk
-            .once(Self::JOINT_JERK_BOUND.map(|v| v * speed));
+            .once(Self::JOINT_JERK_BOUND.map(|v| v * scale));
         self.max_cartesian_vel
-            .once(Self::CARTESIAN_VEL_BOUND * speed);
+            .once(Self::CARTESIAN_VEL_BOUND * scale);
         self.max_cartesian_acc
-            .once(Self::CARTESIAN_ACC_BOUND * speed);
+            .once(Self::CARTESIAN_ACC_BOUND * scale);
         self
     }
     fn with_velocity(&mut self, joint_vel: &[f64; FRANKA_DOF]) -> &mut Self {
@@ -403,21 +423,7 @@ where
     fn move_joint(&mut self, target: &[f64; FRANKA_DOF]) -> RobotResult<()> {
         self.move_joint_async(target)?;
 
-        loop {
-            let state = self.robot_state.read().unwrap();
-            state.error_result()?;
-            let finished = state.motion_generator_mode == MotionGeneratorMode::Idle;
-            drop(state);
-
-            if finished {
-                self.command_handle.remove_closure();
-                let _ = self.network.tcp_blocking_recv::<MoveResponse>();
-                break;
-            }
-            sleep(Duration::from_millis(1));
-        }
-        self.is_moving = false;
-        Ok(())
+        self.waiting_for_finish()
     }
     fn move_joint_async(&mut self, target: &[f64; FRANKA_DOF]) -> RobotResult<()> {
         self.is_moving = true;
@@ -453,22 +459,7 @@ where
     fn move_cartesian(&mut self, target: &Pose) -> RobotResult<()> {
         self.move_cartesian_async(target)?;
 
-        loop {
-            let state = self.robot_state.read().unwrap();
-            state.error_result()?;
-            let finished = state.motion_generator_mode == MotionGeneratorMode::Idle;
-            drop(state);
-
-            if finished {
-                self.command_handle.remove_closure();
-                let _ = self.network.tcp_blocking_recv::<MoveResponse>();
-                break;
-            }
-            sleep(Duration::from_millis(1));
-        }
-        let _ = self._stop_move(());
-        self.is_moving = false;
-        Ok(())
+        self.waiting_for_finish()
     }
     fn move_cartesian_async(&mut self, target: &Pose) -> RobotResult<()> {
         self.is_moving = true;
@@ -510,22 +501,7 @@ where
     fn move_traj(&mut self, path: Vec<MotionType<FRANKA_DOF>>) -> RobotResult<()> {
         self.move_traj_async(path)?;
 
-        loop {
-            let state = self.robot_state.read().unwrap();
-            state.error_result()?;
-            let finished = state.motion_generator_mode == MotionGeneratorMode::Idle;
-            drop(state);
-
-            if finished {
-                self.command_handle.remove_closure();
-                let _ = self.network.tcp_blocking_recv::<MoveResponse>();
-                break;
-            }
-            sleep(Duration::from_millis(1));
-        }
-
-        self.is_moving = false;
-        Ok(())
+        self.waiting_for_finish()
     }
     fn move_traj_async(&mut self, path: Vec<MotionType<FRANKA_DOF>>) -> RobotResult<()> {
         self.is_moving = true;
@@ -715,6 +691,7 @@ where
                         let state = robot_state.read().unwrap();
                         state.error_result()?;
                         state.motion_generator_mode == MotionGeneratorMode::Idle
+                            && state.controller_mode == ControllerMode::Other
                     };
 
                     if finished {
@@ -753,6 +730,7 @@ where
                         let state = robot_state.read().unwrap();
                         state.error_result()?;
                         state.motion_generator_mode == MotionGeneratorMode::Idle
+                            && state.controller_mode == ControllerMode::Other
                     };
 
                     if finished {

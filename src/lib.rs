@@ -16,6 +16,7 @@ mod params;
 mod robot;
 pub mod types;
 pub mod utils;
+mod vncuum_gripper;
 
 pub use franka::*;
 pub use gripper::FrankaGripper;
