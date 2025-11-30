@@ -1,6 +1,7 @@
 use robot_behavior::{RobotException, RobotResult};
 use robot_behavior::{is_hardware_realtime, set_realtime_priority};
 use serde::{Serialize, de::DeserializeOwned};
+use std::cmp::max;
 use std::{
     fmt::{Debug, Display},
     io::{Read, Write},
@@ -110,8 +111,14 @@ impl Network {
             let mut receive_buffer = Vec::new();
             loop {
                 let mut buffer = vec![0_u8; 1024 * 5];
+                let mut size_max = 0;
                 if let Ok(size) = stream.read(&mut buffer) {
                     receive_buffer.append(&mut buffer[..size].to_vec());
+                    if size < size_max {
+                        break;
+                    }
+                    size_max = max(size_max, size);
+                    #[cfg(feature = "debug")]
                     println!("size:{size}");
                 } else {
                     break;
