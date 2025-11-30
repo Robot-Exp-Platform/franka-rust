@@ -12,9 +12,9 @@ use std::{net::UdpSocket, thread};
 use crate::command_handle::CommandHandle;
 use crate::types::robot_types::{CommandFilter, CommandIDConfig};
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Network {
-    tcp_stream: Option<TcpStream>,
+    tcp_stream: Option<Arc<Mutex<TcpStream>>>,
     command_counter: Arc<Mutex<u32>>,
 }
 
@@ -30,7 +30,10 @@ impl Network {
                 .set_write_timeout(Some(std::time::Duration::from_millis(3)))
                 .unwrap();
         }
-        Network { tcp_stream, command_counter: Arc::new(Mutex::new(0)) }
+        Network {
+            tcp_stream: tcp_stream.map(|s| Arc::new(Mutex::new(s))),
+            command_counter: Arc::new(Mutex::new(0)),
+        }
     }
 
     /// 发送并阻塞接收 tcp 指令
@@ -42,6 +45,7 @@ impl Network {
         #[cfg(feature = "debug")]
         println!("tcp send {:?}", request);
         if let Some(stream) = &mut self.tcp_stream {
+            let mut stream = stream.lock().unwrap();
             let command_id = {
                 let mut counter = self.command_counter.lock().unwrap();
                 *counter += 1;
@@ -67,6 +71,7 @@ impl Network {
         S: DeserializeOwned + CommandIDConfig<u32> + Debug,
     {
         if let Some(stream) = &mut self.tcp_stream {
+            let mut stream = stream.lock().unwrap();
             let mut buffer = vec![0_u8; size_of::<S>() + 4];
             stream.read_exact(&mut buffer)?;
 
@@ -87,6 +92,7 @@ impl Network {
         #[cfg(feature = "debug")]
         println!("tcp send {:?}", request);
         if let Some(stream) = &mut self.tcp_stream {
+            let mut stream = stream.lock().unwrap();
             let command_id = {
                 let mut counter = self.command_counter.lock().unwrap();
                 *counter += 1;

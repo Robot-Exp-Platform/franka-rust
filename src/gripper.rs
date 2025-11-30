@@ -2,9 +2,9 @@ use robot_behavior::{RobotException, RobotResult};
 use std::sync::{Arc, RwLock};
 
 use crate::{
-    FRANKA_GRIPPER_VERSION, PORT_GRIPPER_COMMAND, PORT_GRIPPER_UDP,
     network::Network,
     types::{gripper_command::GripperCommand, gripper_state::*, gripper_types::*},
+    FRANKA_GRIPPER_VERSION, PORT_GRIPPER_COMMAND, PORT_GRIPPER_UDP,
 };
 
 /// # FrankaGripper

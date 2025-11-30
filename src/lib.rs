@@ -8,6 +8,7 @@ mod command_handle;
 #[cfg(feature = "ffi")]
 pub mod ffi;
 pub mod franka;
+pub mod impedance;
 pub mod model;
 mod network;
 pub mod once;

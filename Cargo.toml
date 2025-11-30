@@ -15,8 +15,9 @@ name = "franka_rust"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-robot_behavior = "0.5.1"
-pyo3 = { version = "0.26", optional = true, features = [
+roplat = { version = "0.1.0", path = "../roplat" }
+robot_behavior = { version = "0.5.2", path = "../robot_behavior" }
+pyo3 = { version = "0.27.1", optional = true, features = [
     "extension-module",
     "multiple-pymethods",
 ] }
@@ -38,6 +39,8 @@ libloading = "0.8"
 libc = "0.2"
 strum = "0.27"
 strum_macros = "0.27"
+futures = "0.3.31"
+tokio = { version = "1.48.0", features = ["time"] }
 
 [build-dependencies]
 cxx-build = "1.0"

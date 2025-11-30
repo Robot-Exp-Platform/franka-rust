@@ -1,3 +1,5 @@
+use futures::future::BoxFuture;
+use nalgebra as na;
 use robot_behavior::{
     utils::path_generate::{self, cartesian_quat_simple_4th_curve},
     *,
@@ -7,7 +9,10 @@ use std::{
     io::Write,
     marker::PhantomData,
     path::Path,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        Arc, Mutex, RwLock,
+        atomic::{AtomicBool, Ordering},
+    },
     thread::sleep,
     time::Duration,
 };
@@ -15,7 +20,8 @@ use std::{
 use crate::{
     FRANKA_DOF, FRANKA_ROBOT_VERSION, LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
     command_handle::CommandHandle,
-    model::FrankaModel,
+    impedance::{cartesian_impedance, joint_impedance},
+    model::{Frame, FrankaModel},
     network::Network,
     once::OverrideOnce,
     types::{robot_command::RobotCommand, robot_state::*, robot_types::*},
@@ -263,7 +269,8 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
     }
 
     fn is_moving(&mut self) -> bool {
-        unimplemented!()
+        let state = self.robot_state.read().unwrap();
+        state.motion_generator_mode != MotionGeneratorMode::Idle
     }
 
     fn stop(&mut self) -> RobotResult<()> {
@@ -592,6 +599,173 @@ where
     }
     fn control_with_target(&mut self) -> Arc<Mutex<Option<ControlType<FRANKA_DOF>>>> {
         unimplemented!()
+    }
+}
+
+impl<T: FrankaType> ArmImpedance<7> for FrankaRobot<T>
+where
+    Self: ArmParam<7>,
+{
+    fn joint_impedance_async(
+        &mut self,
+        stiffness: &[f64; 7],
+        damping: &[f64; 7],
+    ) -> RobotResult<JointImpedanceHandle<7>> {
+        let handle = JointImpedanceHandle {
+            stiffness: Arc::new(Mutex::new(*stiffness)),
+            damping: Arc::new(Mutex::new(*damping)),
+            target: Arc::new(Mutex::new(None)),
+            is_finished: Arc::new(AtomicBool::new(false)),
+        };
+
+        let stiffness_clone = handle.stiffness.clone();
+        let damping_clone = handle.damping.clone();
+        let target_clone = handle.target.clone();
+        let is_finished_clone = handle.is_finished.clone();
+        let _ = self.control_with_closure(move |state, _| {
+            let q = state.joint.unwrap();
+            let dq = state.joint_vel.unwrap();
+            let target = {
+                let t = target_clone.lock().unwrap();
+                t.unwrap_or(state.joint.unwrap())
+            };
+            let stiffness = {
+                let s = stiffness_clone.lock().unwrap();
+                *s
+            };
+            let damping = {
+                let d = damping_clone.lock().unwrap();
+                *d
+            };
+            let torque = joint_impedance(&stiffness, &damping, target, q, dq);
+            (
+                ControlType::Torque(torque),
+                is_finished_clone.load(Ordering::SeqCst),
+            )
+        });
+
+        Ok(handle)
+    }
+    fn cartesian_impedance_async(
+        &mut self,
+        stiffness: (f64, f64),
+        damping: (f64, f64),
+    ) -> RobotResult<CartesianImpedanceHandle> {
+        let handle = CartesianImpedanceHandle {
+            stiffness: Arc::new(Mutex::new(stiffness)),
+            damping: Arc::new(Mutex::new(damping)),
+            target: Arc::new(Mutex::new(None)),
+            is_finished: Arc::new(AtomicBool::new(false)),
+        };
+
+        let stiffness_clone = handle.stiffness.clone();
+        let damping_clone = handle.damping.clone();
+        let target_clone = handle.target.clone();
+        let is_finished_clone = handle.is_finished.clone();
+        let model = self.model()?;
+
+        let _ = self.control_with_closure(move |state, _| {
+            let pose = state.pose_o_to_ee.unwrap();
+            let dq = state.joint_vel.unwrap();
+            let target = {
+                let t = target_clone.lock().unwrap();
+                t.unwrap_or(pose)
+            };
+            let stiffness = {
+                let s = stiffness_clone.lock().unwrap();
+                *s
+            };
+            let damping = {
+                let d = damping_clone.lock().unwrap();
+                *d
+            };
+            let jacobian = na::SMatrix::<f64, 6, 7>::from_column_slice(
+                &model.zero_jacobian_from_arm_state(&Frame::EndEffector, &state),
+            );
+            let force_torque =
+                cartesian_impedance(stiffness, damping, target.quat(), jacobian, dq, pose.quat());
+            (
+                ControlType::Torque(force_torque),
+                is_finished_clone.load(Ordering::SeqCst),
+            )
+        });
+
+        Ok(handle)
+    }
+    fn joint_impedance_control(
+        &mut self,
+        stiffness: &[f64; 7],
+        damping: &[f64; 7],
+    ) -> RobotResult<(
+        JointImpedanceHandle<7>,
+        Box<dyn FnMut() -> BoxFuture<'static, RobotResult<()>> + Send + 'static>,
+    )> {
+        let handle = self.joint_impedance_async(stiffness, damping)?;
+        let robot_state = self.robot_state.clone();
+        let command_handle = self.command_handle.clone();
+        let network = self.network.clone();
+
+        let closure = Box::new(move || {
+            let robot_state = robot_state.clone();
+            let command_handle = command_handle.clone();
+            let mut network = network.clone();
+            Box::pin(async move {
+                loop {
+                    let finished = {
+                        let state = robot_state.read().unwrap();
+                        state.error_result()?;
+                        state.motion_generator_mode == MotionGeneratorMode::Idle
+                    };
+
+                    if finished {
+                        command_handle.remove_closure();
+                        let _ = network.tcp_blocking_recv::<MoveResponse>();
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+                Ok(())
+            }) as BoxFuture<'static, RobotResult<()>>
+        });
+        Ok((handle, closure))
+    }
+
+    fn cartesian_impedance_control(
+        &mut self,
+        stiffness: (f64, f64),
+        damping: (f64, f64),
+    ) -> RobotResult<(
+        CartesianImpedanceHandle,
+        Box<dyn FnMut() -> BoxFuture<'static, RobotResult<()>> + Send + 'static>,
+    )> {
+        let handle = self.cartesian_impedance_async(stiffness, damping)?;
+        let robot_state = self.robot_state.clone();
+        let command_handle = self.command_handle.clone();
+        let network = self.network.clone();
+
+        let closure = Box::new(move || {
+            let robot_state = robot_state.clone();
+            let command_handle = command_handle.clone();
+            let mut network = network.clone();
+            Box::pin(async move {
+                loop {
+                    let finished = {
+                        let state = robot_state.read().unwrap();
+                        state.error_result()?;
+                        state.motion_generator_mode == MotionGeneratorMode::Idle
+                    };
+
+                    if finished {
+                        command_handle.remove_closure();
+                        let _ = network.tcp_blocking_recv::<MoveResponse>();
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+                Ok(())
+            }) as BoxFuture<'static, RobotResult<()>>
+        });
+        Ok((handle, closure))
     }
 }
 
