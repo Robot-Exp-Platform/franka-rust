@@ -15,7 +15,7 @@ async fn main() -> RobotResult<()> {
         handle.finish();
     };
 
-    let (result, _) = tokio::join!(closure(), handle,);
+    let (result, _) = tokio::join!(closure(), handle);
 
     result
 }

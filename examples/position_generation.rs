@@ -38,8 +38,8 @@ fn main() -> RobotResult<()> {
 
     robot.with_scale(0.3).move_to(MotionType::Joint(joint2))?;
     robot.with_scale(0.3).move_to(MotionType::Joint(joint1))?;
-    robot.with_scale(0.3).move_to(MotionType::Joint(joint2))?;
-    robot.with_scale(0.3).move_to(MotionType::Joint(joint1))?;
+    robot.with_scale(0.3).move_joint(&joint2)?;
+    robot.with_scale(0.3).move_joint(&joint1)?;
 
     println!("Joint 1 position reached");
     // std::thread::sleep(Duration::from_secs(2));

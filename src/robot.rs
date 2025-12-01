@@ -279,7 +279,7 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
             let state = self.robot_state.read().unwrap();
             state.error_result()?;
             let finished = state.motion_generator_mode == MotionGeneratorMode::Idle
-                && state.controller_mode == ControllerMode::Other;
+                || state.controller_mode == ControllerMode::Other;
             drop(state);
 
             if finished {
