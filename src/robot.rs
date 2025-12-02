@@ -268,27 +268,21 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
         unimplemented!()
     }
 
-    fn is_moving(&mut self) -> bool {
+    fn is_moving(&mut self) -> RobotResult<bool> {
         let state = self.robot_state.read().unwrap();
-        state.motion_generator_mode != MotionGeneratorMode::Idle
-            || state.controller_mode != ControllerMode::Other
+        state.error_result()?;
+
+        Ok((state.motion_generator_mode != MotionGeneratorMode::Idle
+            && state.motion_generator_mode != MotionGeneratorMode::None)
+            || state.controller_mode == ControllerMode::ExternalController)
     }
 
     fn waiting_for_finish(&mut self) -> RobotResult<()> {
-        loop {
-            let state = self.robot_state.read().unwrap();
-            state.error_result()?;
-            let finished = state.motion_generator_mode == MotionGeneratorMode::Idle
-                || state.controller_mode == ControllerMode::Other;
-            drop(state);
-
-            if finished {
-                self.command_handle.remove_closure();
-                let _ = self.network.tcp_blocking_recv::<MoveResponse>();
-                break;
-            }
+        while self.is_moving()? {
             sleep(Duration::from_millis(1));
         }
+        self.command_handle.remove_closure();
+        let _ = self.network.tcp_blocking_recv::<MoveResponse>();
         self.is_moving = false;
         Ok(())
     }
@@ -690,8 +684,9 @@ where
                     let finished = {
                         let state = robot_state.read().unwrap();
                         state.error_result()?;
-                        state.motion_generator_mode == MotionGeneratorMode::Idle
-                            && state.controller_mode == ControllerMode::Other
+                        (state.motion_generator_mode != MotionGeneratorMode::Idle
+                            && state.motion_generator_mode != MotionGeneratorMode::None)
+                            || state.controller_mode == ControllerMode::ExternalController
                     };
 
                     if finished {
@@ -729,8 +724,9 @@ where
                     let finished = {
                         let state = robot_state.read().unwrap();
                         state.error_result()?;
-                        state.motion_generator_mode == MotionGeneratorMode::Idle
-                            && state.controller_mode == ControllerMode::Other
+                        (state.motion_generator_mode != MotionGeneratorMode::Idle
+                            && state.motion_generator_mode != MotionGeneratorMode::None)
+                            || state.controller_mode == ControllerMode::ExternalController
                     };
 
                     if finished {
