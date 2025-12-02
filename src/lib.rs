@@ -14,6 +14,7 @@ mod network;
 pub mod once;
 mod params;
 mod robot;
+mod robot_impl;
 pub mod types;
 pub mod utils;
 mod vncuum_gripper;
@@ -22,7 +23,7 @@ pub use franka::*;
 pub use gripper::FrankaGripper;
 pub use params::*;
 pub use robot::FrankaRobot;
-
+pub use robot_impl::FrankaRobotImpl;
 #[cfg(feature = "to_py")]
 #[pyo3::pymodule]
 mod franka_rust {

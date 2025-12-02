@@ -37,7 +37,7 @@ fn main() -> RobotResult<()> {
     let target: na::SVector<f64, 7> = state.q.into();
     // let mut path = [[0.; 7]; 48].iter();
 
-    let state = robot.robot_state.clone();
+    let state = robot.robot_impl.robot_state.clone();
 
     robot.control_with_closure(move |_, _| {
         let state_lock = state.read().unwrap();

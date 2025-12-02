@@ -10,7 +10,7 @@ use std::{
     marker::PhantomData,
     path::Path,
     sync::{
-        Arc, Mutex, RwLock,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     thread::sleep,
@@ -18,11 +18,10 @@ use std::{
 };
 
 use crate::{
-    FRANKA_DOF, FRANKA_ROBOT_VERSION, LIBFRANKA_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
+    FRANKA_DOF, FrankaRobotImpl, LIBFRANKA_VERSION,
     command_handle::CommandHandle,
     impedance::{cartesian_impedance, joint_impedance},
     model::{Frame, FrankaModel},
-    network::Network,
     once::OverrideOnce,
     types::{robot_command::RobotCommand, robot_state::*, robot_types::*},
 };
@@ -32,9 +31,10 @@ pub trait FrankaType {}
 #[derive(Default)]
 pub struct FrankaRobot<T: FrankaType> {
     marker: PhantomData<T>,
-    network: Network,
-    command_handle: CommandHandle<RobotCommand, RobotStateInter>,
-    pub robot_state: Arc<RwLock<RobotStateInter>>,
+    pub robot_impl: FrankaRobotImpl,
+    // network: Network,
+    // command_handle: CommandHandle<RobotCommand, RobotStateInter>,
+    // pub robot_state: Arc<RwLock<RobotStateInter>>,
     is_moving: bool,
     coord: OverrideOnce<Coord>,
     max_vel: OverrideOnce<[f64; FRANKA_DOF]>,
@@ -44,17 +44,6 @@ pub struct FrankaRobot<T: FrankaType> {
     max_cartesian_acc: OverrideOnce<f64>,
 }
 
-macro_rules! cmd_fn {
-    ($fn_name:ident, $command:expr; $arg_name:ident: $arg_type:ty; $ret_type:ty) => {
-        fn $fn_name(&mut self, $arg_name: $arg_type) -> RobotResult<$ret_type> {
-            let response: Response<$command, $ret_type> = self
-                .network
-                .tcp_send_and_recv(&mut Request::<$command, $arg_type>::from($arg_name))?;
-            Ok(response.status)
-        }
-    };
-}
-
 impl<T: FrankaType> FrankaRobot<T> {}
 
 impl<T: FrankaType> FrankaRobot<T>
@@ -62,12 +51,9 @@ where
     FrankaRobot<T>: ArmParam<7>,
 {
     pub fn new(ip: &str) -> Self {
-        let (command_handle, robot_state) = Network::spawn_udp_thread(PORT_ROBOT_UDP);
         let mut robot = FrankaRobot {
             marker: PhantomData,
-            network: Network::new(ip, PORT_ROBOT_COMMAND),
-            command_handle,
-            robot_state,
+            robot_impl: FrankaRobotImpl::new(ip),
             is_moving: false,
             coord: OverrideOnce::new(Coord::OCS),
             max_vel: OverrideOnce::new(Self::JOINT_VEL_BOUND),
@@ -76,17 +62,13 @@ where
             max_cartesian_vel: OverrideOnce::new(Self::CARTESIAN_VEL_BOUND),
             max_cartesian_acc: OverrideOnce::new(Self::CARTESIAN_ACC_BOUND),
         };
-        robot.connect_().unwrap();
         let _ = robot.set_scale(0.1);
 
         robot
     }
 
     pub fn connect(&mut self, ip: &str) {
-        let (command_handle, robot_state) = Network::spawn_udp_thread(PORT_ROBOT_UDP);
-        self.network = Network::new(ip, PORT_ROBOT_COMMAND);
-        self.command_handle = command_handle;
-        self.robot_state = robot_state;
+        self.robot_impl = FrankaRobotImpl::new(ip);
         self.is_moving = false;
         self.coord = OverrideOnce::new(Coord::OCS);
         self.max_vel = OverrideOnce::new(Self::JOINT_VEL_BOUND);
@@ -95,35 +77,7 @@ where
         self.max_cartesian_vel = OverrideOnce::new(Self::CARTESIAN_VEL_BOUND);
         self.max_cartesian_acc = OverrideOnce::new(Self::CARTESIAN_ACC_BOUND);
 
-        self.connect_().unwrap();
         let _ = self.set_scale(0.1);
-    }
-
-    cmd_fn!(_connect, { Command::Connect }; data: ConnectData; ConnectStatus);
-    cmd_fn!(_move, { Command::Move }; data: MoveData; MoveStatus);
-    cmd_fn!(_set_collision_behavior, { Command::SetCollisionBehavior }; data: SetCollisionBehaviorData; GetterSetterStatus);
-    cmd_fn!(_set_joint_impedance, { Command::SetJointImpedance }; data: SetJointImpedanceData; GetterSetterStatus);
-    cmd_fn!(_set_cartesian_impedance, { Command::SetCartesianImpedance }; data: SetCartesianImpedanceData; GetterSetterStatus);
-    cmd_fn!(_set_guiding_mode, { Command::SetGuidingMode }; data: SetGuidingModeData; GetterSetterStatus);
-    cmd_fn!(_set_ee_to_k, { Command::SetEEToK }; data: SetEEToKData; GetterSetterStatus);
-    cmd_fn!(_set_ne_to_ee, { Command::SetNEToEE }; data: SetNEToEEData; GetterSetterStatus);
-    cmd_fn!(_set_load, { Command::SetLoad }; data: SetLoadData; GetterSetterStatus);
-    cmd_fn!(_set_fliters, { Command::SetFilters }; data: SetFiltersData; GetterSetterStatus);
-    cmd_fn!(_automatic_error_recovery, { Command::AutomaticErrorRecovery }; data: (); GetterSetterStatus);
-    cmd_fn!(_stop_move, { Command::StopMove }; data: (); GetterSetterStatus);
-    cmd_fn!(_get_cartesian_limit, { Command::GetCartesianLimit }; data: GetCartesianLimitData; GetCartesianLimitStatus);
-
-    fn connect_(&mut self) -> RobotResult<()> {
-        let result =
-            self._connect(ConnectData { version: FRANKA_ROBOT_VERSION, udp_port: PORT_ROBOT_UDP })?;
-        if let ConnectStatusEnum::Success = result.status {
-            Ok(())
-        } else {
-            Err(RobotException::IncompatibleVersionException {
-                server_version: result.version as u64,
-                client_version: FRANKA_ROBOT_VERSION as u64,
-            })
-        }
     }
 
     /// # set_collision_behavior
@@ -136,34 +90,34 @@ where
     /// Forces or torques above the upper threshold are registered as collision and cause the robot to
     /// stop moving.
     pub fn set_collision_behavior(&mut self, data: SetCollisionBehaviorData) -> RobotResult<()> {
-        self._set_collision_behavior(data)?.into()
+        self.robot_impl._set_collision_behavior(data)?.into()
     }
 
     /// # set_joint_impedance
     /// **Sets the impedance for each joint in the internal controller.**
     pub fn set_joint_impedance(&mut self, data: SetJointImpedanceData) -> RobotResult<()> {
-        self._set_joint_impedance(data)?.into()
+        self.robot_impl._set_joint_impedance(data)?.into()
     }
 
     /// # set_cartesian_impedance
     /// **Sets the impedance for the Cartesian internal controller.**
     pub fn set_cartesian_impedance(&mut self, data: SetCartesianImpedanceData) -> RobotResult<()> {
-        self._set_cartesian_impedance(data)?.into()
+        self.robot_impl._set_cartesian_impedance(data)?.into()
     }
 
     /// # set_cartesian_limit
     /// **Locks or unlocks guiding mode movement in (x, y, z, roll, pitch, yaw).**
     /// If a flag is set to true, movement is unlocked.
     pub fn set_guiding_mode(&mut self, data: SetGuidingModeData) -> RobotResult<()> {
-        self._set_guiding_mode(data)?.into()
+        self.robot_impl._set_guiding_mode(data)?.into()
     }
 
     pub fn set_ee_to_k(&mut self, data: SetEEToKData) -> RobotResult<()> {
-        self._set_ee_to_k(data)?.into()
+        self.robot_impl._set_ee_to_k(data)?.into()
     }
 
     pub fn set_ne_to_ee(&mut self, data: SetNEToEEData) -> RobotResult<()> {
-        self._set_ne_to_ee(data)?.into()
+        self.robot_impl._set_ne_to_ee(data)?.into()
     }
 
     // /// # set_load
@@ -177,11 +131,11 @@ where
 
     #[deprecated(note = "please use `low_pass_filter` instead")]
     pub fn set_filters(&mut self, data: SetFiltersData) -> RobotResult<()> {
-        self._set_fliters(data)?.into()
+        self.robot_impl._set_fliters(data)?.into()
     }
 
     pub fn read_franka_state(&mut self) -> RobotResult<RobotState> {
-        let state = self.robot_state.read().unwrap();
+        let state = self.robot_impl.robot_state.read().unwrap();
         Ok((*state).into())
     }
 
@@ -195,6 +149,7 @@ where
     fn download_library(&mut self, download_path: &Path) -> RobotResult<()> {
         let mut req: LoadModelLibraryRequest = LoadModelLibraryData::default().into();
         let (res, library_buffer) = self
+            .robot_impl
             .network
             .tcp_send_and_recv_buffer::<_, LoadModelLibraryResponse>(&mut req)?;
 
@@ -269,20 +224,11 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
     }
 
     fn is_moving(&mut self) -> RobotResult<bool> {
-        let state = self.robot_state.read().unwrap();
-        state.error_result()?;
-
-        Ok((state.motion_generator_mode != MotionGeneratorMode::Idle
-            && state.motion_generator_mode != MotionGeneratorMode::None)
-            || state.controller_mode == ControllerMode::ExternalController)
+        self.robot_impl.is_moving()
     }
 
     fn waiting_for_finish(&mut self) -> RobotResult<()> {
-        while self.is_moving()? {
-            sleep(Duration::from_millis(1));
-        }
-        self.command_handle.remove_closure();
-        let _ = self.network.tcp_blocking_recv::<MoveResponse>();
+        self.robot_impl.waiting_for_finish()?;
         self.is_moving = false;
         Ok(())
     }
@@ -308,7 +254,7 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
     }
 
     fn read_state(&mut self) -> RobotResult<Self::State> {
-        let state = self.robot_state.read().unwrap();
+        let state = self.robot_impl.robot_state.read().unwrap();
         Ok((*state).into())
     }
 }
@@ -318,11 +264,11 @@ where
     FrankaRobot<T>: ArmParam<7>,
 {
     fn state(&mut self) -> RobotResult<ArmState<FRANKA_DOF>> {
-        let state = self.robot_state.read().unwrap();
+        let state = self.robot_impl.robot_state.read().unwrap();
         Ok((*state).into())
     }
     fn set_load(&mut self, load: LoadState) -> RobotResult<()> {
-        self._set_load(load.into()).map(|_| ())
+        self.robot_impl._set_load(load.into()).map(|_| ())
     }
     fn set_coord(&mut self, coord: Coord) -> RobotResult<()> {
         self.coord.set(coord);
@@ -421,10 +367,10 @@ where
     }
     fn move_joint_async(&mut self, target: &[f64; FRANKA_DOF]) -> RobotResult<()> {
         self.is_moving = true;
-        self._move(MotionType::Joint(*target).into())?;
+        self.robot_impl._move(MotionType::Joint(*target).into())?;
         sleep(Duration::from_millis(2));
 
-        let state = self.robot_state.read().unwrap();
+        let state = self.robot_impl.robot_state.read().unwrap();
         let joint = state.q_d;
         drop(state);
         let target = match self.coord.get() {
@@ -444,7 +390,7 @@ where
         // let path_generate = path_generate::joint_trapezoid(&joint, &target, v_max, a_max);
 
         let mut duration = Duration::from_millis(0);
-        self.command_handle.set_closure(move |_, d| {
+        self.robot_impl.command_handle.set_closure(move |_, d| {
             duration += d;
             (MotionType::Joint(path_generate(duration)), duration > t_max).into()
         });
@@ -457,11 +403,12 @@ where
     }
     fn move_cartesian_async(&mut self, target: &Pose) -> RobotResult<()> {
         self.is_moving = true;
-        self._move(MotionType::<7>::Cartesian(*target).into())?;
+        self.robot_impl
+            ._move(MotionType::<7>::Cartesian(*target).into())?;
         sleep(Duration::from_millis(1));
 
         let target = *target;
-        let state = self.robot_state.read().unwrap();
+        let state = self.robot_impl.robot_state.read().unwrap();
         let pose: Pose = state.O_T_EE.into();
         drop(state);
 
@@ -476,7 +423,7 @@ where
             cartesian_quat_simple_4th_curve(pose.quat(), target.quat(), *v_max, *a_max);
 
         let mut duration = Duration::from_millis(0);
-        self.command_handle.set_closure(move |_, d| {
+        self.robot_impl.command_handle.set_closure(move |_, d| {
             duration += d;
             (
                 MotionType::Cartesian(path_generate(duration).into()),
@@ -506,7 +453,7 @@ where
         self.move_to(path[0])?;
         let last = path.last().cloned().unwrap_or(MotionType::Stop);
         let mut path = path.into_iter();
-        self.command_handle.set_closure(move |_, _| {
+        self.robot_impl.command_handle.set_closure(move |_, _| {
             if let Some(next) = path.next() {
                 (next.with_coord(&coord, &state), false)
             } else {
@@ -549,14 +496,15 @@ where
     type Handle = FrankaHandle;
     fn start_streaming(&mut self) -> RobotResult<Self::Handle> {
         self.is_moving = true;
-        self._move(MotionType::Joint([0.0; 7]).into())?;
+        self.robot_impl._move(MotionType::Joint([0.0; 7]).into())?;
         sleep(Duration::from_millis(2));
-        let state = self.robot_state.read().unwrap();
-        self.command_handle
+        let state = self.robot_impl.robot_state.read().unwrap();
+        self.robot_impl
+            .command_handle
             .set_target((MotionType::Joint(state.q_d), false));
 
         Ok(FrankaHandle {
-            command_handle: self.command_handle.clone(),
+            command_handle: self.robot_impl.command_handle.clone(),
             last_motion: None,
             last_control: None,
         })
@@ -671,31 +619,23 @@ where
         Box<dyn FnMut() -> BoxFuture<'static, RobotResult<()>> + Send + 'static>,
     )> {
         let handle = self.joint_impedance_async(stiffness, damping)?;
-        let robot_state = self.robot_state.clone();
-        let command_handle = self.command_handle.clone();
-        let network = self.network.clone();
+        let is_finished = handle.is_finished.clone();
+        let robot = self.robot_impl.clone();
 
         let closure = Box::new(move || {
-            let robot_state = robot_state.clone();
-            let command_handle = command_handle.clone();
-            let mut network = network.clone();
+            let mut robot = robot.clone();
+            let is_finished = is_finished.clone();
             Box::pin(async move {
-                loop {
-                    let finished = {
-                        let state = robot_state.read().unwrap();
-                        state.error_result()?;
-                        (state.motion_generator_mode != MotionGeneratorMode::Idle
-                            && state.motion_generator_mode != MotionGeneratorMode::None)
-                            || state.controller_mode == ControllerMode::ExternalController
-                    };
-
-                    if finished {
-                        command_handle.remove_closure();
-                        let _ = network.tcp_blocking_recv::<MoveResponse>();
-                        break;
+                let mut stop_sent = false;
+                while robot.is_moving()? {
+                    if is_finished.load(Ordering::SeqCst) && !stop_sent {
+                        let _ = robot._stop_move(());
+                        stop_sent = true;
                     }
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
+                robot.command_handle.remove_closure();
+                let _ = robot.network.tcp_blocking_recv::<MoveResponse>();
                 Ok(())
             }) as BoxFuture<'static, RobotResult<()>>
         });
@@ -711,31 +651,23 @@ where
         Box<dyn FnMut() -> BoxFuture<'static, RobotResult<()>> + Send + 'static>,
     )> {
         let handle = self.cartesian_impedance_async(stiffness, damping)?;
-        let robot_state = self.robot_state.clone();
-        let command_handle = self.command_handle.clone();
-        let network = self.network.clone();
+        let robot = self.robot_impl.clone();
+        let is_finished = handle.is_finished.clone();
 
         let closure = Box::new(move || {
-            let robot_state = robot_state.clone();
-            let command_handle = command_handle.clone();
-            let mut network = network.clone();
+            let mut robot = robot.clone();
+            let is_finished = is_finished.clone();
             Box::pin(async move {
-                loop {
-                    let finished = {
-                        let state = robot_state.read().unwrap();
-                        state.error_result()?;
-                        (state.motion_generator_mode != MotionGeneratorMode::Idle
-                            && state.motion_generator_mode != MotionGeneratorMode::None)
-                            || state.controller_mode == ControllerMode::ExternalController
-                    };
-
-                    if finished {
-                        command_handle.remove_closure();
-                        let _ = network.tcp_blocking_recv::<MoveResponse>();
-                        break;
+                let mut stop_sent = false;
+                while robot.is_moving()? {
+                    if is_finished.load(Ordering::SeqCst) && !stop_sent {
+                        let _ = robot._stop_move(());
+                        stop_sent = true;
                     }
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
+                robot.command_handle.remove_closure();
+                let _ = robot.network.tcp_blocking_recv::<MoveResponse>();
                 Ok(())
             }) as BoxFuture<'static, RobotResult<()>>
         });
@@ -757,8 +689,10 @@ where
     {
         self.is_moving = true;
         let example = ArmState::<FRANKA_DOF>::default();
-        self._move(closure(example, Duration::from_millis(0)).0.into())?;
-        self.command_handle
+        self.robot_impl
+            ._move(closure(example, Duration::from_millis(0)).0.into())?;
+        self.robot_impl
+            .command_handle
             .set_closure(move |state, duration| closure((*state).into(), duration).into());
         Ok(())
     }
@@ -771,8 +705,10 @@ where
     {
         self.is_moving = true;
         let example = ArmState::<FRANKA_DOF>::default();
-        self._move(closure(example, Duration::from_millis(0)).0.into())?;
-        self.command_handle
+        self.robot_impl
+            ._move(closure(example, Duration::from_millis(0)).0.into())?;
+        self.robot_impl
+            .command_handle
             .set_closure(move |state, duration| closure((*state).into(), duration).into());
         Ok(())
     }
