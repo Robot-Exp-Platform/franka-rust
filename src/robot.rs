@@ -627,6 +627,15 @@ where
             let is_finished = is_finished.clone();
             Box::pin(async move {
                 let mut stop_sent = false;
+                // Wait for robot to start moving
+                let start_wait = std::time::Instant::now();
+                while !robot.is_moving()? {
+                    if start_wait.elapsed() > Duration::from_secs(2) {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+
                 while robot.is_moving()? {
                     if is_finished.load(Ordering::SeqCst) && !stop_sent {
                         let _ = robot._stop_move(());
@@ -659,6 +668,14 @@ where
             let is_finished = is_finished.clone();
             Box::pin(async move {
                 let mut stop_sent = false;
+                // Wait for robot to start moving
+                let start_wait = std::time::Instant::now();
+                while !robot.is_moving()? {
+                    if start_wait.elapsed() > Duration::from_secs(2) {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
                 while robot.is_moving()? {
                     if is_finished.load(Ordering::SeqCst) && !stop_sent {
                         let _ = robot._stop_move(());
