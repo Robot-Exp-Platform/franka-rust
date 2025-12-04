@@ -1,6 +1,6 @@
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
-use robot_behavior::{DhParam, behavior::*, mdh_param};
+use robot_behavior::{DhParam, behavior::*};
 
 use crate::{FRANKA_DOF, FrankaRobot, robot::FrankaType};
 
@@ -50,12 +50,12 @@ impl ArmParam<FRANKA_DOF> for _FrankaFR3 {
 
 impl ArmForwardKinematics<FRANKA_DOF> for FrankaFR3 {
     const DH: [DhParam; FRANKA_DOF] = [
-        mdh_param!(0., 0.333, 0., 0.),
-        mdh_param!(0., 0., 0., -FRAC_PI_2),
-        mdh_param!(0., 0.316, 0., FRAC_PI_2),
-        mdh_param!(0., 0., 0.0825, FRAC_PI_2),
-        mdh_param!(0., 0.384, -0.0825, -FRAC_PI_2),
-        mdh_param!(0., 0., 0., FRAC_PI_2),
-        mdh_param!(0., 0., 0.088, FRAC_PI_2),
+        DhParam::MDH { alpha: 0., a: 0., theta: 0., d: 0.333 },
+        DhParam::MDH { alpha: -FRAC_PI_2, a: 0., theta: 0., d: 0. },
+        DhParam::MDH { alpha: FRAC_PI_2, a: 0., theta: 0., d: 0.316 },
+        DhParam::MDH { alpha: FRAC_PI_2, a: 0.0825, theta: 0., d: 0. },
+        DhParam::MDH { alpha: -FRAC_PI_2, a: -0.0825, theta: 0., d: 0.384 },
+        DhParam::MDH { alpha: FRAC_PI_2, a: 0., theta: 0., d: 0. },
+        DhParam::MDH { alpha: FRAC_PI_2, a: 0.088, theta: 0., d: 0. },
     ];
 }
