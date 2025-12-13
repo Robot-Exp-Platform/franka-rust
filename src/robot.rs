@@ -616,7 +616,7 @@ where
         damping: &[f64; 7],
     ) -> RobotResult<(
         JointImpedanceHandle<7>,
-        Box<dyn FnMut() -> BoxFuture<'static, RobotResult<()>> + Send + 'static>,
+        impl FnMut() -> BoxFuture<'static, RobotResult<()>> + Send + 'static,
     )> {
         let handle = self.joint_impedance_async(stiffness, damping)?;
         let is_finished = handle.is_finished.clone();
@@ -657,7 +657,7 @@ where
         damping: (f64, f64),
     ) -> RobotResult<(
         CartesianImpedanceHandle,
-        Box<dyn FnMut() -> BoxFuture<'static, RobotResult<()>> + Send + 'static>,
+        impl FnMut() -> BoxFuture<'static, RobotResult<()>> + Send + 'static,
     )> {
         let handle = self.cartesian_impedance_async(stiffness, damping)?;
         let robot = self.robot_impl.clone();
