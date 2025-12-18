@@ -1,6 +1,6 @@
 [package]
 name = "franka_rust"
-version = "0.1.11"
+version = "0.1.12"
 edition = "2024"
 authors = ["Yixing <yanjizhou312@163.com>"]
 readme = "README.md"
@@ -15,7 +15,7 @@ name = "franka_rust"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-roplat = { version = "0.1.0", path = "../roplat" }
+roplat = "0.1.0"
 robot_behavior = { version = "0.5.2", path = "../robot_behavior" }
 pyo3 = { version = "0.27.1", optional = true, features = [
     "extension-module",
