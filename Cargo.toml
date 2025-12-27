@@ -16,7 +16,7 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 roplat = "0.1.0"
-robot_behavior = { version = "0.5.2", path = "../robot_behavior" }
+robot_behavior = { version = "0.5.2" }
 pyo3 = { version = "0.27.1", optional = true, features = [
     "extension-module",
     "multiple-pymethods",
@@ -41,6 +41,7 @@ strum = "0.27"
 strum_macros = "0.27"
 futures = "0.3.31"
 tokio = { version = "1.48.0", features = ["time"] }
+anyhow = "1.0.100"
 
 [build-dependencies]
 cxx-build = "1.0"

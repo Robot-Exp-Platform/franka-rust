@@ -540,12 +540,17 @@ where
         let damping_clone = handle.damping.clone();
         let target_clone = handle.target.clone();
         let is_finished_clone = handle.is_finished.clone();
+        let robot = self.robot_impl.clone();
         let _ = self.control_with_closure(move |state, _| {
-            let q = state.joint.unwrap();
-            let dq = state.joint_vel.unwrap();
+            let state_ = robot.robot_state.read().unwrap();
+            let q = state_.q;
+            let dq = state_.dq;
+            drop(state_);
+            // let q = state.joint.unwrap();
+            // let dq = state.joint_vel.unwrap();
             let target = {
                 let t = target_clone.lock().unwrap();
-                t.unwrap_or(state.joint.unwrap())
+                t.unwrap_or(q)
             };
             let stiffness = {
                 let s = stiffness_clone.lock().unwrap();
