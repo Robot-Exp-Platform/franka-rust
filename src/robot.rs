@@ -540,14 +540,13 @@ where
         let damping_clone = handle.damping.clone();
         let target_clone = handle.target.clone();
         let is_finished_clone = handle.is_finished.clone();
-        let robot = self.robot_impl.clone();
-        let _ = self.control_with_closure(move |state, _| {
-            let state_ = robot.robot_state.read().unwrap();
-            let q = state_.q;
-            let dq = state_.dq;
-            drop(state_);
-            // let q = state.joint.unwrap();
-            // let dq = state.joint_vel.unwrap();
+
+        self.is_moving = true;
+        self.robot_impl._move(ControlType::Torque([0.; 7]).into())?;
+
+        self.robot_impl.command_handle.set_closure(move |state, _| {
+            let q = state.q;
+            let dq = state.dq;
             let target = {
                 let t = target_clone.lock().unwrap();
                 t.unwrap_or(q)
@@ -565,8 +564,8 @@ where
                 ControlType::Torque(torque),
                 is_finished_clone.load(Ordering::SeqCst),
             )
+                .into()
         });
-
         Ok(handle)
     }
     fn cartesian_impedance_async(
@@ -587,12 +586,15 @@ where
         let is_finished_clone = handle.is_finished.clone();
         let model = self.model()?;
 
-        let _ = self.control_with_closure(move |state, _| {
-            let pose = state.pose_o_to_ee.unwrap();
-            let dq = state.joint_vel.unwrap();
+        self.is_moving = true;
+        self.robot_impl._move(ControlType::Torque([0.; 7]).into())?;
+
+        self.robot_impl.command_handle.set_closure(move |state, _| {
+            let pose = state.O_T_EE;
+            let dq = state.dq;
             let target = {
                 let t = target_clone.lock().unwrap();
-                t.unwrap_or(pose)
+                t.unwrap_or(Pose::Homo(pose))
             };
             let stiffness = {
                 let s = stiffness_clone.lock().unwrap();
@@ -603,14 +605,21 @@ where
                 *d
             };
             let jacobian = na::SMatrix::<f64, 6, 7>::from_column_slice(
-                &model.zero_jacobian_from_arm_state(&Frame::EndEffector, &state),
+                &model.zero_jacobian_from_state(&Frame::EndEffector, &state.clone().into()),
             );
-            let force_torque =
-                cartesian_impedance(stiffness, damping, target.quat(), jacobian, dq, pose.quat());
+            let force_torque = cartesian_impedance(
+                stiffness,
+                damping,
+                target.quat(),
+                jacobian,
+                dq,
+                Pose::Homo(pose).quat(),
+            );
             (
                 ControlType::Torque(force_torque),
                 is_finished_clone.load(Ordering::SeqCst),
             )
+                .into()
         });
 
         Ok(handle)
