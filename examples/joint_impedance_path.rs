@@ -1,6 +1,6 @@
 use anyhow::Result;
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{MotionType,  behavior::*};
+use robot_behavior::{MotionType, behavior::*};
 use std::{fs::File, thread::sleep, time::Duration};
 
 fn main() -> Result<()> {

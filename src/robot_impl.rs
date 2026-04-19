@@ -32,7 +32,14 @@ macro_rules! cmd_fn {
 
 impl FrankaRobotImpl {
     pub fn new(ip: &str) -> Self {
-        let (command_handle, robot_state) = Network::spawn_udp_thread(PORT_ROBOT_UDP);
+        Self::new_with_hook(ip, |_| {})
+    }
+
+    pub fn new_with_hook(
+        ip: &str,
+        on_update: impl Fn(&RobotStateInter) + Send + 'static,
+    ) -> Self {
+        let (command_handle, robot_state) = Network::spawn_udp_thread(PORT_ROBOT_UDP, on_update);
         let network = Network::new(ip, PORT_ROBOT_COMMAND);
         let mut robot = Self { network, command_handle, robot_state };
         robot.connect_().unwrap();

@@ -7,7 +7,17 @@ use crate::{FRANKA_DOF, FrankaRobot, robot::FrankaType};
 #[derive(Default)]
 pub struct _FrankaFR3;
 
-impl FrankaType for _FrankaFR3 {}
+impl FrankaType for _FrankaFR3 {
+    const JOINT_NAMES: [&'static str; FRANKA_DOF] = [
+        "fr3_joint1",
+        "fr3_joint2",
+        "fr3_joint3",
+        "fr3_joint4",
+        "fr3_joint5",
+        "fr3_joint6",
+        "fr3_joint7",
+    ];
+}
 
 pub type FrankaFR3 = FrankaRobot<_FrankaFR3>;
 

@@ -6,10 +6,22 @@ use crate::{FRANKA_DOF, FrankaRobot, robot::FrankaType};
 
 #[derive(Default)]
 pub struct _FrankaEmika;
+pub type _FrankaPanda = _FrankaEmika;
 
-impl FrankaType for _FrankaEmika {}
+impl FrankaType for _FrankaEmika {
+    const JOINT_NAMES: [&'static str; FRANKA_DOF] = [
+        "panda_joint1",
+        "panda_joint2",
+        "panda_joint3",
+        "panda_joint4",
+        "panda_joint5",
+        "panda_joint6",
+        "panda_joint7",
+    ];
+}
 
 pub type FrankaEmika = FrankaRobot<_FrankaEmika>;
+pub type FrankaPanda = FrankaEmika;
 
 impl ArmParam<FRANKA_DOF> for _FrankaEmika {
     const JOINT_DEFAULT: [f64; FRANKA_DOF] = [

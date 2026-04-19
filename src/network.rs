@@ -133,7 +133,10 @@ impl Network {
         }
     }
 
-    pub fn spawn_udp_thread<R, S>(port: u16) -> (CommandHandle<R, S>, Arc<RwLock<S>>)
+    pub fn spawn_udp_thread<R, S>(
+        port: u16,
+        on_update: impl Fn(&S) + Send + 'static,
+    ) -> (CommandHandle<R, S>, Arc<RwLock<S>>)
     where
         R: Serialize
             + CommandIDConfig<u64>
@@ -232,6 +235,7 @@ impl Network {
                 }
 
                 *res.write().unwrap() = response;
+                on_update(&*res.read().unwrap());
             }
         });
         (cmd_handle, res_handle)

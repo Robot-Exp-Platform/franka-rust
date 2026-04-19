@@ -2,9 +2,9 @@ use robot_behavior::{RobotException, RobotResult};
 use std::sync::{Arc, RwLock};
 
 use crate::{
+    FRANKA_GRIPPER_VERSION, PORT_GRIPPER_COMMAND, PORT_GRIPPER_UDP,
     network::Network,
     types::{gripper_command::GripperCommand, gripper_state::*, gripper_types::*},
-    FRANKA_GRIPPER_VERSION, PORT_GRIPPER_COMMAND, PORT_GRIPPER_UDP,
 };
 
 /// # FrankaGripper
@@ -27,7 +27,7 @@ macro_rules! cmd_fn {
 
 impl FrankaGripper {
     pub fn new(ip: &str) -> Self {
-        let (_, gripper_state) = Network::spawn_udp_thread::<GripperCommand, _>(PORT_GRIPPER_UDP);
+        let (_, gripper_state) = Network::spawn_udp_thread::<GripperCommand, _>(PORT_GRIPPER_UDP, |_| {});
         let mut gripper = FrankaGripper {
             network: Network::new(ip, PORT_GRIPPER_COMMAND),
             gripper_state,

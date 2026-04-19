@@ -26,15 +26,14 @@ use crate::{
     types::{robot_command::RobotCommand, robot_state::*, robot_types::*},
 };
 
-pub trait FrankaType {}
+pub trait FrankaType {
+    const JOINT_NAMES: [&'static str; FRANKA_DOF];
+}
 
 #[derive(Default)]
 pub struct FrankaRobot<T: FrankaType> {
     marker: PhantomData<T>,
     pub robot_impl: FrankaRobotImpl,
-    // network: Network,
-    // command_handle: CommandHandle<RobotCommand, RobotStateInter>,
-    // pub robot_state: Arc<RwLock<RobotStateInter>>,
     is_moving: bool,
     coord: OverrideOnce<Coord>,
     max_vel: OverrideOnce<[f64; FRANKA_DOF]>,
@@ -42,6 +41,7 @@ pub struct FrankaRobot<T: FrankaType> {
     max_jerk: OverrideOnce<[f64; FRANKA_DOF]>,
     max_cartesian_vel: OverrideOnce<f64>,
     max_cartesian_acc: OverrideOnce<f64>,
+    joint_state_map: JointStateMap,
 }
 
 impl<T: FrankaType> FrankaRobot<T> {}
@@ -51,9 +51,14 @@ where
     FrankaRobot<T>: ArmParam<7>,
 {
     pub fn new(ip: &str) -> Self {
+        let joint_state_map: JointStateMap = Default::default();
+        let map_hook = joint_state_map.clone();
         let mut robot = FrankaRobot {
             marker: PhantomData,
-            robot_impl: FrankaRobotImpl::new(ip),
+            robot_impl: FrankaRobotImpl::new_with_hook(ip, move |state| {
+                let arm_state: ArmState<FRANKA_DOF> = (*state).into();
+                update_joint_state_map(&map_hook, &T::JOINT_NAMES, &arm_state);
+            }),
             is_moving: false,
             coord: OverrideOnce::new(Coord::OCS),
             max_vel: OverrideOnce::new(Self::JOINT_VEL_BOUND),
@@ -61,6 +66,7 @@ where
             max_jerk: OverrideOnce::new(Self::JOINT_JERK_BOUND),
             max_cartesian_vel: OverrideOnce::new(Self::CARTESIAN_VEL_BOUND),
             max_cartesian_acc: OverrideOnce::new(Self::CARTESIAN_ACC_BOUND),
+            joint_state_map,
         };
         let _ = robot.set_scale(0.1);
 
@@ -68,7 +74,11 @@ where
     }
 
     pub fn connect(&mut self, ip: &str) {
-        self.robot_impl = FrankaRobotImpl::new(ip);
+        let map_hook = self.joint_state_map.clone();
+        self.robot_impl = FrankaRobotImpl::new_with_hook(ip, move |state| {
+            let arm_state: ArmState<FRANKA_DOF> = (*state).into();
+            update_joint_state_map(&map_hook, &T::JOINT_NAMES, &arm_state);
+        });
         self.is_moving = false;
         self.coord = OverrideOnce::new(Coord::OCS);
         self.max_vel = OverrideOnce::new(Self::JOINT_VEL_BOUND);
@@ -356,6 +366,12 @@ where
     const TORQUE_DOT_BOUND: [f64; FRANKA_DOF] = T::TORQUE_DOT_BOUND;
 }
 
+impl<T: FrankaType> JointStateSync for FrankaRobot<T> {
+    fn joint_state_handle(&self) -> JointStateMap {
+        self.joint_state_map.clone()
+    }
+}
+
 impl<T: FrankaType> ArmPreplannedMotion<7> for FrankaRobot<T>
 where
     FrankaRobot<T>: ArmParam<7>,
@@ -605,7 +621,7 @@ where
                 *d
             };
             let jacobian = na::SMatrix::<f64, 6, 7>::from_column_slice(
-                &model.zero_jacobian_from_state(&Frame::EndEffector, &state.clone().into()),
+                &model.zero_jacobian_from_state(&Frame::EndEffector, &(*state).into()),
             );
             let force_torque = cartesian_impedance(
                 stiffness,
