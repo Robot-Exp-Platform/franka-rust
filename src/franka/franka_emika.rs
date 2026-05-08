@@ -23,7 +23,8 @@ impl FrankaType for _FrankaEmika {
 pub type FrankaEmika = FrankaRobot<_FrankaEmika>;
 pub type FrankaPanda = FrankaEmika;
 
-impl ArmParam<FRANKA_DOF> for _FrankaEmika {
+impl ArmParam<FRANKA_DOF> for FrankaEmika {
+    const CONTROL_PERIOD: f64 = 1e-3;
     const JOINT_DEFAULT: [f64; FRANKA_DOF] = [
         0.,
         -FRAC_PI_4,
@@ -62,6 +63,10 @@ impl ArmForwardKinematics<FRANKA_DOF> for FrankaEmika {
         DhParam::MDH { alpha: FRAC_PI_2, a: 0.088, theta: 0., d: 0. },
     ];
 }
+
+// Use the default iterative IK pipeline (DLS / LM / Newton / JT) provided by
+// the trait — no analytic family registered.
+impl ArmInverseKinematics<FRANKA_DOF> for FrankaEmika {}
 
 impl RobotFile for FrankaEmika {
     const URDF: &'static str = "franka_panda/panda.urdf";

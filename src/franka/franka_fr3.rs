@@ -21,7 +21,8 @@ impl FrankaType for _FrankaFR3 {
 
 pub type FrankaFR3 = FrankaRobot<_FrankaFR3>;
 
-impl ArmParam<FRANKA_DOF> for _FrankaFR3 {
+impl ArmParam<FRANKA_DOF> for FrankaFR3 {
+    const CONTROL_PERIOD: f64 = 1e-3;
     const JOINT_DEFAULT: [f64; FRANKA_DOF] = [
         0.,
         -FRAC_PI_4,
@@ -35,13 +36,12 @@ impl ArmParam<FRANKA_DOF> for _FrankaFR3 {
     const JOINT_MIN: [f64; FRANKA_DOF] =
         [-2.7437, -1.7837, -2.9007, -3.0421, -2.8065, 0.5445, -3.0159];
     #[cfg(feature = "conservative_constraint")]
-    const JOINT_MIN: [f64; FrankaEmika::N] =
+    const JOINT_MIN: [f64; FRANKA_DOF] =
         [-2.3093, -1.5133, -2.4937, -2.7478, -2.4800, 0.8521, -2.6895];
     #[cfg(not(feature = "conservative_constraint"))]
     const JOINT_MAX: [f64; FRANKA_DOF] = [2.7437, 1.7837, 2.9007, -0.1518, 2.8065, 4.5169, 3.0159];
     #[cfg(feature = "conservative_constraint")]
-    const JOINT_MAX: [f64; FrankaEmika::N] =
-        [2.3093, 1.5133, 2.4937, -0.4461, 2.4800, 4.2094, 2.6895];
+    const JOINT_MAX: [f64; FRANKA_DOF] = [2.3093, 1.5133, 2.4937, -0.4461, 2.4800, 4.2094, 2.6895];
     #[cfg(not(feature = "conservative_constraint"))]
     const JOINT_VEL_BOUND: [f64; FRANKA_DOF] = [2.62, 2.62, 2.62, 2.62, 5.26, 4.18, 5.26];
     #[cfg(feature = "conservative_constraint")]

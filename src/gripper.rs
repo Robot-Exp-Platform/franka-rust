@@ -27,7 +27,8 @@ macro_rules! cmd_fn {
 
 impl FrankaGripper {
     pub fn new(ip: &str) -> Self {
-        let (_, gripper_state) = Network::spawn_udp_thread::<GripperCommand, _>(PORT_GRIPPER_UDP, |_| {});
+        let (_, gripper_state) =
+            Network::spawn_udp_thread::<GripperCommand, _>(PORT_GRIPPER_UDP, |_| {});
         let mut gripper = FrankaGripper {
             network: Network::new(ip, PORT_GRIPPER_COMMAND),
             gripper_state,
