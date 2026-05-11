@@ -36,6 +36,7 @@ pub struct FrankaRobot<T: FrankaType> {
     pub robot_impl: FrankaRobotImpl,
     is_moving: bool,
     coord: OverrideOnce<Coord>,
+    scale: OverrideOnce<f64>,
     max_vel: OverrideOnce<[f64; FRANKA_DOF]>,
     max_acc: OverrideOnce<[f64; FRANKA_DOF]>,
     max_jerk: OverrideOnce<[f64; FRANKA_DOF]>,
@@ -61,6 +62,7 @@ where
             }),
             is_moving: false,
             coord: OverrideOnce::new(Coord::OCS),
+            scale: OverrideOnce::new(1.0),
             max_vel: OverrideOnce::new(Self::JOINT_VEL_BOUND),
             max_acc: OverrideOnce::new(Self::JOINT_ACC_BOUND),
             max_jerk: OverrideOnce::new(Self::JOINT_JERK_BOUND),
@@ -81,6 +83,7 @@ where
         });
         self.is_moving = false;
         self.coord = OverrideOnce::new(Coord::OCS);
+        self.scale = OverrideOnce::new(1.0);
         self.max_vel = OverrideOnce::new(Self::JOINT_VEL_BOUND);
         self.max_acc = OverrideOnce::new(Self::JOINT_ACC_BOUND);
         self.max_jerk = OverrideOnce::new(Self::JOINT_JERK_BOUND);
@@ -285,6 +288,7 @@ where
         Ok(())
     }
     fn set_scale(&mut self, scale: f64) -> RobotResult<()> {
+        self.scale.set(scale);
         self.max_vel.set(Self::JOINT_VEL_BOUND.map(|v| v * scale));
         self.max_acc.set(Self::JOINT_ACC_BOUND.map(|v| v * scale));
         self.max_jerk.set(Self::JOINT_JERK_BOUND.map(|v| v * scale));
@@ -295,11 +299,16 @@ where
         Ok(())
     }
 
+    fn get_scale(&self) -> f64 {
+        *self.scale.get()
+    }
+
     fn with_coord(&mut self, coord: Coord) -> &mut Self {
         self.coord.once(coord);
         self
     }
     fn with_scale(&mut self, scale: f64) -> &mut Self {
+        self.scale.once(scale);
         self.max_vel.once(Self::JOINT_VEL_BOUND.map(|v| v * scale));
         self.max_acc.once(Self::JOINT_ACC_BOUND.map(|v| v * scale));
         self.max_jerk
@@ -449,6 +458,9 @@ where
         self.move_to(path[0])?;
         let last = path.last().cloned().unwrap_or(MotionType::Stop);
         let mut path = path.into_iter();
+        self.robot_impl._move(last.into())?;
+        sleep(Duration::from_millis(2));
+
         self.robot_impl.command_handle.set_closure(move |_, _| {
             if let Some(next) = path.next() {
                 (next.with_coord(&coord, &state), false)
@@ -718,6 +730,7 @@ where
         let example = ArmState::<FRANKA_DOF>::default();
         self.robot_impl
             ._move(closure(example, Duration::from_millis(0)).0.into())?;
+        sleep(Duration::from_millis(2));
         self.robot_impl
             .command_handle
             .set_closure(move |state, duration| closure((*state).into(), duration).into());
