@@ -5,7 +5,6 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::f64::consts::PI;
-use std::fmt;
 use std::marker::ConstParamTy;
 use std::time::Duration;
 
@@ -107,14 +106,6 @@ pub struct ConnectStatus {
 pub type MoveRequest = Request<{ Command::Move }, MoveData>;
 pub type MoveResponse = Response<{ Command::Move }, MoveStatus>;
 
-impl fmt::Debug for MoveResponse {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("MoveResponse")
-            .field("status", &self.status)
-            .finish()
-    }
-}
-
 #[derive(Debug, Default, Serialize_repr, Copy, Clone)]
 #[repr(u32)]
 pub enum MoveControllerMode {
@@ -156,7 +147,7 @@ pub struct MoveData {
     pub maximum_goal_deviation: MoveDeviation,
 }
 
-#[derive(Debug, Deserialize_repr)]
+#[derive(Debug, Deserialize_repr, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum MoveStatus {
     Success,

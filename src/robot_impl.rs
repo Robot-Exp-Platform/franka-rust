@@ -84,7 +84,14 @@ impl FrankaRobotImpl {
             sleep(Duration::from_millis(1));
         }
         self.command_handle.remove_closure();
-        let _ = self.network.tcp_blocking_recv::<MoveResponse>();
-        Ok(())
+        let response = self.network.tcp_blocking_recv::<MoveResponse>()?;
+        let status = response.status;
+        if status == MoveStatus::Success {
+            Ok(())
+        } else {
+            Err(RobotException::CommandException(format!(
+                "move failed with status: {status:?}"
+            )))
+        }
     }
 }

@@ -744,12 +744,12 @@ where
             + 'static,
     {
         self.is_moving = true;
-        let example = ArmState::<FRANKA_DOF>::default();
-        self.robot_impl
-            ._move(closure(example, Duration::from_millis(0)).0.into())?;
         self.robot_impl
             .command_handle
             .set_closure(move |state, duration| closure((*state).into(), duration).into());
+        self.robot_impl
+            ._move(ControlType::Torque([0.0; FRANKA_DOF]).into())?;
+        sleep(Duration::from_millis(2));
         Ok(())
     }
 }

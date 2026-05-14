@@ -192,7 +192,10 @@ impl From<(ControlType<7>, bool)> for RobotCommand {
     fn from(value: (ControlType<7>, bool)) -> Self {
         RobotCommand {
             message_id: 0,
-            motion: MotionGeneratorCommand::default(),
+            motion: MotionGeneratorCommand {
+                motion_generation_finished: value.1,
+                ..MotionGeneratorCommand::default()
+            },
             control: match value.0 {
                 ControlType::Torque(tau) => ControllerCommand { tau_j_d: tau },
                 ControlType::Zero => ControllerCommand::default(),
