@@ -274,20 +274,20 @@ impl FrankaModel {
         frame: &Frame,
         arm_state: &ArmState<7>,
     ) -> [f64; 42] {
-        let pose_f_to_ee = if let Some(Pose::Homo(pose)) = arm_state.pose_o_to_ee {
+        let pose_f_to_ee = if let Some(Pose::Homo(pose)) = arm_state.measured.pose_o_to_ee {
             pose
         } else {
             [0.; 16]
         };
 
-        let pose_ee_to_k = if let Some(Pose::Homo(pose)) = arm_state.pose_ee_to_k {
+        let pose_ee_to_k = if let Some(Pose::Homo(pose)) = arm_state.measured.pose_ee_to_k {
             pose
         } else {
             [0.; 16]
         };
         self.zero_jacobian(
             frame,
-            &arm_state.joint.unwrap(),
+            &arm_state.measured.joint.unwrap(),
             &pose_f_to_ee,
             &pose_ee_to_k,
         )
@@ -369,8 +369,8 @@ impl FrankaModel {
     }
     pub fn coriolis_from_arm_state(&self, arm_state: &ArmState<7>) -> [f64; 7] {
         self.coriolis(
-            &arm_state.joint.unwrap(),
-            &arm_state.joint_vel.unwrap(),
+            &arm_state.measured.joint.unwrap(),
+            &arm_state.measured.joint_vel.unwrap(),
             &arm_state.load.as_ref().unwrap().i,
             arm_state.load.as_ref().unwrap().m,
             &arm_state.load.as_ref().unwrap().x,
@@ -424,7 +424,7 @@ impl FrankaModel {
         gravity_earth: Grav,
     ) -> [f64; 7] {
         self.gravity(
-            &arm_state.joint.unwrap(),
+            &arm_state.measured.joint.unwrap(),
             arm_state.load.as_ref().unwrap().m,
             &arm_state.load.as_ref().unwrap().x,
             gravity_earth

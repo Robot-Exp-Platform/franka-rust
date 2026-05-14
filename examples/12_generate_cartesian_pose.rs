@@ -25,7 +25,7 @@ fn main() -> RobotResult<()> {
     let mut initial_position = Pose::Homo([0.; 16]);
     robot.move_with_closure(move |state, dt| {
         if time == Duration::ZERO {
-            initial_position = state.pose_o_to_ee.unwrap();
+            initial_position = state.measured.pose_o_to_ee.unwrap();
         }
         time += dt;
 

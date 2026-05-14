@@ -1,5 +1,5 @@
 use nalgebra as na;
-use robot_behavior::{ArmState, LoadState, Pose, RobotResult};
+use robot_behavior::{ArmState, ArmStateSample, LoadState, Pose, RobotResult};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -399,14 +399,33 @@ impl From<RobotStateInter> for ArmState<7> {
             val.I_load,
         );
         ArmState {
-            joint: Some(val.q_d),
-            joint_vel: Some(val.dq),
-            joint_acc: None,
-            torque: Some(val.tau_J_d),
-            pose_o_to_ee: Some(Pose::Homo(val.O_T_EE_c)),
-            // pose_f_to_ee: Some(Pose::Homo(val.F_T_EE)),
-            pose_ee_to_k: Some(Pose::Homo(val.EE_T_K)),
-            cartesian_vel: None,
+            measured: ArmStateSample {
+                joint: Some(val.q),
+                joint_vel: Some(val.dq),
+                joint_acc: None,
+                torque: Some(val.tau_J),
+                pose_o_to_ee: Some(Pose::Homo(val.O_T_EE)),
+                pose_ee_to_k: Some(Pose::Homo(val.EE_T_K)),
+                cartesian_vel: None,
+            },
+            desired: ArmStateSample {
+                joint: Some(val.q_d),
+                joint_vel: Some(val.dq_d),
+                joint_acc: Some(val.ddq_d),
+                torque: Some(val.tau_J_d),
+                pose_o_to_ee: Some(Pose::Homo(val.O_T_EE_d)),
+                pose_ee_to_k: None,
+                cartesian_vel: Some(val.O_dP_EE_d),
+            },
+            commanded: ArmStateSample {
+                joint: None,
+                joint_vel: None,
+                joint_acc: None,
+                torque: None,
+                pose_o_to_ee: Some(Pose::Homo(val.O_T_EE_c)),
+                pose_ee_to_k: None,
+                cartesian_vel: Some(val.O_dP_EE_c),
+            },
             load: Some(LoadState { m, x, i }),
         }
     }
