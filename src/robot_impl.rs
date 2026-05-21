@@ -36,10 +36,11 @@ impl FrankaRobotImpl {
     }
 
     pub fn new_with_hook(ip: &str, on_update: impl Fn(&RobotStateInter) + Send + 'static) -> Self {
-        let (command_handle, robot_state) = Network::spawn_udp_thread(PORT_ROBOT_UDP, on_update);
+        let (command_handle, robot_state, udp_port) =
+            Network::spawn_udp_thread(PORT_ROBOT_UDP, on_update);
         let network = Network::new(ip, PORT_ROBOT_COMMAND);
         let mut robot = Self { network, command_handle, robot_state };
-        robot.connect_().unwrap();
+        robot.connect_(udp_port).unwrap();
         robot
     }
 
@@ -57,9 +58,8 @@ impl FrankaRobotImpl {
     cmd_fn!(_stop_move, { Command::StopMove }; data: (); GetterSetterStatus);
     cmd_fn!(_get_cartesian_limit, { Command::GetCartesianLimit }; data: GetCartesianLimitData; GetCartesianLimitStatus);
 
-    fn connect_(&mut self) -> RobotResult<()> {
-        let result =
-            self._connect(ConnectData { version: FRANKA_ROBOT_VERSION, udp_port: PORT_ROBOT_UDP })?;
+    fn connect_(&mut self, udp_port: u16) -> RobotResult<()> {
+        let result = self._connect(ConnectData { version: FRANKA_ROBOT_VERSION, udp_port })?;
         if let ConnectStatusEnum::Success = result.status {
             Ok(())
         } else {

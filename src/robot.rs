@@ -106,6 +106,12 @@ where
         self.robot_impl._set_collision_behavior(data)?.into()
     }
 
+    /// # automatic_error_recovery
+    /// **Performs automatic error recovery after a collision or safety stop.**
+    pub fn automatic_error_recovery(&mut self) -> RobotResult<()> {
+        self.robot_impl._automatic_error_recovery(())?.into()
+    }
+
     /// # set_joint_impedance
     /// **Sets the impedance for each joint in the internal controller.**
     pub fn set_joint_impedance(&mut self, data: SetJointImpedanceData) -> RobotResult<()> {

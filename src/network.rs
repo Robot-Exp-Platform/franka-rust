@@ -136,7 +136,7 @@ impl Network {
     pub fn spawn_udp_thread<R, S>(
         port: u16,
         on_update: impl Fn(&S) + Send + 'static,
-    ) -> (CommandHandle<R, S>, Arc<RwLock<S>>)
+    ) -> (CommandHandle<R, S>, Arc<RwLock<S>>, u16)
     where
         R: Serialize
             + CommandIDConfig<u64>
@@ -157,10 +157,15 @@ impl Network {
     {
         use std::time::Duration;
 
+        let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port))
+            .or_else(|_| UdpSocket::bind(("0.0.0.0", 0)))
+            .unwrap();
+        let local_port = udp_socket.local_addr().unwrap().port();
+
         #[cfg(target_os = "windows")]
         {
-            if !is_firewall_rule_active(port) {
-                let (title, fix_step, cleanup_info) = get_localized_message(port);
+            if !is_firewall_rule_active(local_port) {
+                let (title, fix_step, cleanup_info) = get_localized_message(local_port);
                 eprintln!("\n{title}\n\n{fix_step}\n\n{cleanup_info}\n");
                 std::process::exit(1);
             }
@@ -187,7 +192,6 @@ impl Network {
             #[cfg(feature = "debug")]
             let start_time = std::time::Instant::now();
 
-            let udp_socket = UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)).unwrap();
             // udp_socket
             //     .set_read_timeout(Some(Duration::from_micros(1200)))
             //     .unwrap();
@@ -238,7 +242,7 @@ impl Network {
                 on_update(&*res.read().unwrap());
             }
         });
-        (cmd_handle, res_handle)
+        (cmd_handle, res_handle, local_port)
     }
 }
 

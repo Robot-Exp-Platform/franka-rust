@@ -12,6 +12,7 @@ use crate::{
 pub struct FrankaGripper {
     network: Network,
     gripper_state: Arc<RwLock<GripperStateInter>>,
+    udp_port: u16,
 }
 
 macro_rules! cmd_fn {
@@ -27,13 +28,14 @@ macro_rules! cmd_fn {
 
 impl FrankaGripper {
     pub fn new(ip: &str) -> Self {
-        let (_, gripper_state) =
+        let (_, gripper_state, udp_port) =
             Network::spawn_udp_thread::<GripperCommand, _>(PORT_GRIPPER_UDP, |_| {});
         let mut gripper = FrankaGripper {
             network: Network::new(ip, PORT_GRIPPER_COMMAND),
             gripper_state,
+            udp_port,
         };
-        gripper.connect().unwrap();
+        gripper.connect_with_udp_port(udp_port).unwrap();
         gripper
     }
 
@@ -44,10 +46,11 @@ impl FrankaGripper {
     cmd_fn!(_stop, { Command::Stop}; data: (); StopStatus);
 
     pub fn connect(&mut self) -> RobotResult<()> {
-        let result = self._connect(ConnectData {
-            version: FRANKA_GRIPPER_VERSION,
-            udp_port: PORT_GRIPPER_UDP,
-        })?;
+        self.connect_with_udp_port(self.udp_port)
+    }
+
+    fn connect_with_udp_port(&mut self, udp_port: u16) -> RobotResult<()> {
+        let result = self._connect(ConnectData { version: FRANKA_GRIPPER_VERSION, udp_port })?;
         if let Status::Success = result.status {
             Ok(())
         } else {
