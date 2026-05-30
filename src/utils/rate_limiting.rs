@@ -251,9 +251,6 @@ pub fn franka_limit_rate_torques(
     commanded_values: &[f64; 7],
     last_commanded_values: &[f64; 7],
 ) -> [f64; 7] {
-    if commanded_values.iter().sum::<f64>() == 0.0 {
-        return *commanded_values;
-    }
     limit_rate_torques(&MAX_TORQUE_RATE, commanded_values, last_commanded_values)
 }
 

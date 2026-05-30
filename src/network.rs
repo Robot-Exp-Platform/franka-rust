@@ -178,8 +178,15 @@ impl Network {
 
         thread::spawn(move || {
             if is_hardware_realtime() {
-                println!("you have realtime permission, enjoy it");
-                set_realtime_priority().unwrap();
+                println!("realtime kernel detected, attempting realtime scheduling");
+                if let Err(err) = set_realtime_priority() {
+                    eprintln!(
+                        "failed to set realtime scheduling: {err:?}; falling back to best-effort priority"
+                    );
+                    let _ = thread_priority::set_current_thread_priority(
+                        thread_priority::ThreadPriority::Max,
+                    );
+                }
             } else {
                 println!(
                     "you don't have realtime permission, which may cause communication latency"
