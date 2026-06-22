@@ -1,12 +1,27 @@
 #![allow(dead_code)]
 
-use robot_behavior::{ControlType, LoadState, MotionType, RobotException, RobotResult};
+use robot_behavior::{LoadState, Pose, RobotException, RobotResult};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::f64::consts::PI;
 use std::marker::ConstParamTy;
 use std::time::Duration;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MotionType<const N: usize> {
+    Joint([f64; N]),
+    JointVel([f64; N]),
+    Cartesian(Pose),
+    CartesianVel([f64; 6]),
+    Stop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ControlType<const N: usize> {
+    Torque([f64; N]),
+    Zero,
+}
 
 #[derive(Debug, ConstParamTy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]

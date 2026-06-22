@@ -1,21 +1,19 @@
-use franka_rust::FrankaEmika;
-use robot_behavior::{RobotResult, behavior::*};
+﻿use franka_rust::FrankaEmika;
+use robot_behavior::{RobotResult, behavior::*, controller::joint_impedance_session};
 
 #[tokio::main]
 async fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
 
-    let (handle, mut closure) = robot.joint_impedance_control(
-        &[600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0],
-        &[50.0, 50.0, 50.0, 50.0, 30.0, 25.0, 15.0],
-    )?;
+    let (controller, handle) = joint_impedance_session::<7>(
+        None,
+        [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0],
+        [50.0, 50.0, 50.0, 50.0, 30.0, 25.0, 15.0],
+    );
+    robot.control_with::<TorqueControl<7>, _>(controller)?;
 
-    let handle = async move {
-        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-        handle.finish();
-    };
+    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+    handle.finish();
 
-    let (result, _) = tokio::join!(closure(), handle);
-
-    result
+    robot.waiting_for_finish()
 }

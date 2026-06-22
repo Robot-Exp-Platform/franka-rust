@@ -1,5 +1,5 @@
-use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{MotionType, RobotResult, behavior::*};
+﻿use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
+use robot_behavior::{RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -20,7 +20,7 @@ fn main() -> RobotResult<()> {
         let time_max = 4.0;
         let omega_max = 0.2;
         let mut time = 0.0;
-        robot.move_with_closure(move |_, period| {
+        robot.control_with::<JointVelocityControl<7>, _>(move |_, period| {
             time += period.as_secs_f64();
 
             let cycle = (-1.0f64).powf((time - time.rem_euclid(time_max)) / time_max);
@@ -31,9 +31,9 @@ fn main() -> RobotResult<()> {
 
             if time >= 2.0 * time_max {
                 println!("\nFinished motion.");
-                (MotionType::JointVel(velocities), true)
+                (velocities, true)
             } else {
-                (MotionType::JointVel(velocities), false)
+                (velocities, false)
             }
         })?;
 

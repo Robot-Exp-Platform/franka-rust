@@ -1,5 +1,5 @@
 use franka_rust::FrankaEmika;
-use robot_behavior::{ArmPreplannedMotionExt, RobotResult};
+use robot_behavior::{RobotResult, behavior::*};
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
@@ -34,7 +34,7 @@ fn main() -> RobotResult<()> {
         }
     }
 
-    robot.move_joint_traj(data).unwrap();
+    robot.move_traj::<JointSpace<7>>(data).unwrap();
 
     Ok(())
 }

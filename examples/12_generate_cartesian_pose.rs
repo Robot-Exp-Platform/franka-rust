@@ -1,11 +1,11 @@
-use std::{
+﻿use std::{
     f64::consts::{FRAC_PI_4, PI},
     thread::sleep,
     time::Duration,
 };
 
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{MotionType, Pose, RobotResult, behavior::*};
+use robot_behavior::{Pose, RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -23,9 +23,9 @@ fn main() -> RobotResult<()> {
 
     let mut time = Duration::ZERO;
     let mut initial_position = Pose::Homo([0.; 16]);
-    robot.move_with_closure(move |state, dt| {
+    robot.control_with::<CartesianPoseControl<7>, _>(move |state, dt| {
         if time == Duration::ZERO {
-            initial_position = state.measured.pose_o_to_ee.unwrap();
+            initial_position = state.flange.meas.pose.unwrap();
         }
         time += dt;
 
@@ -39,7 +39,7 @@ fn main() -> RobotResult<()> {
         new_pose[14] += delta_z;
 
         let is_finished = time >= Duration::from_secs(10);
-        (MotionType::Cartesian(Pose::Homo(new_pose)), is_finished)
+        (Pose::Homo(new_pose), is_finished)
     })?;
 
     sleep(Duration::from_secs(6));

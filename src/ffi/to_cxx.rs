@@ -1,369 +1,213 @@
-use robot_behavior::{
-    ControlType, CxxArmState, LoadState, MotionType, behavior::*, cxx_arm_behavior, cxx_arm_param,
-    cxx_arm_preplanned_motion, cxx_arm_preplanned_motion_ext, cxx_arm_preplanned_motion_impl,
-    cxx_arm_real_time_control, cxx_arm_real_time_control_ext, cxx_arm_streaming_handle,
-    cxx_arm_streaming_motion, cxx_robot_behavior,
-};
-
-use crate::{FrankaGripper, model::FrankaModel};
+use robot_behavior::{Arm, FlangeSpace, JointSpace, LoadState, MoveTo, Pose, Robot, RobotResult};
 
 struct FrankaEmika(crate::FrankaEmika);
 struct FrankaFR3(crate::FrankaFR3);
-struct FrankaHandle(crate::robot::FrankaHandle);
 
 #[cxx::bridge]
-mod franka_rust {
-    pub struct CxxMotionType {
-        pub mode: CxxMotionTypeMode,
-        pub values: Vec<f64>,
-    }
-    pub enum CxxMotionTypeMode {
-        Joint,
-        JointVel,
-        Cartesian,
-        CartesianVel,
+mod franka_cxx {
+    enum CxxPoseKind {
+        Euler,
+        Quat,
+        Homo,
+        AxisAngle,
         Position,
-        PositionVel,
-        Stop,
     }
-    pub struct CxxControlType {
-        pub mode: CxxControlTypeMode,
-        pub values: Vec<f64>,
+
+    struct CxxPoseData {
+        kind: CxxPoseKind,
+        values: Vec<f64>,
     }
-    pub enum CxxControlTypeMode {
-        Zero,
-        Torque,
-    }
-    pub struct CxxLoadState {
-        pub m: f64,
-        pub x: [f64; 3],
-        pub i: [f64; 9],
-    }
+
     extern "Rust" {
         type FrankaEmika;
 
-        #[Self = "FrankaEmika"]
-        fn attach(ip: &str) -> Box<FrankaEmika>;
-        #[Self = "FrankaEmika"]
-        fn create() -> Box<FrankaEmika>;
-        fn connect(&mut self, ip: &str);
-
-        #[Self = "FrankaEmika"]
-        fn version() -> String;
+        fn franka_emika_attach(ip: &str) -> Box<FrankaEmika>;
+        fn version(&self) -> String;
         fn init(&mut self) -> Result<()>;
         fn shutdown(&mut self) -> Result<()>;
         fn enable(&mut self) -> Result<()>;
         fn disable(&mut self) -> Result<()>;
         fn reset(&mut self) -> Result<()>;
-        fn is_moving(&mut self) -> bool;
         fn stop(&mut self) -> Result<()>;
-        fn pause(&mut self) -> Result<()>;
-        fn resume(&mut self) -> Result<()>;
         fn emergency_stop(&mut self) -> Result<()>;
         fn clear_emergency_stop(&mut self) -> Result<()>;
-
-        // fn state(&mut self)
-        fn set_load(&mut self, load: CxxLoadState) -> Result<()>;
-        // fn set_coord
-        // fn with_coord(&mut self)
-        fn set_speed(&mut self, speed: f64) -> Result<()>;
-        fn with_speed(&mut self, speed: f64) -> &mut FrankaEmika;
-        unsafe fn with_velocity<'a>(&'a mut self, joint_vel: &[f64; 7]) -> &'a mut FrankaEmika;
-        unsafe fn with_acceleration<'a>(&'a mut self, joint_acc: &[f64; 7]) -> &'a mut FrankaEmika;
-        unsafe fn with_jerk<'a>(&'a mut self, joint_jerk: &[f64; 7]) -> &'a mut FrankaEmika;
-        fn with_cartesian_velocity(&mut self, cartesian_vel: f64) -> &mut FrankaEmika;
-        fn with_cartesian_acceleration(&mut self, cartesian_acc: f64) -> &mut FrankaEmika;
-        fn with_cartesian_jerk(&mut self, cartesian_jerk: f64) -> &mut FrankaEmika;
-        fn with_rotation_velocity(&mut self, rotation_vel: f64) -> &mut FrankaEmika;
-        fn with_rotation_acceleration(&mut self, rotation_acc: f64) -> &mut FrankaEmika;
-        fn with_rotation_jerk(&mut self, rotation_jerk: f64) -> &mut FrankaEmika;
-
-        fn move_joint(&mut self, target: &[f64; 7]) -> Result<()>;
-        fn move_joint_async(&mut self, target: &[f64; 7]) -> Result<()>;
-        fn move_cartesian(&mut self, target: &[f64]) -> Result<()>;
-        fn move_cartesian_async(&mut self, target: &[f64]) -> Result<()>;
-
-        fn move_to(&mut self, target: CxxMotionType) -> Result<()>;
-        fn move_to_async(&mut self, target: CxxMotionType) -> Result<()>;
-        fn move_rel(&mut self, target: CxxMotionType) -> Result<()>;
-        fn move_rel_async(&mut self, target: CxxMotionType) -> Result<()>;
-        fn move_int(&mut self, target: CxxMotionType) -> Result<()>;
-        fn move_int_async(&mut self, target: CxxMotionType) -> Result<()>;
-        // fn move_path(&mut self, path: Vec<CxxMotionType>) -> Result<()>;
-        // fn move_path_async(&mut self, path: Vec<CxxMotionType>) -> Result<()>;
-        // fn move_path_prepare(&mut self, path: Vec<CxxMotionType>) -> Result<()>;
-        fn move_path_start(&mut self, start: CxxMotionType) -> Result<()>;
-
-        fn move_joint_rel(&mut self, target: &[f64; 7]) -> Result<()>;
-        fn move_joint_rel_async(&mut self, target: &[f64; 7]) -> Result<()>;
-        // fn move_joint_path(&mut self, path: Vec<[f64; 6]>) -> Result<()>;
-        // fn move_cartesian_rel(&mut self, target: &Pose) -> Result<()>;
-        // fn move_cartesian_rel_async(&mut self, target: &Pose) -> Result<()>;
-        // fn move_cartesian_int(&mut self, target: &Pose) -> Result<()>;
-        // fn move_cartesian_int_async(&mut self, target: &Pose) -> Result<()>;
-        // fn move_cartesian_path(&mut self, path: Vec<Pose>) -> Result<()>;/
-        fn move_linear_with_euler(&mut self, pose: [f64; 6]) -> Result<()>;
-        fn move_linear_with_euler_async(&mut self, pose: [f64; 6]) -> Result<()>;
-        fn move_linear_with_euler_rel(&mut self, pose: [f64; 6]) -> Result<()>;
-        fn move_linear_with_euler_rel_async(&mut self, pose: [f64; 6]) -> Result<()>;
-        fn move_linear_with_euler_int(&mut self, pose: [f64; 6]) -> Result<()>;
-        fn move_linear_with_euler_int_async(&mut self, pose: [f64; 6]) -> Result<()>;
-        // fn move_linear_with_quat(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        // fn move_linear_with_quat_async(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        // fn move_linear_with_quat_rel(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        // fn move_linear_with_quat_rel_async(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        // fn move_linear_with_quat_int(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        // fn move_linear_with_quat_int_async(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        fn move_linear_with_homo(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_linear_with_homo_async(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_linear_with_homo_rel(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_linear_with_homo_rel_async(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_linear_with_homo_int(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_linear_with_homo_int_async(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_path_prepare_from_file(&mut self, path: &str) -> Result<()>;
-        fn move_path_from_file(&mut self, path: &str) -> Result<()>;
-
-        fn start_streaming(&mut self) -> Result<Box<FrankaHandle>>;
-        fn end_streaming(&mut self) -> Result<()>;
-        // fn move_to_target(&mut self) -> Arc<Mutex<Option<CxxMotionType>>>;
-        // fn control_with_target(&mut self) -> Arc<Mutex<Option<ControlType<6>>>>;
+        fn is_moving(&mut self) -> Result<bool>;
+        fn state(&mut self) -> Result<String>;
+        fn set_load(&mut self, m: f64, x: [f64; 3], i: [f64; 9]) -> Result<()>;
+        fn get_joint(&self) -> [f64; 7];
+        fn get_endpoint(&self) -> CxxPoseData;
+        fn move_joint(&mut self, target: [f64; 7]) -> Result<()>;
+        fn move_joint_sync(&mut self, target: [f64; 7]) -> Result<()>;
+        fn move_flange(&mut self, target: CxxPoseData) -> Result<()>;
+        fn move_flange_sync(&mut self, target: CxxPoseData) -> Result<()>;
     }
+
     extern "Rust" {
         type FrankaFR3;
 
-        #[Self = "FrankaFR3"]
-        fn attach(ip: &str) -> Box<FrankaFR3>;
-        #[Self = "FrankaFR3"]
-        fn create() -> Box<FrankaFR3>;
-        fn connect(&mut self, ip: &str);
-
-        #[Self = "FrankaFR3"]
-        fn version() -> String;
+        fn franka_fr3_attach(ip: &str) -> Box<FrankaFR3>;
+        fn version(&self) -> String;
         fn init(&mut self) -> Result<()>;
         fn shutdown(&mut self) -> Result<()>;
         fn enable(&mut self) -> Result<()>;
         fn disable(&mut self) -> Result<()>;
         fn reset(&mut self) -> Result<()>;
-        fn is_moving(&mut self) -> bool;
         fn stop(&mut self) -> Result<()>;
-        fn pause(&mut self) -> Result<()>;
-        fn resume(&mut self) -> Result<()>;
         fn emergency_stop(&mut self) -> Result<()>;
         fn clear_emergency_stop(&mut self) -> Result<()>;
-
-        // fn state(&mut self)
-        fn set_load(&mut self, load: CxxLoadState) -> Result<()>;
-        // fn set_coord
-        // fn with_coord(&mut self)
-        fn set_speed(&mut self, speed: f64) -> Result<()>;
-        fn with_speed(&mut self, speed: f64) -> &mut FrankaFR3;
-        unsafe fn with_velocity<'a>(&'a mut self, joint_vel: &[f64; 7]) -> &'a mut FrankaFR3;
-        unsafe fn with_acceleration<'a>(&'a mut self, joint_acc: &[f64; 7]) -> &'a mut FrankaFR3;
-        unsafe fn with_jerk<'a>(&'a mut self, joint_jerk: &[f64; 7]) -> &'a mut FrankaFR3;
-        fn with_cartesian_velocity(&mut self, cartesian_vel: f64) -> &mut FrankaFR3;
-        fn with_cartesian_acceleration(&mut self, cartesian_acc: f64) -> &mut FrankaFR3;
-        fn with_cartesian_jerk(&mut self, cartesian_jerk: f64) -> &mut FrankaFR3;
-        fn with_rotation_velocity(&mut self, rotation_vel: f64) -> &mut FrankaFR3;
-        fn with_rotation_acceleration(&mut self, rotation_acc: f64) -> &mut FrankaFR3;
-        fn with_rotation_jerk(&mut self, rotation_jerk: f64) -> &mut FrankaFR3;
-
-        fn move_joint(&mut self, target: &[f64; 7]) -> Result<()>;
-        fn move_joint_async(&mut self, target: &[f64; 7]) -> Result<()>;
-        fn move_cartesian(&mut self, target: &[f64]) -> Result<()>;
-        fn move_cartesian_async(&mut self, target: &[f64]) -> Result<()>;
-
-        fn move_to(&mut self, target: CxxMotionType) -> Result<()>;
-        fn move_to_async(&mut self, target: CxxMotionType) -> Result<()>;
-        fn move_rel(&mut self, target: CxxMotionType) -> Result<()>;
-        fn move_rel_async(&mut self, target: CxxMotionType) -> Result<()>;
-        fn move_int(&mut self, target: CxxMotionType) -> Result<()>;
-        fn move_int_async(&mut self, target: CxxMotionType) -> Result<()>;
-        // fn move_path(&mut self, path: Vec<CxxMotionType>) -> Result<()>;
-        // fn move_path_async(&mut self, path: Vec<CxxMotionType>) -> Result<()>;
-        // fn move_path_prepare(&mut self, path: Vec<CxxMotionType>) -> Result<()>;
-        fn move_path_start(&mut self, start: CxxMotionType) -> Result<()>;
-
-        fn move_joint_rel(&mut self, target: &[f64; 7]) -> Result<()>;
-        fn move_joint_rel_async(&mut self, target: &[f64; 7]) -> Result<()>;
-        // fn move_joint_path(&mut self, path: Vec<[f64; 6]>) -> Result<()>;
-        // fn move_cartesian_rel(&mut self, target: &Pose) -> Result<()>;
-        // fn move_cartesian_rel_async(&mut self, target: &Pose) -> Result<()>;
-        // fn move_cartesian_int(&mut self, target: &Pose) -> Result<()>;
-        // fn move_cartesian_int_async(&mut self, target: &Pose) -> Result<()>;
-        // fn move_cartesian_path(&mut self, path: Vec<Pose>) -> Result<()>;/
-        fn move_linear_with_euler(&mut self, pose: [f64; 6]) -> Result<()>;
-        fn move_linear_with_euler_async(&mut self, pose: [f64; 6]) -> Result<()>;
-        fn move_linear_with_euler_rel(&mut self, pose: [f64; 6]) -> Result<()>;
-        fn move_linear_with_euler_rel_async(&mut self, pose: [f64; 6]) -> Result<()>;
-        fn move_linear_with_euler_int(&mut self, pose: [f64; 6]) -> Result<()>;
-        fn move_linear_with_euler_int_async(&mut self, pose: [f64; 6]) -> Result<()>;
-        // fn move_linear_with_quat(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        // fn move_linear_with_quat_async(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        // fn move_linear_with_quat_rel(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        // fn move_linear_with_quat_rel_async(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        // fn move_linear_with_quat_int(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        // fn move_linear_with_quat_int_async(&mut self, target: &na::Isometry3<f64>) -> Result<()>;
-        fn move_linear_with_homo(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_linear_with_homo_async(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_linear_with_homo_rel(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_linear_with_homo_rel_async(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_linear_with_homo_int(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_linear_with_homo_int_async(&mut self, target: [f64; 16]) -> Result<()>;
-        fn move_path_prepare_from_file(&mut self, path: &str) -> Result<()>;
-        fn move_path_from_file(&mut self, path: &str) -> Result<()>;
-
-        fn start_streaming(&mut self) -> Result<Box<FrankaHandle>>;
-        fn end_streaming(&mut self) -> Result<()>;
-        // fn move_to_target(&mut self) -> Arc<Mutex<Option<CxxMotionType>>>;
-        // fn control_with_target(&mut self) -> Arc<Mutex<Option<ControlType<6>>>>;
-    }
-
-    extern "Rust" {
-        type FrankaHandle;
-
-        fn last_motion(&self) -> CxxMotionType;
-        fn move_to(&mut self, target: CxxMotionType) -> Result<()>;
-        fn last_control(&self) -> CxxControlType;
-        fn control_with(&mut self, control: CxxControlType) -> Result<()>;
-    }
-    extern "Rust" {
-        type FrankaGripper;
-        pub fn homing(&mut self) -> Result<bool>;
-        pub fn grasp(&mut self, width: f64, speed: f64, force: f64) -> Result<bool>;
-        pub fn move_gripper(&mut self, width: f64, speed: f64) -> Result<bool>;
-        pub fn stop(&mut self) -> Result<bool>;
-        // pub fn read_state(&mut self) -> Result<GripperState>;
-    }
-    extern "Rust" {
-        type FrankaModel;
+        fn is_moving(&mut self) -> Result<bool>;
+        fn state(&mut self) -> Result<String>;
+        fn set_load(&mut self, m: f64, x: [f64; 3], i: [f64; 9]) -> Result<()>;
+        fn get_joint(&self) -> [f64; 7];
+        fn get_endpoint(&self) -> CxxPoseData;
+        fn move_joint(&mut self, target: [f64; 7]) -> Result<()>;
+        fn move_joint_sync(&mut self, target: [f64; 7]) -> Result<()>;
+        fn move_flange(&mut self, target: CxxPoseData) -> Result<()>;
+        fn move_flange_sync(&mut self, target: CxxPoseData) -> Result<()>;
     }
 }
 
-pub use franka_rust::*;
+pub use franka_cxx::*;
 
-impl FrankaEmika {
-    pub fn attach(ip: &str) -> Box<Self> {
-        Box::new(FrankaEmika(crate::FrankaEmika::new(ip)))
-    }
-    pub fn create() -> Box<Self> {
-        Box::new(FrankaEmika(crate::FrankaEmika::default()))
-    }
-    pub fn connect(&mut self, ip: &str) {
-        self.0.connect(ip);
-    }
+fn franka_emika_attach(ip: &str) -> Box<FrankaEmika> {
+    Box::new(FrankaEmika(crate::FrankaEmika::new(ip)))
 }
 
-impl FrankaEmika {
-    cxx_robot_behavior!(FrankaEmika(crate::FrankaEmika));
-    cxx_arm_behavior!(FrankaEmika<{7}>(crate::FrankaEmika));
-    cxx_arm_param!(FrankaEmika<{7}>(crate::FrankaEmika));
-    cxx_arm_preplanned_motion_impl!(FrankaEmika<{7}>(crate::FrankaEmika));
-    cxx_arm_preplanned_motion!(FrankaEmika<{7}>(crate::FrankaEmika));
-    cxx_arm_preplanned_motion_ext!(FrankaEmika<{7}>(crate::FrankaEmika));
-    cxx_arm_streaming_motion!(FrankaEmika<{7}>(crate::FrankaEmika) -> FrankaHandle);
-    cxx_arm_real_time_control!(FrankaEmika<{7}>(crate::FrankaEmika));
-    cxx_arm_real_time_control_ext!(FrankaEmika<{7}>(crate::FrankaEmika));
+fn franka_fr3_attach(ip: &str) -> Box<FrankaFR3> {
+    Box::new(FrankaFR3(crate::FrankaFR3::new(ip)))
 }
 
-impl FrankaFR3 {
-    pub fn attach(ip: &str) -> Box<Self> {
-        Box::new(FrankaFR3(crate::FrankaFR3::new(ip)))
-    }
-    pub fn create() -> Box<Self> {
-        Box::new(FrankaFR3(crate::FrankaFR3::default()))
-    }
-    pub fn connect(&mut self, ip: &str) {
-        self.0.connect(ip);
-    }
-}
-
-impl FrankaFR3 {
-    cxx_robot_behavior!(FrankaFR3(FrankaFR3));
-    cxx_arm_behavior!(FrankaFR3<{7}>(crate::FrankaFR3));
-    cxx_arm_param!(FrankaFR3<{7}>(crate::FrankaFR3));
-    cxx_arm_preplanned_motion_impl!(FrankaFR3<{7}>(crate::FrankaFR3));
-    cxx_arm_preplanned_motion!(FrankaFR3<{7}>(crate::FrankaFR3));
-    cxx_arm_preplanned_motion_ext!(FrankaFR3<{7}>(crate::FrankaFR3));
-    cxx_arm_streaming_motion!(FrankaFR3<{7}>(crate::FrankaFR3) -> FrankaHandle);
-    cxx_arm_real_time_control!(FrankaFR3<{7}>(crate::FrankaFR3));
-    cxx_arm_real_time_control_ext!(FrankaFR3<{7}>(crate::FrankaFR3));
-}
-
-impl FrankaHandle {
-    cxx_arm_streaming_handle!(FrankaRobotHandle<{7}>(crate::FrankaHandle));
-}
-
-impl<const N: usize> From<CxxMotionType> for MotionType<N> {
-    fn from(cxx: CxxMotionType) -> Self {
-        match cxx.mode {
-            CxxMotionTypeMode::Joint => MotionType::Joint(cxx.values.try_into().unwrap()),
-            CxxMotionTypeMode::JointVel => MotionType::JointVel(cxx.values.try_into().unwrap()),
-            CxxMotionTypeMode::Cartesian => MotionType::Cartesian(cxx.values.into()),
-            CxxMotionTypeMode::CartesianVel => {
-                MotionType::CartesianVel(cxx.values.try_into().unwrap())
+macro_rules! impl_franka_cxx_robot {
+    ($wrapper:ident, $inner:ty) => {
+        impl $wrapper {
+            fn version(&self) -> String {
+                <$inner as Robot>::version()
             }
-            CxxMotionTypeMode::Position => MotionType::Position(cxx.values.try_into().unwrap()),
-            CxxMotionTypeMode::PositionVel => {
-                MotionType::PositionVel(cxx.values.try_into().unwrap())
-            }
-            CxxMotionTypeMode::Stop => MotionType::Stop,
-            _ => panic!("Invalid mode for MotionType"),
-        }
-    }
-}
 
-impl<const N: usize> From<MotionType<N>> for CxxMotionType {
-    fn from(motion: MotionType<N>) -> Self {
-        match motion {
-            MotionType::Joint(v) => {
-                CxxMotionType { mode: CxxMotionTypeMode::Joint, values: v.to_vec() }
+            fn init(&mut self) -> RobotResult<()> {
+                <$inner as Robot>::init(&mut self.0)
             }
-            MotionType::JointVel(v) => {
-                CxxMotionType { mode: CxxMotionTypeMode::JointVel, values: v.to_vec() }
-            }
-            MotionType::Cartesian(v) => {
-                CxxMotionType { mode: CxxMotionTypeMode::Cartesian, values: v.into() }
-            }
-            MotionType::CartesianVel(v) => {
-                CxxMotionType { mode: CxxMotionTypeMode::CartesianVel, values: v.to_vec() }
-            }
-            MotionType::Position(v) => {
-                CxxMotionType { mode: CxxMotionTypeMode::Position, values: v.to_vec() }
-            }
-            MotionType::PositionVel(v) => {
-                CxxMotionType { mode: CxxMotionTypeMode::PositionVel, values: v.to_vec() }
-            }
-            MotionType::Stop => CxxMotionType {
-                mode: CxxMotionTypeMode::Position, // Use Position as a placeholder for Stop
-                values: vec![],
-            },
-        }
-    }
-}
 
-impl<const N: usize> From<CxxControlType> for ControlType<N> {
-    fn from(cxx: CxxControlType) -> Self {
-        match cxx.mode {
-            CxxControlTypeMode::Zero => ControlType::Zero,
-            CxxControlTypeMode::Torque => ControlType::Torque(cxx.values.try_into().unwrap()),
-            _ => panic!("Invalid mode for ControlType"),
-        }
-    }
-}
+            fn shutdown(&mut self) -> RobotResult<()> {
+                <$inner as Robot>::shutdown(&mut self.0)
+            }
 
-impl<const N: usize> From<ControlType<N>> for CxxControlType {
-    fn from(control: ControlType<N>) -> Self {
-        match control {
-            ControlType::Zero => CxxControlType { mode: CxxControlTypeMode::Zero, values: vec![] },
-            ControlType::Torque(v) => {
-                CxxControlType { mode: CxxControlTypeMode::Torque, values: v.to_vec() }
+            fn enable(&mut self) -> RobotResult<()> {
+                <$inner as Robot>::enable(&mut self.0)
+            }
+
+            fn disable(&mut self) -> RobotResult<()> {
+                <$inner as Robot>::disable(&mut self.0)
+            }
+
+            fn reset(&mut self) -> RobotResult<()> {
+                <$inner as Robot>::reset(&mut self.0)
+            }
+
+            fn stop(&mut self) -> RobotResult<()> {
+                <$inner as Robot>::stop(&mut self.0)
+            }
+
+            fn emergency_stop(&mut self) -> RobotResult<()> {
+                <$inner as Robot>::emergency_stop(&mut self.0)
+            }
+
+            fn clear_emergency_stop(&mut self) -> RobotResult<()> {
+                <$inner as Robot>::clear_emergency_stop(&mut self.0)
+            }
+
+            fn is_moving(&mut self) -> RobotResult<bool> {
+                <$inner as Robot>::is_moving(&mut self.0)
+            }
+
+            fn state(&mut self) -> RobotResult<String> {
+                Ok(format!("{:?}", <$inner as Arm<7>>::state(&mut self.0)?))
+            }
+
+            fn set_load(&mut self, m: f64, x: [f64; 3], i: [f64; 9]) -> RobotResult<()> {
+                <$inner as Arm<7>>::set_load(&mut self.0, LoadState { m, x, i })
+            }
+
+            fn get_joint(&self) -> [f64; 7] {
+                <$inner as Arm<7>>::get_joint(&self.0)
+            }
+
+            fn get_endpoint(&self) -> CxxPoseData {
+                pose_to_cxx(<$inner as Arm<7>>::get_endpoint(&self.0))
+            }
+
+            fn move_joint(&mut self, target: [f64; 7]) -> RobotResult<()> {
+                <$inner as MoveTo<JointSpace<7>>>::move_to(&mut self.0, target)
+            }
+
+            fn move_joint_sync(&mut self, target: [f64; 7]) -> RobotResult<()> {
+                <$inner as MoveTo<JointSpace<7>>>::move_to_sync(&mut self.0, target)
+            }
+
+            fn move_flange(&mut self, target: CxxPoseData) -> RobotResult<()> {
+                <$inner as MoveTo<FlangeSpace>>::move_to(&mut self.0, cxx_to_pose(target)?)
+            }
+
+            fn move_flange_sync(&mut self, target: CxxPoseData) -> RobotResult<()> {
+                <$inner as MoveTo<FlangeSpace>>::move_to_sync(&mut self.0, cxx_to_pose(target)?)
             }
         }
+    };
+}
+
+impl_franka_cxx_robot!(FrankaEmika, crate::FrankaEmika);
+impl_franka_cxx_robot!(FrankaFR3, crate::FrankaFR3);
+
+fn pose_to_cxx(pose: Pose) -> CxxPoseData {
+    match pose {
+        Pose::Euler(tran, rot) => {
+            let mut values = Vec::with_capacity(6);
+            values.extend_from_slice(&tran);
+            values.extend_from_slice(&rot);
+            CxxPoseData { kind: CxxPoseKind::Euler, values }
+        }
+        Pose::Quat(pose) => {
+            let mut values = Vec::with_capacity(7);
+            values.extend_from_slice(pose.translation.vector.as_slice());
+            values.extend_from_slice(pose.rotation.coords.as_slice());
+            CxxPoseData { kind: CxxPoseKind::Quat, values }
+        }
+        Pose::Homo(values) => CxxPoseData { kind: CxxPoseKind::Homo, values: values.to_vec() },
+        Pose::AxisAngle(tran, axis, angle) => {
+            let mut values = Vec::with_capacity(7);
+            values.extend_from_slice(&tran);
+            values.extend_from_slice(&axis);
+            values.push(angle);
+            CxxPoseData { kind: CxxPoseKind::AxisAngle, values }
+        }
+        Pose::Position(tran) => CxxPoseData { kind: CxxPoseKind::Position, values: tran.to_vec() },
     }
 }
 
-impl From<CxxLoadState> for LoadState {
-    fn from(cxx: CxxLoadState) -> Self {
-        LoadState { m: cxx.m, x: cxx.x, i: cxx.i }
+fn cxx_to_pose(data: CxxPoseData) -> RobotResult<Pose> {
+    match (data.kind, data.values.len()) {
+        (CxxPoseKind::Euler, 6) => Ok(Pose::Euler(
+            data.values[..3].try_into().unwrap(),
+            data.values[3..6].try_into().unwrap(),
+        )),
+        (CxxPoseKind::Quat, 7) => Ok(Pose::from([
+            data.values[0],
+            data.values[1],
+            data.values[2],
+            data.values[3],
+            data.values[4],
+            data.values[5],
+            data.values[6],
+        ])),
+        (CxxPoseKind::Homo, 16) => Ok(Pose::Homo(data.values.try_into().unwrap())),
+        (CxxPoseKind::AxisAngle, 7) => Ok(Pose::AxisAngle(
+            data.values[..3].try_into().unwrap(),
+            data.values[3..6].try_into().unwrap(),
+            data.values[6],
+        )),
+        (CxxPoseKind::Position, 3) => Ok(Pose::Position(data.values.try_into().unwrap())),
+        _ => Err(robot_behavior::RobotException::InvalidFFIData(
+            "invalid CxxPoseData length for pose kind".into(),
+        )),
     }
 }

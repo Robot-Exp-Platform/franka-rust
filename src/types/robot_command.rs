@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use robot_behavior::{ControlType, MotionType};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::{
@@ -11,7 +10,7 @@ use crate::utils::{
 
 use super::{
     robot_state::{RobotState, RobotStateInter},
-    robot_types::{CommandFilter, CommandIDConfig},
+    robot_types::{CommandFilter, CommandIDConfig, ControlType, MotionType},
 };
 
 /// This struct is a command of the motion generator, including joint angle generator,

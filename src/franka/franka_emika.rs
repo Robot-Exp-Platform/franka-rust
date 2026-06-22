@@ -23,8 +23,7 @@ impl FrankaType for _FrankaEmika {
 pub type FrankaEmika = FrankaRobot<_FrankaEmika>;
 pub type FrankaPanda = FrankaEmika;
 
-impl ArmParam<FRANKA_DOF> for FrankaEmika {
-    const CONTROL_PERIOD: f64 = 1e-3;
+impl Joints<FRANKA_DOF> for FrankaEmika {
     const JOINT_DEFAULT: [f64; FRANKA_DOF] = [
         0.,
         -FRAC_PI_4,
@@ -42,14 +41,17 @@ impl ArmParam<FRANKA_DOF> for FrankaEmika {
         [2.1750, 2.1750, 2.1750, 2.1750, 2.6100, 2.6100, 2.6100];
     const JOINT_ACC_BOUND: [f64; FRANKA_DOF] = [15., 7.5, 10., 12.5, 15., 20., 20.];
     const JOINT_JERK_BOUND: [f64; FRANKA_DOF] = [7500., 3750., 5000., 6250., 7500., 10000., 10000.];
+    const TORQUE_BOUND: [f64; FRANKA_DOF] = [87., 87., 87., 87., 12., 12., 12.];
+    const TORQUE_DOT_BOUND: [f64; FRANKA_DOF] = [1000., 1000., 1000., 1000., 1000., 1000., 1000.];
+}
+
+impl EndPoint for FrankaEmika {
     const CARTESIAN_VEL_BOUND: f64 = 1.7;
     const CARTESIAN_ACC_BOUND: f64 = 13.0;
     const CARTESIAN_JERK_BOUND: f64 = 6500.0;
     const ROTATION_VEL_BOUND: f64 = 2.5;
     const ROTATION_ACC_BOUND: f64 = 25.0;
     const ROTATION_JERK_BOUND: f64 = 12500.;
-    const TORQUE_BOUND: [f64; FRANKA_DOF] = [87., 87., 87., 87., 12., 12., 12.];
-    const TORQUE_DOT_BOUND: [f64; FRANKA_DOF] = [1000., 1000., 1000., 1000., 1000., 1000., 1000.];
 }
 
 impl ArmForwardKinematics<FRANKA_DOF> for FrankaEmika {
@@ -68,6 +70,6 @@ impl ArmForwardKinematics<FRANKA_DOF> for FrankaEmika {
 // the trait — no analytic family registered.
 impl ArmInverseKinematics<FRANKA_DOF> for FrankaEmika {}
 
-impl RobotFile for FrankaEmika {
-    const URDF: &'static str = "franka_panda/panda.urdf";
+impl RobotDescription for FrankaEmika {
+    const URDF: Option<&'static str> = Some("franka_panda/panda.urdf");
 }

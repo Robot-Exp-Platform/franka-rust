@@ -1,5 +1,9 @@
-use nalgebra::Matrix4;
-use robot_behavior::{ArmState, Pose, RobotResult};
+use nalgebra::{Matrix4, SMatrix};
+use robot_behavior::{
+    ArmState, CoriolisInput, CoriolisInputSpace, FlangeSpace, GravityInput, GravityInputSpace,
+    JMat, Jaco, JacobianSpace, JointSpace, JointTorqueSpace, LoadState, MassMatrixSpace, Pose,
+    RobotResult, SpaceMap,
+};
 use std::fmt;
 use std::path::Path;
 use strum_macros::EnumIter;
@@ -62,6 +66,7 @@ impl fmt::Display for Frame {
 /// Calculates poses of joints and dynamic properties of the robot.
 pub struct FrankaModel {
     library: ModelLibrary,
+    load: LoadState,
 }
 
 #[allow(non_snake_case)]
@@ -93,9 +98,29 @@ impl FrankaModel {
     ///
     /// Why do we need it? - Because the model is not self contained and relies on some functions from libm
     ///
-    /// How does the libfranka embed libm? They are not including <math.h> - Apparently it gets somehow included when using \<array> ¯\_(ツ)_/¯
+    /// How does the libfranka embed libm? They are not including <math.h> -
+    /// Apparently it gets somehow included when using `<array>`.
     pub fn new<S: AsRef<Path>>(model_filename: S) -> RobotResult<Self> {
-        Ok(FrankaModel { library: ModelLibrary::new(model_filename.as_ref())? })
+        Ok(FrankaModel {
+            library: ModelLibrary::new(model_filename.as_ref())?,
+            load: LoadState { m: 0.0, x: [0.0; 3], i: [0.0; 9] },
+        })
+    }
+
+    /// Configure the payload used by the generic [`DynamicsModel`](robot_behavior::DynamicsModel)
+    /// adapter. The explicit `mass` / `coriolis` / `gravity` methods still
+    /// accept per-call payload parameters when finer control is needed.
+    pub fn with_load(mut self, load: LoadState) -> Self {
+        self.load = load;
+        self
+    }
+
+    pub fn set_load(&mut self, load: LoadState) {
+        self.load = load;
+    }
+
+    pub fn load(&self) -> &LoadState {
+        &self.load
     }
     /// Gets the 4x4 pose matrix for the given frame in base frame.
     ///
@@ -274,20 +299,24 @@ impl FrankaModel {
         frame: &Frame,
         arm_state: &ArmState<7>,
     ) -> [f64; 42] {
-        let pose_f_to_ee = if let Some(Pose::Homo(pose)) = arm_state.measured.pose_o_to_ee {
+        let pose_f_to_ee = if let Some(Pose::Homo(pose)) = arm_state.flange.meas.pose {
             pose
         } else {
             [0.; 16]
         };
 
-        let pose_ee_to_k = if let Some(Pose::Homo(pose)) = arm_state.measured.pose_ee_to_k {
+        let pose_ee_to_k = if let Some(Pose::Homo(pose)) = arm_state
+            .stiffness
+            .as_ref()
+            .and_then(|stiffness| stiffness.meas.pose)
+        {
             pose
         } else {
             [0.; 16]
         };
         self.zero_jacobian(
             frame,
-            &arm_state.measured.joint.unwrap(),
+            &arm_state.joint.meas.q.unwrap(),
             &pose_f_to_ee,
             &pose_ee_to_k,
         )
@@ -369,8 +398,8 @@ impl FrankaModel {
     }
     pub fn coriolis_from_arm_state(&self, arm_state: &ArmState<7>) -> [f64; 7] {
         self.coriolis(
-            &arm_state.measured.joint.unwrap(),
-            &arm_state.measured.joint_vel.unwrap(),
+            &arm_state.joint.meas.q.unwrap(),
+            &arm_state.joint.meas.dq.unwrap(),
             &arm_state.load.as_ref().unwrap().i,
             arm_state.load.as_ref().unwrap().m,
             &arm_state.load.as_ref().unwrap().x,
@@ -424,12 +453,80 @@ impl FrankaModel {
         gravity_earth: Grav,
     ) -> [f64; 7] {
         self.gravity(
-            &arm_state.measured.joint.unwrap(),
+            &arm_state.joint.meas.q.unwrap(),
             arm_state.load.as_ref().unwrap().m,
             &arm_state.load.as_ref().unwrap().x,
             gravity_earth
                 .into()
                 .unwrap_or(&arm_state.load.as_ref().unwrap().x),
         )
+    }
+}
+
+fn identity_transform() -> [f64; 16] {
+    let mut pose = [0.0; 16];
+    pose[0] = 1.0;
+    pose[5] = 1.0;
+    pose[10] = 1.0;
+    pose[15] = 1.0;
+    pose
+}
+
+impl SpaceMap<JointSpace<7>, FlangeSpace> for FrankaModel {
+    type Input = [f64; 7];
+    type Output = Pose;
+
+    fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
+        let identity = identity_transform();
+        Ok(Pose::Homo(self.pose(
+            &Frame::Flange,
+            &input,
+            &identity,
+            &identity,
+        )))
+    }
+}
+
+impl SpaceMap<JointSpace<7>, JacobianSpace<7>> for FrankaModel {
+    type Input = [f64; 7];
+    type Output = Jaco<7>;
+
+    fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
+        let identity = identity_transform();
+        Ok(SMatrix::<f64, 6, 7>::from_column_slice(
+            &self.zero_jacobian(&Frame::Flange, &input, &identity, &identity),
+        ))
+    }
+}
+
+impl SpaceMap<JointSpace<7>, MassMatrixSpace<7>> for FrankaModel {
+    type Input = [f64; 7];
+    type Output = JMat<7>;
+
+    fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
+        Ok(SMatrix::<f64, 7, 7>::from_column_slice(&self.mass(
+            &input,
+            &self.load.i,
+            self.load.m,
+            &self.load.x,
+        )))
+    }
+}
+
+impl SpaceMap<CoriolisInputSpace<7>, JointTorqueSpace<7>> for FrankaModel {
+    type Input = CoriolisInput<7>;
+    type Output = [f64; 7];
+
+    fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
+        Ok(self.coriolis(&input.q, &input.dq, &self.load.i, self.load.m, &self.load.x))
+    }
+}
+
+impl SpaceMap<GravityInputSpace<7>, JointTorqueSpace<7>> for FrankaModel {
+    type Input = GravityInput<7>;
+    type Output = [f64; 7];
+
+    fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
+        Ok(self.gravity(&input.q, self.load.m, &self.load.x, &input.gravity))
     }
 }

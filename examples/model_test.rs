@@ -2,7 +2,7 @@ use franka_rust::{
     FrankaEmika,
     model::{Frame, FrankaModel},
 };
-use robot_behavior::{ArmParam, RobotResult};
+use robot_behavior::{Joints, RobotResult};
 use strum::IntoEnumIterator;
 
 fn main() -> RobotResult<()> {

@@ -21,8 +21,7 @@ impl FrankaType for _FrankaFR3 {
 
 pub type FrankaFR3 = FrankaRobot<_FrankaFR3>;
 
-impl ArmParam<FRANKA_DOF> for FrankaFR3 {
-    const CONTROL_PERIOD: f64 = 1e-3;
+impl Joints<FRANKA_DOF> for FrankaFR3 {
     const JOINT_DEFAULT: [f64; FRANKA_DOF] = [
         0.,
         -FRAC_PI_4,
@@ -48,14 +47,17 @@ impl ArmParam<FRANKA_DOF> for FrankaFR3 {
     const JOINT_VEL_BOUND: [f64; FRANKA_DOF] = [2., 1., 1.5, 1.25, 3., 1.5, 3.];
     const JOINT_ACC_BOUND: [f64; FRANKA_DOF] = [10.; FRANKA_DOF];
     const JOINT_JERK_BOUND: [f64; FRANKA_DOF] = [5000.; FRANKA_DOF];
+    const TORQUE_BOUND: [f64; FRANKA_DOF] = [87., 87., 87., 87., 12., 12., 12.];
+    const TORQUE_DOT_BOUND: [f64; FRANKA_DOF] = [1000., 1000., 1000., 1000., 1000., 1000., 1000.];
+}
+
+impl EndPoint for FrankaFR3 {
     const CARTESIAN_VEL_BOUND: f64 = 3.0;
     const CARTESIAN_ACC_BOUND: f64 = 9.0;
     const CARTESIAN_JERK_BOUND: f64 = 4500.0;
     const ROTATION_VEL_BOUND: f64 = 2.5;
     const ROTATION_ACC_BOUND: f64 = 217.0;
     const ROTATION_JERK_BOUND: f64 = 8500.;
-    const TORQUE_BOUND: [f64; FRANKA_DOF] = [87., 87., 87., 87., 12., 12., 12.];
-    const TORQUE_DOT_BOUND: [f64; FRANKA_DOF] = [1000., 1000., 1000., 1000., 1000., 1000., 1000.];
 }
 
 impl ArmForwardKinematics<FRANKA_DOF> for FrankaFR3 {

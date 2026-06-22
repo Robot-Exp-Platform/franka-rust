@@ -1,7 +1,7 @@
-use std::time::Duration;
+﻿use std::time::Duration;
 
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{RobotResult, behavior::*};
+use robot_behavior::{RobotResult, behavior::*, controller::cartesian_impedance_session};
 
 #[tokio::main]
 async fn main() -> RobotResult<()> {
@@ -18,13 +18,25 @@ async fn main() -> RobotResult<()> {
         upper_force_thresholds_nominal: [100.0; 6],
     })?;
 
-    let handle = robot.cartesian_impedance_async(
-        (150.0, 10.0),
-        (2.0 * 150.0_f64.sqrt(), 2.0 * 10.0_f64.sqrt()),
-    )?;
+    let model = robot.model()?;
+    let (controller, handle) = cartesian_impedance_session::<_, 7>(
+        model,
+        None,
+        [150.0, 150.0, 150.0, 10.0, 10.0, 10.0],
+        [
+            2.0 * 150.0_f64.sqrt(),
+            2.0 * 150.0_f64.sqrt(),
+            2.0 * 150.0_f64.sqrt(),
+            2.0 * 10.0_f64.sqrt(),
+            2.0 * 10.0_f64.sqrt(),
+            2.0 * 10.0_f64.sqrt(),
+        ],
+    );
+    robot.control_with::<ArmTorqueControl<7>, _>(controller)?;
 
     tokio::time::sleep(Duration::from_secs(10)).await;
     handle.finish();
+    robot.waiting_for_finish()?;
 
     Ok(())
 }

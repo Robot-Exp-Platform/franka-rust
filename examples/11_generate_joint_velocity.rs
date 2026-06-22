@@ -1,7 +1,7 @@
-use std::{f64::consts::PI, thread::sleep, time::Duration};
+﻿use std::{f64::consts::PI, thread::sleep, time::Duration};
 
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{MotionType, RobotResult, behavior::*};
+use robot_behavior::{RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -18,7 +18,7 @@ fn main() -> RobotResult<()> {
     })?;
 
     let mut time = Duration::ZERO;
-    robot.move_with_closure(move |_, dt| {
+    robot.control_with::<JointVelocityControl<7>, _>(move |_, dt| {
         time += dt;
 
         let time_ = time.as_secs_f64();
@@ -29,7 +29,7 @@ fn main() -> RobotResult<()> {
 
         let is_finished = time > Duration::from_secs(2);
 
-        (MotionType::JointVel(output), is_finished)
+        (output, is_finished)
     })?;
 
     sleep(Duration::from_secs(6));

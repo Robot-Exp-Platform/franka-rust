@@ -1,5 +1,5 @@
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{Arm, ArmPreplannedMotion, MotionType, RobotResult};
+use robot_behavior::{RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -36,10 +36,10 @@ fn main() -> RobotResult<()> {
         -1.123_585_085_306_893_6,
     ];
 
-    robot.with_scale(0.3).move_to(MotionType::Joint(joint2))?;
-    robot.with_scale(0.3).move_to(MotionType::Joint(joint1))?;
-    robot.with_scale(0.3).move_joint(&joint2)?;
-    robot.with_scale(0.3).move_joint(&joint1)?;
+    robot.with_scale(0.3);
+    robot.move_to::<JointSpace<7>>(joint2)?;
+    robot.with_scale(0.3);
+    robot.move_to::<JointSpace<7>>(joint1)?;
 
     println!("Joint 1 position reached");
     // std::thread::sleep(Duration::from_secs(2));

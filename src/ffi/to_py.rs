@@ -1,23 +1,18 @@
-use pyo3::{PyResult, exceptions::PyException, pyclass, pymethods, types::PyAnyMethods};
+use pyo3::{PyResult, exceptions::PyException, pyclass, pymethods};
 use robot_behavior::{
-    RobotException, behavior::*, py_arm_behavior, py_arm_param, py_arm_preplanned_motion,
-    py_arm_preplanned_motion_ext, py_arm_preplanned_motion_impl, py_arm_real_time_control,
-    py_arm_real_time_control_ext, py_arm_streaming_handle, py_arm_streaming_motion,
-    py_robot_behavior,
+    RobotException, py_arm, py_arm_torque_control, py_cartesian_pose_control,
+    py_cartesian_velocity_control, py_flange_move, py_joint_motion, py_joint_position_control,
+    py_joint_torque_control, py_joint_velocity_control, py_robot,
 };
 
 use crate::{
-    FRANKA_DOF, FrankaEmika, FrankaFR3, FrankaGripper, model::FrankaModel, robot::FrankaHandle,
-    types::robot_types::*,
+    FRANKA_DOF, FrankaEmika, FrankaFR3, FrankaGripper, model::FrankaModel, types::robot_types::*,
 };
 
 #[pyclass(name = "FrankaEmika")]
 pub struct PyFrankaEmika(FrankaEmika);
 #[pyclass(name = "FrankaFR3")]
 pub struct PyFrankaFR3(FrankaFR3);
-
-#[pyclass(name = "FrankaHandle")]
-pub struct PyFrankaHandle(FrankaHandle);
 
 #[pyclass(name = "FrankaGripper")]
 pub struct PyFrankaGripper(FrankaGripper);
@@ -160,35 +155,27 @@ impl PyFrankaFR3 {
     }
 }
 
-#[pymethods]
-impl PyFrankaHandle {}
+py_robot!(PyFrankaEmika(FrankaEmika));
+py_arm!(PyFrankaEmika<{7}>(FrankaEmika));
+py_joint_motion!(PyFrankaEmika<{7}>(FrankaEmika));
+py_flange_move!(PyFrankaEmika(FrankaEmika));
+py_joint_position_control!(PyFrankaEmika<{7}>(FrankaEmika));
+py_joint_velocity_control!(PyFrankaEmika<{7}>(FrankaEmika));
+py_cartesian_velocity_control!(PyFrankaEmika<{7}>(FrankaEmika));
+py_cartesian_pose_control!(PyFrankaEmika<{7}>(FrankaEmika));
+py_joint_torque_control!(PyFrankaEmika<{7}>(FrankaEmika));
+py_arm_torque_control!(PyFrankaEmika<{7}>(FrankaEmika));
 
-impl From<FrankaHandle> for PyFrankaHandle {
-    fn from(handle: FrankaHandle) -> Self {
-        PyFrankaHandle(handle)
-    }
-}
-py_arm_streaming_handle!(PyFrankaHandle<{7}>(FrankaHandle));
-
-py_robot_behavior!(PyFrankaEmika(FrankaEmika));
-py_arm_behavior!(PyFrankaEmika<{7}>(FrankaEmika));
-py_arm_param!(PyFrankaEmika<{7}>(FrankaEmika));
-py_arm_preplanned_motion!(PyFrankaEmika<{7}>(FrankaEmika));
-py_arm_preplanned_motion_impl!(PyFrankaEmika<{7}>(FrankaEmika));
-py_arm_preplanned_motion_ext!(PyFrankaEmika<{7}>(FrankaEmika));
-py_arm_streaming_motion!(PyFrankaEmika<{7}>(FrankaEmika) -> PyFrankaHandle);
-py_arm_real_time_control!(PyFrankaEmika<{7}>(FrankaEmika));
-py_arm_real_time_control_ext!(PyFrankaEmika<{7}>(FrankaEmika));
-
-py_robot_behavior!(PyFrankaFR3(FrankaFR3));
-py_arm_behavior!(PyFrankaFR3<{7}>(FrankaFR3));
-py_arm_param!(PyFrankaFR3<{7}>(FrankaFR3));
-py_arm_preplanned_motion!(PyFrankaFR3<{7}>(FrankaFR3));
-py_arm_preplanned_motion_impl!(PyFrankaFR3<{7}>(FrankaFR3));
-py_arm_preplanned_motion_ext!(PyFrankaFR3<{7}>(FrankaFR3));
-py_arm_streaming_motion!(PyFrankaFR3<{7}>(FrankaFR3) -> PyFrankaHandle);
-py_arm_real_time_control!(PyFrankaFR3<{7}>(FrankaFR3));
-py_arm_real_time_control_ext!(PyFrankaFR3<{7}>(FrankaFR3));
+py_robot!(PyFrankaFR3(FrankaFR3));
+py_arm!(PyFrankaFR3<{7}>(FrankaFR3));
+py_joint_motion!(PyFrankaFR3<{7}>(FrankaFR3));
+py_flange_move!(PyFrankaFR3(FrankaFR3));
+py_joint_position_control!(PyFrankaFR3<{7}>(FrankaFR3));
+py_joint_velocity_control!(PyFrankaFR3<{7}>(FrankaFR3));
+py_cartesian_velocity_control!(PyFrankaFR3<{7}>(FrankaFR3));
+py_cartesian_pose_control!(PyFrankaFR3<{7}>(FrankaFR3));
+py_joint_torque_control!(PyFrankaFR3<{7}>(FrankaFR3));
+py_arm_torque_control!(PyFrankaFR3<{7}>(FrankaFR3));
 
 #[pymethods]
 impl PyFrankaGripper {

@@ -1,5 +1,5 @@
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{ArmParam, RobotResult, behavior::*};
+use robot_behavior::{RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -16,9 +16,8 @@ fn main() -> RobotResult<()> {
         upper_force_thresholds_nominal: [20., 20., 20., 25., 25., 25.],
     })?;
 
-    robot
-        .with_scale(0.3)
-        .move_joint(&FrankaEmika::JOINT_DEFAULT)?;
+    robot.with_scale(0.3);
+    robot.move_to::<JointSpace<7>>(FrankaEmika::JOINT_DEFAULT)?;
 
     Ok(())
 }

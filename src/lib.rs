@@ -8,7 +8,6 @@ mod command_handle;
 #[cfg(feature = "ffi")]
 pub mod ffi;
 pub mod franka;
-pub mod impedance;
 pub mod model;
 mod network;
 pub mod once;
@@ -30,5 +29,8 @@ mod franka_rust {
     #[pymodule_export]
     use super::ffi::to_py::{PyFrankaEmika, PyFrankaFR3, PyFrankaGripper, PyFrankaModel};
     #[pymodule_export]
-    use robot_behavior::{LoadState, PyArmState, PyControlType, PyMotionType, PyPose};
+    use robot_behavior::{
+        LoadState, PyArmState, PyJointSample, PyJointState, PyMotionType, PyPose, PySpatialSample,
+        PySpatialState,
+    };
 }

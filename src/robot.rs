@@ -1,29 +1,14 @@
-use futures::future::BoxFuture;
-use nalgebra as na;
-use robot_behavior::{
+﻿use robot_behavior::{
     utils::path_generate::{self, cartesian_quat_simple_4th_curve},
     *,
 };
-use std::{
-    fs::File,
-    io::Write,
-    marker::PhantomData,
-    path::Path,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread::sleep,
-    time::Duration,
-};
+use std::{fs::File, io::Write, marker::PhantomData, path::Path, thread::sleep, time::Duration};
 
 use crate::{
     FRANKA_DOF, FrankaRobotImpl, LIBFRANKA_VERSION,
-    command_handle::CommandHandle,
-    impedance::{cartesian_impedance, joint_impedance},
-    model::{Frame, FrankaModel},
+    model::FrankaModel,
     once::OverrideOnce,
-    types::{robot_command::RobotCommand, robot_state::*, robot_types::*},
+    types::{robot_state::*, robot_types::*},
 };
 
 pub trait FrankaType {
@@ -42,24 +27,16 @@ pub struct FrankaRobot<T: FrankaType> {
     max_jerk: OverrideOnce<[f64; FRANKA_DOF]>,
     max_cartesian_vel: OverrideOnce<f64>,
     max_cartesian_acc: OverrideOnce<f64>,
-    joint_state_map: JointStateMap,
 }
-
-impl<T: FrankaType> FrankaRobot<T> {}
 
 impl<T: FrankaType> FrankaRobot<T>
 where
-    FrankaRobot<T>: ArmParam<7>,
+    FrankaRobot<T>: Joints<7> + EndPoint,
 {
     pub fn new(ip: &str) -> Self {
-        let joint_state_map: JointStateMap = Default::default();
-        let map_hook = joint_state_map.clone();
         let mut robot = FrankaRobot {
             marker: PhantomData,
-            robot_impl: FrankaRobotImpl::new_with_hook(ip, move |state| {
-                let arm_state: ArmState<FRANKA_DOF> = (*state).into();
-                update_joint_state_map(&map_hook, &T::JOINT_NAMES, &arm_state);
-            }),
+            robot_impl: FrankaRobotImpl::new(ip),
             is_moving: false,
             coord: OverrideOnce::new(Coord::OCS),
             scale: OverrideOnce::new(1.0),
@@ -68,7 +45,6 @@ where
             max_jerk: OverrideOnce::new(Self::JOINT_JERK_BOUND),
             max_cartesian_vel: OverrideOnce::new(Self::CARTESIAN_VEL_BOUND),
             max_cartesian_acc: OverrideOnce::new(Self::CARTESIAN_ACC_BOUND),
-            joint_state_map,
         };
         let _ = robot.set_scale(0.1);
 
@@ -76,11 +52,7 @@ where
     }
 
     pub fn connect(&mut self, ip: &str) {
-        let map_hook = self.joint_state_map.clone();
-        self.robot_impl = FrankaRobotImpl::new_with_hook(ip, move |state| {
-            let arm_state: ArmState<FRANKA_DOF> = (*state).into();
-            update_joint_state_map(&map_hook, &T::JOINT_NAMES, &arm_state);
-        });
+        self.robot_impl = FrankaRobotImpl::new(ip);
         self.is_moving = false;
         self.coord = OverrideOnce::new(Coord::OCS);
         self.scale = OverrideOnce::new(1.0);
@@ -218,6 +190,8 @@ where
 
 impl<T: FrankaType> Robot for FrankaRobot<T> {
     type State = RobotState;
+    const CONTROL_PERIOD: f64 = 1e-3;
+
     fn version() -> String {
         format!("FrankaRobot v{LIBFRANKA_VERSION}")
     }
@@ -227,19 +201,24 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
     }
 
     fn shutdown(&mut self) -> RobotResult<()> {
-        unimplemented!()
+        if self.robot_impl.is_moving().unwrap_or(false) {
+            self.stop()?;
+        } else {
+            self.robot_impl.command_handle.remove_closure();
+        }
+        Ok(())
     }
 
     fn enable(&mut self) -> RobotResult<()> {
-        unimplemented!()
+        Ok(())
     }
 
     fn disable(&mut self) -> RobotResult<()> {
-        unimplemented!()
+        self.stop()
     }
 
     fn reset(&mut self) -> RobotResult<()> {
-        unimplemented!()
+        self.robot_impl._automatic_error_recovery(())?.into()
     }
 
     fn is_moving(&mut self) -> RobotResult<bool> {
@@ -253,23 +232,30 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
     }
 
     fn stop(&mut self) -> RobotResult<()> {
-        unimplemented!()
+        self.robot_impl.command_handle.remove_closure();
+        let result: RobotResult<()> = self.robot_impl._stop_move(())?.into();
+        self.is_moving = false;
+        result
     }
 
     fn pause(&mut self) -> RobotResult<()> {
-        unimplemented!()
+        Err(RobotException::UnprocessableInstructionError(
+            "Franka FCI does not expose a generic pause operation; use stop()".to_string(),
+        ))
     }
 
     fn resume(&mut self) -> RobotResult<()> {
-        unimplemented!()
+        Err(RobotException::UnprocessableInstructionError(
+            "Franka FCI does not expose a generic resume operation".to_string(),
+        ))
     }
 
     fn emergency_stop(&mut self) -> RobotResult<()> {
-        unimplemented!()
+        self.stop()
     }
 
     fn clear_emergency_stop(&mut self) -> RobotResult<()> {
-        unimplemented!()
+        self.robot_impl._automatic_error_recovery(())?.into()
     }
 
     fn read_state(&mut self) -> RobotResult<Self::State> {
@@ -280,7 +266,7 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
 
 impl<T: FrankaType> Arm<7> for FrankaRobot<T>
 where
-    FrankaRobot<T>: ArmParam<7>,
+    FrankaRobot<T>: Joints<7> + EndPoint + MoveTo<JointSpace<7>> + MoveTo<FlangeSpace>,
 {
     fn state(&mut self) -> RobotResult<ArmState<FRANKA_DOF>> {
         let state = self.robot_impl.robot_state.read().unwrap();
@@ -289,11 +275,77 @@ where
     fn set_load(&mut self, load: LoadState) -> RobotResult<()> {
         self.robot_impl._set_load(load.into()).map(|_| ())
     }
-    fn set_coord(&mut self, coord: Coord) -> RobotResult<()> {
+
+    fn get_joint(&self) -> [f64; FRANKA_DOF] {
+        self.robot_impl.robot_state.read().unwrap().q
+    }
+
+    fn with_joint_vel(mut self, vel_bound: [f64; FRANKA_DOF]) -> Self {
+        self.max_vel.once(vel_bound);
+        self
+    }
+
+    fn with_joint_acc(mut self, acc_bound: [f64; FRANKA_DOF]) -> Self {
+        self.max_acc.once(acc_bound);
+        self
+    }
+
+    fn with_joint_jerk(mut self, jerk_bound: [f64; FRANKA_DOF]) -> Self {
+        self.max_jerk.once(jerk_bound);
+        self
+    }
+
+    fn with_torque(self, _torque_bound: [f64; FRANKA_DOF]) -> Self {
+        self
+    }
+
+    fn with_torque_dot(self, _torque_dot_bound: [f64; FRANKA_DOF]) -> Self {
+        self
+    }
+
+    fn get_endpoint(&self) -> Pose {
+        Pose::Homo(self.robot_impl.robot_state.read().unwrap().O_T_EE)
+    }
+
+    fn with_cartesian_vel(mut self, vel_bound: f64) -> Self {
+        self.max_cartesian_vel.once(vel_bound);
+        self
+    }
+
+    fn with_cartesian_acc(mut self, acc_bound: f64) -> Self {
+        self.max_cartesian_acc.once(acc_bound);
+        self
+    }
+
+    fn with_cartesian_jerk(self, _jerk_bound: f64) -> Self {
+        self
+    }
+
+    fn with_rotation_vel(mut self, vel_bound: f64) -> Self {
+        self.max_cartesian_vel.once(vel_bound);
+        self
+    }
+
+    fn with_rotation_acc(mut self, acc_bound: f64) -> Self {
+        self.max_cartesian_acc.once(acc_bound);
+        self
+    }
+
+    fn with_rotation_jerk(self, _jerk_bound: f64) -> Self {
+        self
+    }
+}
+
+impl<T: FrankaType> FrankaRobot<T>
+where
+    Self: Joints<7> + EndPoint,
+{
+    pub fn set_coord(&mut self, coord: Coord) -> RobotResult<()> {
         self.coord.set(coord);
         Ok(())
     }
-    fn set_scale(&mut self, scale: f64) -> RobotResult<()> {
+
+    pub fn set_scale(&mut self, scale: f64) -> RobotResult<()> {
         self.scale.set(scale);
         self.max_vel.set(Self::JOINT_VEL_BOUND.map(|v| v * scale));
         self.max_acc.set(Self::JOINT_ACC_BOUND.map(|v| v * scale));
@@ -305,15 +357,16 @@ where
         Ok(())
     }
 
-    fn get_scale(&self) -> f64 {
+    pub fn get_scale(&self) -> f64 {
         *self.scale.get()
     }
 
-    fn with_coord(&mut self, coord: Coord) -> &mut Self {
+    pub fn with_coord(&mut self, coord: Coord) -> &mut Self {
         self.coord.once(coord);
         self
     }
-    fn with_scale(&mut self, scale: f64) -> &mut Self {
+
+    pub fn with_scale(&mut self, scale: f64) -> &mut Self {
         self.scale.once(scale);
         self.max_vel.once(Self::JOINT_VEL_BOUND.map(|v| v * scale));
         self.max_acc.once(Self::JOINT_ACC_BOUND.map(|v| v * scale));
@@ -325,60 +378,15 @@ where
             .once(Self::CARTESIAN_ACC_BOUND * scale);
         self
     }
-    fn with_velocity(&mut self, joint_vel: &[f64; FRANKA_DOF]) -> &mut Self {
-        self.max_vel.once(*joint_vel);
-        self
-    }
-    fn with_acceleration(&mut self, joint_acc: &[f64; FRANKA_DOF]) -> &mut Self {
-        self.max_acc.once(*joint_acc);
-        self
-    }
-    fn with_jerk(&mut self, joint_jerk: &[f64; FRANKA_DOF]) -> &mut Self {
-        self.max_jerk.once(*joint_jerk);
-        self
-    }
-    fn with_cartesian_velocity(&mut self, cartesian_vel: f64) -> &mut Self {
-        self.max_cartesian_vel.once(cartesian_vel);
-        self
-    }
-    fn with_cartesian_acceleration(&mut self, cartesian_acc: f64) -> &mut Self {
-        self.max_cartesian_acc.once(cartesian_acc);
-        self
-    }
-    fn with_cartesian_jerk(&mut self, _cartesian_jerk: f64) -> &mut Self {
-        self
-    }
-    fn with_rotation_velocity(&mut self, rotation_vel: f64) -> &mut Self {
-        self.max_cartesian_vel.once(rotation_vel);
-        self
-    }
-    fn with_rotation_acceleration(&mut self, rotation_acc: f64) -> &mut Self {
-        self.max_cartesian_acc.once(rotation_acc);
-        self
-    }
-    fn with_rotation_jerk(&mut self, _rotation_jerk: f64) -> &mut Self {
-        self
-    }
 }
 
-impl<T: FrankaType> JointStateSync for FrankaRobot<T> {
-    fn joint_state_handle(&self) -> JointStateMap {
-        self.joint_state_map.clone()
-    }
-}
-
-impl<T: FrankaType> ArmPreplannedMotion<7> for FrankaRobot<T>
+impl<T: FrankaType> MoveTo<JointSpace<7>> for FrankaRobot<T>
 where
-    FrankaRobot<T>: ArmParam<7>,
+    Self: Joints<7>,
 {
-    fn move_joint(&mut self, target: &[f64; FRANKA_DOF]) -> RobotResult<()> {
-        self.move_joint_async(target)?;
-
-        self.waiting_for_finish()
-    }
-    fn move_joint_async(&mut self, target: &[f64; FRANKA_DOF]) -> RobotResult<()> {
+    fn move_to(&mut self, target: [f64; FRANKA_DOF]) -> RobotResult<()> {
         self.is_moving = true;
-        self.robot_impl._move(MotionType::Joint(*target).into())?;
+        self.robot_impl._move(MotionType::Joint(target).into())?;
         sleep(Duration::from_millis(2));
 
         let state = self.robot_impl.robot_state.read().unwrap();
@@ -392,7 +400,7 @@ where
                 }
                 result
             }
-            _ => *target,
+            _ => target,
         };
 
         let (v_max, a_max, j_max) = (self.max_vel.get(), self.max_acc.get(), self.max_jerk.get());
@@ -407,18 +415,23 @@ where
         });
         Ok(())
     }
-    fn move_cartesian(&mut self, target: &Pose) -> RobotResult<()> {
-        self.move_cartesian_async(target)?;
 
+    fn move_to_sync(&mut self, target: [f64; FRANKA_DOF]) -> RobotResult<()> {
+        <Self as MoveTo<JointSpace<7>>>::move_to(self, target)?;
         self.waiting_for_finish()
     }
-    fn move_cartesian_async(&mut self, target: &Pose) -> RobotResult<()> {
+}
+
+impl<T: FrankaType> MoveTo<FlangeSpace> for FrankaRobot<T>
+where
+    Self: EndPoint,
+{
+    fn move_to(&mut self, target: Pose) -> RobotResult<()> {
         self.is_moving = true;
         self.robot_impl
-            ._move(MotionType::<7>::Cartesian(*target).into())?;
+            ._move(MotionType::<7>::Cartesian(target).into())?;
         sleep(Duration::from_millis(1));
 
-        let target = *target;
         let state = self.robot_impl.robot_state.read().unwrap();
         let pose: Pose = state.O_T_EE.into();
         drop(state);
@@ -444,32 +457,32 @@ where
         });
         Ok(())
     }
-}
 
-impl<T: FrankaType> ArmPreplannedPath<7> for FrankaRobot<T>
-where
-    Self: ArmParam<7>,
-{
-    fn move_traj(&mut self, path: Vec<MotionType<FRANKA_DOF>>) -> RobotResult<()> {
-        self.move_traj_async(path)?;
-
+    fn move_to_sync(&mut self, target: Pose) -> RobotResult<()> {
+        <Self as MoveTo<FlangeSpace>>::move_to(self, target)?;
         self.waiting_for_finish()
     }
-    fn move_traj_async(&mut self, path: Vec<MotionType<FRANKA_DOF>>) -> RobotResult<()> {
-        self.is_moving = true;
-        let coord = self.coord.get().to_owned();
-        let state = self.state()?;
-        self.with_coord(coord);
+}
 
-        self.move_to(path[0])?;
-        let last = path.last().cloned().unwrap_or(MotionType::Stop);
+impl<T: FrankaType> MoveTraj<JointSpace<7>> for FrankaRobot<T>
+where
+    Self: Joints<7> + EndPoint,
+{
+    fn move_traj(&mut self, path: Vec<[f64; FRANKA_DOF]>) -> RobotResult<()> {
+        if path.is_empty() {
+            return Ok(());
+        }
+
+        self.is_moving = true;
+        <Self as MoveTo<JointSpace<7>>>::move_to(self, path[0])?;
+        let last = MotionType::Joint(*path.last().unwrap());
         let mut path = path.into_iter();
         self.robot_impl._move(last.into())?;
         sleep(Duration::from_millis(2));
 
         self.robot_impl.command_handle.set_closure(move |_, _| {
             if let Some(next) = path.next() {
-                (next.with_coord(&coord, &state), false)
+                (MotionType::Joint(next), false)
             } else {
                 (last, true)
             }
@@ -477,290 +490,237 @@ where
         });
         Ok(())
     }
-}
 
-pub struct FrankaHandle {
-    command_handle: CommandHandle<RobotCommand, RobotStateInter>,
-    last_motion: Option<MotionType<FRANKA_DOF>>,
-    last_control: Option<ControlType<FRANKA_DOF>>,
-}
-
-impl ArmStreamingHandle<FRANKA_DOF> for FrankaHandle {
-    fn move_to(&mut self, target: MotionType<FRANKA_DOF>) -> RobotResult<()> {
-        self.command_handle.set_target((target, false));
-        Ok(())
-    }
-    fn control_with(&mut self, control: ControlType<FRANKA_DOF>) -> RobotResult<()> {
-        self.command_handle.set_target((control, false));
-        Ok(())
+    fn move_traj_sync(&mut self, path: Vec<[f64; FRANKA_DOF]>) -> RobotResult<()> {
+        <Self as MoveTraj<JointSpace<7>>>::move_traj(self, path)?;
+        self.waiting_for_finish()
     }
 
-    fn last_control(&self) -> Option<ControlType<FRANKA_DOF>> {
-        self.last_control
-    }
-    fn last_motion(&self) -> Option<MotionType<FRANKA_DOF>> {
-        self.last_motion
-    }
-}
-
-impl<T: FrankaType> ArmStreamingMotion<7> for FrankaRobot<T>
-where
-    Self: ArmParam<7>,
-{
-    type Handle = FrankaHandle;
-    fn start_streaming(&mut self) -> RobotResult<Self::Handle> {
-        self.is_moving = true;
-        self.robot_impl._move(MotionType::Joint([0.0; 7]).into())?;
-        sleep(Duration::from_millis(2));
-        let state = self.robot_impl.robot_state.read().unwrap();
-        self.robot_impl
-            .command_handle
-            .set_target((MotionType::Joint(state.q_d), false));
-
-        Ok(FrankaHandle {
-            command_handle: self.robot_impl.command_handle.clone(),
-            last_motion: None,
-            last_control: None,
-        })
-    }
-    fn end_streaming(&mut self) -> RobotResult<()> {
-        self.stop()
-    }
-    fn move_to_target(&mut self) -> Arc<Mutex<Option<MotionType<FRANKA_DOF>>>> {
-        unimplemented!()
-    }
-    fn control_with_target(&mut self) -> Arc<Mutex<Option<ControlType<FRANKA_DOF>>>> {
-        unimplemented!()
-    }
-}
-
-impl<T: FrankaType> ArmImpedance<7> for FrankaRobot<T>
-where
-    Self: ArmParam<7>,
-{
-    fn joint_impedance_async(
-        &mut self,
-        stiffness: &[f64; 7],
-        damping: &[f64; 7],
-    ) -> RobotResult<JointImpedanceHandle<7>> {
-        let handle = JointImpedanceHandle {
-            stiffness: Arc::new(Mutex::new(*stiffness)),
-            damping: Arc::new(Mutex::new(*damping)),
-            target: Arc::new(Mutex::new(None)),
-            is_finished: Arc::new(AtomicBool::new(false)),
-        };
-
-        let stiffness_clone = handle.stiffness.clone();
-        let damping_clone = handle.damping.clone();
-        let target_clone = handle.target.clone();
-        let is_finished_clone = handle.is_finished.clone();
-
-        self.is_moving = true;
-        self.robot_impl._move(ControlType::Torque([0.; 7]).into())?;
-
-        self.robot_impl.command_handle.set_closure(move |state, _| {
-            let q = state.q;
-            let dq = state.dq;
-            let target = {
-                let t = target_clone.lock().unwrap();
-                t.unwrap_or(q)
-            };
-            let stiffness = {
-                let s = stiffness_clone.lock().unwrap();
-                *s
-            };
-            let damping = {
-                let d = damping_clone.lock().unwrap();
-                *d
-            };
-            let torque = joint_impedance(&stiffness, &damping, target, q, dq);
-            (
-                ControlType::Torque(torque),
-                is_finished_clone.load(Ordering::SeqCst),
-            )
-                .into()
-        });
-        Ok(handle)
-    }
-    fn cartesian_impedance_async(
-        &mut self,
-        stiffness: (f64, f64),
-        damping: (f64, f64),
-    ) -> RobotResult<CartesianImpedanceHandle> {
-        let handle = CartesianImpedanceHandle {
-            stiffness: Arc::new(Mutex::new(stiffness)),
-            damping: Arc::new(Mutex::new(damping)),
-            target: Arc::new(Mutex::new(None)),
-            is_finished: Arc::new(AtomicBool::new(false)),
-        };
-
-        let stiffness_clone = handle.stiffness.clone();
-        let damping_clone = handle.damping.clone();
-        let target_clone = handle.target.clone();
-        let is_finished_clone = handle.is_finished.clone();
-        let model = self.model()?;
-
-        self.is_moving = true;
-        self.robot_impl._move(ControlType::Torque([0.; 7]).into())?;
-
-        self.robot_impl.command_handle.set_closure(move |state, _| {
-            let pose = state.O_T_EE;
-            let dq = state.dq;
-            let target = {
-                let t = target_clone.lock().unwrap();
-                t.unwrap_or(Pose::Homo(pose))
-            };
-            let stiffness = {
-                let s = stiffness_clone.lock().unwrap();
-                *s
-            };
-            let damping = {
-                let d = damping_clone.lock().unwrap();
-                *d
-            };
-            let jacobian = na::SMatrix::<f64, 6, 7>::from_column_slice(
-                &model.zero_jacobian_from_state(&Frame::EndEffector, &(*state).into()),
-            );
-            let force_torque = cartesian_impedance(
-                stiffness,
-                damping,
-                target.quat(),
-                jacobian,
-                dq,
-                Pose::Homo(pose).quat(),
-            );
-            (
-                ControlType::Torque(force_torque),
-                is_finished_clone.load(Ordering::SeqCst),
-            )
-                .into()
-        });
-
-        Ok(handle)
-    }
-    fn joint_impedance_control(
-        &mut self,
-        stiffness: &[f64; 7],
-        damping: &[f64; 7],
-    ) -> RobotResult<(
-        JointImpedanceHandle<7>,
-        impl FnMut() -> BoxFuture<'static, RobotResult<()>> + Send + 'static,
-    )> {
-        let handle = self.joint_impedance_async(stiffness, damping)?;
-        let is_finished = handle.is_finished.clone();
-        let robot = self.robot_impl.clone();
-
-        let closure = Box::new(move || {
-            let mut robot = robot.clone();
-            let is_finished = is_finished.clone();
-            Box::pin(async move {
-                let mut stop_sent = false;
-                // Wait for robot to start moving
-                let start_wait = std::time::Instant::now();
-                while !robot.is_moving()? {
-                    if start_wait.elapsed() > Duration::from_secs(2) {
-                        break;
-                    }
-                    tokio::time::sleep(Duration::from_millis(1)).await;
-                }
-
-                while robot.is_moving()? {
-                    if is_finished.load(Ordering::SeqCst) && !stop_sent {
-                        let _ = robot._stop_move(());
-                        stop_sent = true;
-                    }
-                    tokio::time::sleep(Duration::from_millis(1)).await;
-                }
-                robot.command_handle.remove_closure();
-                let _ = robot.network.tcp_blocking_recv::<MoveResponse>();
-                Ok(())
-            }) as BoxFuture<'static, RobotResult<()>>
-        });
-        Ok((handle, closure))
-    }
-
-    fn cartesian_impedance_control(
-        &mut self,
-        stiffness: (f64, f64),
-        damping: (f64, f64),
-    ) -> RobotResult<(
-        CartesianImpedanceHandle,
-        impl FnMut() -> BoxFuture<'static, RobotResult<()>> + Send + 'static,
-    )> {
-        let handle = self.cartesian_impedance_async(stiffness, damping)?;
-        let robot = self.robot_impl.clone();
-        let is_finished = handle.is_finished.clone();
-
-        let closure = Box::new(move || {
-            let mut robot = robot.clone();
-            let is_finished = is_finished.clone();
-            Box::pin(async move {
-                let mut stop_sent = false;
-                // Wait for robot to start moving
-                let start_wait = std::time::Instant::now();
-                while !robot.is_moving()? {
-                    if start_wait.elapsed() > Duration::from_secs(2) {
-                        break;
-                    }
-                    tokio::time::sleep(Duration::from_millis(1)).await;
-                }
-                while robot.is_moving()? {
-                    if is_finished.load(Ordering::SeqCst) && !stop_sent {
-                        let _ = robot._stop_move(());
-                        stop_sent = true;
-                    }
-                    tokio::time::sleep(Duration::from_millis(1)).await;
-                }
-                robot.command_handle.remove_closure();
-                let _ = robot.network.tcp_blocking_recv::<MoveResponse>();
-                Ok(())
-            }) as BoxFuture<'static, RobotResult<()>>
-        });
-        Ok((handle, closure))
-    }
-}
-
-impl<T: FrankaType> Realtime for FrankaRobot<T> {}
-
-impl<T: FrankaType> ArmRealtimeControl<7> for FrankaRobot<T>
-where
-    Self: ArmParam<7>,
-{
-    fn move_with_closure<FM>(&mut self, mut closure: FM) -> RobotResult<()>
+    fn move_path<F>(&mut self, path: F) -> RobotResult<()>
     where
-        FM: FnMut(ArmState<FRANKA_DOF>, Duration) -> (MotionType<FRANKA_DOF>, bool)
-            + Send
-            + 'static,
+        F: Fn(f64) -> Option<[f64; FRANKA_DOF]>,
     {
-        self.is_moving = true;
-        let example = ArmState::<FRANKA_DOF>::default();
-        self.robot_impl
-            ._move(closure(example, Duration::from_millis(0)).0.into())?;
-        sleep(Duration::from_millis(2));
-        self.robot_impl
-            .command_handle
-            .set_closure(move |state, duration| closure((*state).into(), duration).into());
-        Ok(())
+        let traj = robot_behavior::utils::trajectory::plan_path_traj_via_copp::<Self, F, FRANKA_DOF>(
+            &path,
+            self.get_scale(),
+        )?;
+        <Self as MoveTraj<JointSpace<7>>>::move_traj(self, traj)
     }
 
-    fn control_with_closure<FC>(&mut self, mut closure: FC) -> RobotResult<()>
+    fn move_waypoints(&mut self, waypoints: Vec<[f64; FRANKA_DOF]>) -> RobotResult<()> {
+        let traj = robot_behavior::utils::trajectory::plan_waypoints_traj_via_copp::<
+            Self,
+            FRANKA_DOF,
+        >(&waypoints, self.get_scale())?;
+        <Self as MoveTraj<JointSpace<7>>>::move_traj(self, traj)
+    }
+}
+
+impl<T: FrankaType> ControlWith<JointPositionControl<7>> for FrankaRobot<T>
+where
+    Self: Joints<7>,
+{
+    fn hold_command(state: &JointState<FRANKA_DOF>) -> [f64; FRANKA_DOF] {
+        state
+            .cmd
+            .q
+            .or(state.des.q)
+            .or(state.meas.q)
+            .unwrap_or([0.0; FRANKA_DOF])
+    }
+
+    fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
     where
-        FC: FnMut(ArmState<FRANKA_DOF>, Duration) -> (ControlType<FRANKA_DOF>, bool)
-            + Send
-            + 'static,
+        F: FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool) + Send + 'static,
+    {
+        self.robot_impl
+            .command_handle
+            .set_closure(move |state, duration| {
+                let arm: ArmState<FRANKA_DOF> = (*state).into();
+                let (joint, done) = closure(arm.joint, duration);
+                (MotionType::Joint(joint), done).into()
+            });
+        self.is_moving = true;
+        // The command value only selects Franka's joint-position generator.
+        // Per-cycle targets come from the closure and are rate-limited by
+        // `CommandFilter` before they leave the UDP command loop.
+        let mode_selector = self.robot_impl.robot_state.read().unwrap().q_d;
+        if let Err(err) = self
+            .robot_impl
+            ._move(MotionType::Joint(mode_selector).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            self.is_moving = false;
+            return Err(err);
+        }
+        sleep(Duration::from_millis(2));
+        Ok(())
+    }
+}
+
+impl<T: FrankaType> ControlWith<JointVelocityControl<7>> for FrankaRobot<T> {
+    fn hold_command(_state: &JointState<FRANKA_DOF>) -> [f64; FRANKA_DOF] {
+        [0.0; FRANKA_DOF]
+    }
+
+    fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool) + Send + 'static,
     {
         self.is_moving = true;
         self.robot_impl
             .command_handle
-            .set_closure(move |state, duration| closure((*state).into(), duration).into());
-        self.robot_impl
-            ._move(ControlType::Torque([0.0; FRANKA_DOF]).into())?;
+            .set_closure(move |state, duration| {
+                let arm: ArmState<FRANKA_DOF> = (*state).into();
+                let (velocity, done) = closure(arm.joint, duration);
+                (MotionType::JointVel(velocity), done).into()
+            });
+        if let Err(err) = self
+            .robot_impl
+            ._move(MotionType::JointVel([0.0; FRANKA_DOF]).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            self.is_moving = false;
+            return Err(err);
+        }
         sleep(Duration::from_millis(2));
         Ok(())
     }
 }
 
-impl<T: FrankaType> ArmRealtimeControlExt<FRANKA_DOF> for FrankaRobot<T> where
-    Self: ArmParam<FRANKA_DOF>
-{
+impl<T: FrankaType> ControlWith<CartesianVelocityControl<7>> for FrankaRobot<T> {
+    fn hold_command(_state: &ArmState<FRANKA_DOF>) -> [f64; 6] {
+        [0.0; 6]
+    }
+
+    fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: FnMut(ArmState<FRANKA_DOF>, Duration) -> ([f64; 6], bool) + Send + 'static,
+    {
+        self.is_moving = true;
+        self.robot_impl
+            .command_handle
+            .set_closure(move |state, duration| {
+                let (velocity, done) = closure((*state).into(), duration);
+                (MotionType::CartesianVel(velocity), done).into()
+            });
+        if let Err(err) = self
+            .robot_impl
+            ._move(MotionType::<FRANKA_DOF>::CartesianVel([0.0; 6]).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            self.is_moving = false;
+            return Err(err);
+        }
+        sleep(Duration::from_millis(2));
+        Ok(())
+    }
+}
+
+impl<T: FrankaType> ControlWith<CartesianPoseControl<7>> for FrankaRobot<T> {
+    fn hold_command(state: &ArmState<FRANKA_DOF>) -> Pose {
+        state
+            .flange
+            .cmd
+            .pose
+            .or(state.flange.des.pose)
+            .or(state.flange.meas.pose)
+            .unwrap_or_default()
+    }
+
+    fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: FnMut(ArmState<FRANKA_DOF>, Duration) -> (Pose, bool) + Send + 'static,
+    {
+        self.robot_impl
+            .command_handle
+            .set_closure(move |state, duration| {
+                let (pose, done) = closure((*state).into(), duration);
+                (MotionType::Cartesian(pose), done).into()
+            });
+        self.is_moving = true;
+        // The command value only selects Franka's Cartesian pose generator.
+        // The closure supplies the actual per-cycle pose command.
+        let mode_selector = Pose::Homo(self.robot_impl.robot_state.read().unwrap().O_T_EE);
+        if let Err(err) = self
+            .robot_impl
+            ._move(MotionType::<FRANKA_DOF>::Cartesian(mode_selector).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            self.is_moving = false;
+            return Err(err);
+        }
+        sleep(Duration::from_millis(2));
+        Ok(())
+    }
+}
+
+impl<T: FrankaType> ControlWith<TorqueControl<7>> for FrankaRobot<T> {
+    fn hold_command(state: &JointState<FRANKA_DOF>) -> [f64; FRANKA_DOF] {
+        state
+            .cmd
+            .tau
+            .or(state.des.tau)
+            .or(state.meas.tau)
+            .unwrap_or([0.0; FRANKA_DOF])
+    }
+
+    fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool) + Send + 'static,
+    {
+        self.is_moving = true;
+        self.robot_impl
+            .command_handle
+            .set_closure(move |state, duration| {
+                let arm: ArmState<FRANKA_DOF> = (*state).into();
+                let (torque, done) = closure(arm.joint, duration);
+                (ControlType::Torque(torque), done).into()
+            });
+        if let Err(err) = self
+            .robot_impl
+            ._move(ControlType::Torque([0.0; FRANKA_DOF]).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            self.is_moving = false;
+            return Err(err);
+        }
+        sleep(Duration::from_millis(2));
+        Ok(())
+    }
+}
+
+impl<T: FrankaType> ControlWith<ArmTorqueControl<7>> for FrankaRobot<T> {
+    fn hold_command(state: &ArmState<FRANKA_DOF>) -> [f64; FRANKA_DOF] {
+        state
+            .joint
+            .cmd
+            .tau
+            .or(state.joint.des.tau)
+            .or(state.joint.meas.tau)
+            .unwrap_or([0.0; FRANKA_DOF])
+    }
+
+    fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: FnMut(ArmState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool) + Send + 'static,
+    {
+        self.is_moving = true;
+        self.robot_impl
+            .command_handle
+            .set_closure(move |state, duration| {
+                let (torque, done) = closure((*state).into(), duration);
+                (ControlType::Torque(torque), done).into()
+            });
+        if let Err(err) = self
+            .robot_impl
+            ._move(ControlType::Torque([0.0; FRANKA_DOF]).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            self.is_moving = false;
+            return Err(err);
+        }
+        sleep(Duration::from_millis(2));
+        Ok(())
+    }
 }
