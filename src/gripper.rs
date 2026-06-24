@@ -1,17 +1,18 @@
 use robot_behavior::{RobotException, RobotResult};
-use std::sync::{Arc, RwLock};
+use std::net::UdpSocket;
 
 use crate::{
     FRANKA_GRIPPER_VERSION, PORT_GRIPPER_COMMAND, PORT_GRIPPER_UDP,
     network::Network,
-    types::{gripper_command::GripperCommand, gripper_state::*, gripper_types::*},
+    types::{gripper_state::*, gripper_types::*},
 };
 
 /// # FrankaGripper
 ///
 pub struct FrankaGripper {
     network: Network,
-    gripper_state: Arc<RwLock<GripperStateInter>>,
+    udp_socket: UdpSocket,
+    gripper_state: GripperStateInter,
     udp_port: u16,
 }
 
@@ -28,11 +29,14 @@ macro_rules! cmd_fn {
 
 impl FrankaGripper {
     pub fn new(ip: &str) -> Self {
-        let (_, gripper_state, udp_port) =
-            Network::spawn_udp_thread::<GripperCommand, _>(PORT_GRIPPER_UDP, |_| {});
+        let udp_socket = UdpSocket::bind(("0.0.0.0", PORT_GRIPPER_UDP))
+            .or_else(|_| UdpSocket::bind(("0.0.0.0", 0)))
+            .unwrap();
+        let udp_port = udp_socket.local_addr().unwrap().port();
         let mut gripper = FrankaGripper {
             network: Network::new(ip, PORT_GRIPPER_COMMAND),
-            gripper_state,
+            udp_socket,
+            gripper_state: GripperStateInter::default(),
             udp_port,
         };
         gripper.connect_with_udp_port(udp_port).unwrap();
@@ -80,7 +84,11 @@ impl FrankaGripper {
     }
 
     pub fn read_state(&mut self) -> RobotResult<GripperState> {
-        let state = self.gripper_state.read().unwrap();
-        Ok((*state).into())
+        let mut buffer = vec![0_u8; std::mem::size_of::<GripperStateInter>() * 5];
+        let (size, _) = self.udp_socket.recv_from(&mut buffer)?;
+        let state: GripperStateInter = bincode::deserialize(&buffer[..size])
+            .map_err(|err| RobotException::DeserializeError(err.to_string()))?;
+        self.gripper_state = state;
+        Ok(state.into())
     }
 }

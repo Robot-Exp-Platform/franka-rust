@@ -1,22 +1,21 @@
 use robot_behavior::{RobotException, RobotResult};
 use std::{
+    net::{SocketAddr, UdpSocket},
     sync::{Arc, RwLock},
     thread::sleep,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{
     FRANKA_ROBOT_VERSION, PORT_ROBOT_COMMAND, PORT_ROBOT_UDP,
-    command_handle::CommandHandle,
     network::Network,
     types::{robot_command::RobotCommand, robot_state::*, robot_types::*},
 };
 
-#[derive(Clone, Default)]
 pub struct FrankaRobotImpl {
     pub(crate) network: Network,
-    pub(crate) command_handle: CommandHandle<RobotCommand, RobotStateInter>,
     pub robot_state: Arc<RwLock<RobotStateInter>>,
+    pub(crate) udp_socket: UdpSocket,
 }
 
 macro_rules! cmd_fn {
@@ -32,14 +31,14 @@ macro_rules! cmd_fn {
 
 impl FrankaRobotImpl {
     pub fn new(ip: &str) -> Self {
-        Self::new_with_hook(ip, |_| {})
-    }
-
-    pub fn new_with_hook(ip: &str, on_update: impl Fn(&RobotStateInter) + Send + 'static) -> Self {
-        let (command_handle, robot_state, udp_port) =
-            Network::spawn_udp_thread(PORT_ROBOT_UDP, on_update);
+        let udp_socket = Self::bind_udp_socket(PORT_ROBOT_UDP).unwrap();
+        let udp_port = udp_socket.local_addr().unwrap().port();
         let network = Network::new(ip, PORT_ROBOT_COMMAND);
-        let mut robot = Self { network, command_handle, robot_state };
+        let mut robot = Self {
+            network,
+            robot_state: Arc::new(RwLock::new(RobotStateInter::default())),
+            udp_socket,
+        };
         robot.connect_(udp_port).unwrap();
         robot
     }
@@ -58,6 +57,12 @@ impl FrankaRobotImpl {
     cmd_fn!(_stop_move, { Command::StopMove }; data: (); GetterSetterStatus);
     cmd_fn!(_get_cartesian_limit, { Command::GetCartesianLimit }; data: GetCartesianLimitData; GetCartesianLimitStatus);
 
+    fn bind_udp_socket(preferred_port: u16) -> RobotResult<UdpSocket> {
+        let socket = UdpSocket::bind(("0.0.0.0", preferred_port))
+            .or_else(|_| UdpSocket::bind(("0.0.0.0", 0)))?;
+        Ok(socket)
+    }
+
     fn connect_(&mut self, udp_port: u16) -> RobotResult<()> {
         let result = self._connect(ConnectData { version: FRANKA_ROBOT_VERSION, udp_port })?;
         if let ConnectStatusEnum::Success = result.status {
@@ -70,7 +75,50 @@ impl FrankaRobotImpl {
         }
     }
 
-    pub fn is_moving(&self) -> RobotResult<bool> {
+    pub(crate) fn finish_current_motion(&mut self) -> RobotResult<()> {
+        let response = self.network.tcp_blocking_recv::<MoveResponse>()?;
+        if response.status == MoveStatus::Success {
+            Ok(())
+        } else {
+            Err(RobotException::CommandException(format!(
+                "move failed with status: {:?}",
+                response.status
+            )))
+        }
+    }
+
+    pub(crate) fn recv_state(&mut self) -> RobotResult<(RobotStateInter, SocketAddr, Duration)> {
+        let mut buffer = vec![0_u8; std::mem::size_of::<RobotStateInter>() * 5];
+        let start = Instant::now();
+        let (size, addr) = self.udp_socket.recv_from(&mut buffer)?;
+        let state: RobotStateInter = bincode::deserialize(&buffer[..size])
+            .map_err(|err| RobotException::DeserializeError(err.to_string()))?;
+        state.error_result()?;
+        {
+            let mut latest = self.robot_state.write().unwrap();
+            *latest = state;
+        }
+        Ok((state, addr, start.elapsed()))
+    }
+
+    pub(crate) fn send_command(
+        &mut self,
+        state: &RobotStateInter,
+        addr: SocketAddr,
+        command: RobotCommand,
+    ) -> RobotResult<()> {
+        use crate::types::robot_types::{CommandFilter, CommandIDConfig};
+
+        let mut command = command.filter(state);
+        command.set_command_id(state.command_id());
+        let data = bincode::serialize(&command)
+            .map_err(|err| RobotException::CommandException(err.to_string()))?;
+        self.udp_socket.send_to(&data, addr)?;
+        Ok(())
+    }
+
+    pub fn is_moving(&mut self) -> RobotResult<bool> {
+        let _ = self.recv_state();
         let state = self.robot_state.read().unwrap();
         state.error_result()?;
 
@@ -83,15 +131,6 @@ impl FrankaRobotImpl {
         while self.is_moving()? {
             sleep(Duration::from_millis(1));
         }
-        self.command_handle.remove_closure();
-        let response = self.network.tcp_blocking_recv::<MoveResponse>()?;
-        let status = response.status;
-        if status == MoveStatus::Success {
-            Ok(())
-        } else {
-            Err(RobotException::CommandException(format!(
-                "move failed with status: {status:?}"
-            )))
-        }
+        self.finish_current_motion()
     }
 }

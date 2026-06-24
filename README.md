@@ -1,103 +1,151 @@
-# Readme
+# franka_rust
 
-[English](README.md) | [简体中文](README_cn.md)
+[English](README.md) | [简体中文](README_zh.md)
 
-unofficial `rust` implementation of `libfranka`!
+`franka_rust` is a Rust driver for Franka robots in the Robot-Exp driver stack.
+It connects Franka FCI to the common `robot_behavior` traits, so the same
+motion, control, model and roplat orchestration style can be used across real
+robots and simulation backends.
 
-This library is part of the [Universal Robot Driver Project](https://github.com/Robot-Exp-Platform/robot_behavior)! We are committed to providing Rust driver support for more robotic platforms! **Unifying driver interfaces across different robot models, reducing the learning curve for robotics, and delivering more efficient robot control solutions!**
+This crate is not a line-by-line port of `libfranka`. The wire protocol follows
+Franka FCI semantics, while the public API is shaped around Rust ownership,
+typed behavior spaces and scoped controller closures.
 
-During implementation, we referenced both [libfranka](https://github.com/frankaemika/libfranka) and [libfranka-rs](https://github.com/marcbone/libfranka-rs). Special thanks to open-source contributors, especially [marcbone](https://github.com/marcbone) - their library provided significant assistance! This implementation is not intended to be a direct replica of the official approach, but rather follows a more **idiomatic Rust** methodology.
+## What It Provides
 
-Additionally, the official driver implementation has limited support for non-`Ubuntu` systems and high dependency on real-time kernels. In this library, we make real-time kernels an optional dependency. We strive to provide support for platforms without real-time kernels or with performance constraints.
+- One public robot object per model: `FrankaEmika`, `FrankaPanda`, `FrankaFR3`
+  and `FrankaFP3`.
+- `robot_behavior` motion spaces for joint and Cartesian target motion.
+- Blocking `control_with` sessions for joint position, joint velocity,
+  Cartesian pose, Cartesian velocity and torque control.
+- `control_with_async` sessions whose per-cycle controller closure can be
+  asynchronous while the robot resource remains borrowed for the whole control
+  session.
+- Franka-specific configuration such as collision behavior, internal impedance,
+  guiding mode, load and frame settings.
+- Access to the downloaded Franka model library for kinematics and dynamics.
+- Optional Python and C++ FFI layers, kept downstream of `robot_behavior`.
 
-| OS         | Architecture | Support |
-| ---------- | ------------ | ------- |
-| Windows 10 | x86_64       | ✅      |
-| Windows 10 | amd64        | ✅      |
-| Windows 11 | x86_64       | ✅      |
-| Windows 11 | amd64        | ✅      |
-| Ubuntu 20.04 | x86_64     | ✅      |
-| Ubuntu 22.04 | x86_64     | ✅      |
-| macOS 13   | x86_64       | ✅      |
-| macOS 14   | aarch64      | ✅      |
-| Other      | Other        | ???     |
+## Design In 0.2
 
-Other OS/arch combinations may work but remain untested due to hardware limitations. PRs and issues are welcome!
+Version `0.2.0` aligns Franka control with the current `robot_behavior`
+semantics:
 
-This library also aims to support multiple language bindings through our unified interface. Currently supported:
+- `control_with` is blocking. It returns when the controller reports `done` or
+  the robot returns an error.
+- Controller closures no longer need `'static`; they may borrow local
+  trajectories, models or loggers for the duration of the call.
+- The synchronous control path uses a direct `std::net::UdpSocket` realtime
+  loop.
+- The async-control path uses a `tokio::net::UdpSocket` realtime loop internally.
+- Ordinary blocking commands such as `move_to`, configuration setters and model
+  loading remain on the simple blocking command plane.
 
-- [Python](https://pypi.org/project/franka-rust/)
-- **C++** (Planned)
-- **Java** (Planned)
-- **Go** (Planned)
-- **C#** (Planned)
+The result is intentionally small: the robot type is not split into sync and
+async variants, and realtime controllers are not routed through a shared
+background closure store.
+
+## Relationship To Other Crates
+
+- `robot_behavior` defines the behavior traits and controller utilities used by
+  this driver.
+- `roplat` integration shares the same behavior vocabulary; a Franka-native
+  realtime rhythm should be designed together with the roplat async execution
+  boundary instead of wrapping another blocking loop.
+- `rsbullet` and `libjaka-rs` are sibling backends in the same workspace; they
+  target the same behavior vocabulary but use their own transport kernels.
 
 ## Requirements
 
-- Rust 2024
+- Rust nightly, edition 2024.
+- A reachable Franka controller running a compatible FCI server.
+- A realtime Linux kernel is recommended for hardware experiments, but the
+  crate can compile and run on non-realtime systems for development.
 
-## Features
-
-- [x] Robot state reading
-- [x] Robot behavior parameters, controller parameters, and payload configuration
-- [x] Access to official Franka dynamic models
-- [ ] Known-target interfaces
-  - [x] Joint-space point-to-point motion generator (blocking/async)
-  - [x] Cartesian-space point-to-point motion generator (blocking/async)
-  - [x] Waypoint spline motion generator (blocking/async)
-- [x] Closure-based control interfaces
-  - [x] Joint position control
-  - [x] Joint velocity control
-  - [x] Cartesian position control
-  - [x] Cartesian velocity control
-  - [x] Torque control
-- [ ] Handler tracking interfaces
-  - [ ] Joint position tracking
-  - [ ] Joint velocity tracking
-  - [ ] Cartesian position tracking
-  - [ ] Cartesian velocity tracking
-  - [ ] Torque tracking
-- [x] Official gripper support
-- [ ] Official vacuum gripper support
-
-## Quick Start
-
-Add to your `Cargo.toml`:
+## Installation
 
 ```toml
 [dependencies]
-franka-rust = "*"
+franka_rust = "0.2"
+robot_behavior = "0.6"
 ```
 
-Minimal example (see [examples](/examples) for more):
+Inside this workspace, both `roplat` and `robot_behavior` are patched to local
+paths by the root `Cargo.toml`.
+
+## Quick Start
 
 ```rust
+use franka_rust::FrankaEmika;
+use robot_behavior::{RobotResult, behavior::*};
+
 fn main() -> RobotResult<()> {
-    let mut robot = FrankaRobot::new("172.16.0.3");
+    let mut robot = FrankaEmika::new("172.16.0.2");
     robot.set_default_behavior()?;
 
-    robot.set_collision_behavior(SetCollisionBehaviorData {
-        lower_torque_thresholds_acceleration: [20., 20., 18., 18., 16., 14., 12.],
-        upper_torque_thresholds_acceleration: [20., 20., 18., 18., 16., 14., 12.],
-        lower_torque_thresholds_nominal: [20., 20., 18., 18., 16., 14., 12.],
-        upper_torque_thresholds_nominal: [20., 20., 18., 18., 16., 14., 12.],
-        lower_force_thresholds_acceleration: [20., 20., 20., 25., 25., 25.],
-        upper_force_thresholds_acceleration: [20., 20., 20., 25., 25., 25.],
-        lower_force_thresholds_nominal: [20., 20., 20., 25., 25., 25.],
-        upper_force_thresholds_nominal: [20., 20., 20., 25., 25., 25.],
-    })?;
-
-    robot.move_to(MotionType::Joint(FRANKA_ROBOT_DEFAULT_JOINT), 0.3)?;
+    robot.move_to::<JointSpace<7>>(FrankaEmika::JOINT_DEFAULT)?;
 
     Ok(())
 }
 ```
 
-This code connects to a Franka Emika robot at `172.16.0.3` and performs a blocking move to `FRANKA_ROBOT_DEFAULT_JOINT`.
+## Realtime Control
 
-Simple, right? Give it a try!
+```rust
+use franka_rust::FrankaEmika;
+use robot_behavior::{RobotResult, behavior::*};
 
-## TODO
+fn main() -> RobotResult<()> {
+    let mut robot = FrankaEmika::new("172.16.0.2");
+    robot.set_default_behavior()?;
 
-- [ ] more examples
-- [ ] handler interface
+    let mut elapsed = 0.0;
+    robot.control_with::<TorqueControl<7>, _>(|joint, dt| {
+        elapsed += dt.as_secs_f64();
+
+        let q = joint.meas.q.unwrap_or([0.0; 7]);
+        let tau = q.map(|position| -0.5 * position);
+        let done = elapsed > 2.0;
+
+        (tau, done)
+    })?;
+
+    Ok(())
+}
+```
+
+For production experiments, prefer controller builders from
+`robot_behavior::controller` when the control law is generic. Keep only
+Franka-specific wiring in this crate.
+
+## Examples
+
+The `examples/` directory covers:
+
+- joint and Cartesian target motion,
+- generated joint and Cartesian control commands,
+- torque control,
+- impedance controllers provided by `robot_behavior`,
+- model loading,
+- gripper usage,
+- roplat-oriented examples where the current abstraction is sufficient.
+
+Examples are compiled by `cargo check --all-targets`; they are not hardware
+tests unless explicitly run against a robot.
+
+## Safety Notes
+
+This crate exposes low-level realtime command paths. It does not make arbitrary
+commands physically safe. Before hardware tests:
+
+- configure collision thresholds and load data,
+- use conservative velocity, acceleration and torque limits,
+- test controllers in simulation first,
+- keep an operator near the emergency stop,
+- avoid running high-frequency control on heavily loaded non-realtime systems.
+
+## Status
+
+`franka_rust` is an experimental hardware driver. The Rust API is currently more
+important than preserving old names, so minor releases may still reshape public
+interfaces while the Robot-Exp driver stack settles.

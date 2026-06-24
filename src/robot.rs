@@ -1,8 +1,15 @@
-﻿use robot_behavior::{
+use robot_behavior::{
     utils::path_generate::{self, cartesian_quat_simple_4th_curve},
     *,
 };
-use std::{fs::File, io::Write, marker::PhantomData, path::Path, thread::sleep, time::Duration};
+use std::{
+    fs::File,
+    io::Write,
+    marker::PhantomData,
+    path::Path,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use crate::{
     FRANKA_DOF, FrankaRobotImpl, LIBFRANKA_VERSION,
@@ -15,11 +22,31 @@ pub trait FrankaType {
     const JOINT_NAMES: [&'static str; FRANKA_DOF];
 }
 
-#[derive(Default)]
+type FrankaControlObservers = Arc<Mutex<Vec<ControlObserver<RobotState>>>>;
+
+fn control_observers() -> FrankaControlObservers {
+    Arc::new(Mutex::new(Vec::new()))
+}
+
+fn notify_control_observers(
+    observers: &FrankaControlObservers,
+    state: &RobotState,
+    duration: Duration,
+) {
+    let mut observers = observers
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    for observer in observers.iter_mut() {
+        observer(state, duration);
+    }
+}
+
 pub struct FrankaRobot<T: FrankaType> {
     marker: PhantomData<T>,
     pub robot_impl: FrankaRobotImpl,
     is_moving: bool,
+    before_observers: FrankaControlObservers,
+    after_observers: FrankaControlObservers,
     coord: OverrideOnce<Coord>,
     scale: OverrideOnce<f64>,
     max_vel: OverrideOnce<[f64; FRANKA_DOF]>,
@@ -38,6 +65,8 @@ where
             marker: PhantomData,
             robot_impl: FrankaRobotImpl::new(ip),
             is_moving: false,
+            before_observers: control_observers(),
+            after_observers: control_observers(),
             coord: OverrideOnce::new(Coord::OCS),
             scale: OverrideOnce::new(1.0),
             max_vel: OverrideOnce::new(Self::JOINT_VEL_BOUND),
@@ -126,8 +155,8 @@ where
     }
 
     pub fn read_franka_state(&mut self) -> RobotResult<RobotState> {
-        let state = self.robot_impl.robot_state.read().unwrap();
-        Ok((*state).into())
+        let (state, _, _) = self.robot_impl.recv_state()?;
+        Ok(state.into())
     }
 
     pub fn set_default_behavior(&mut self) -> RobotResult<()> {
@@ -203,8 +232,6 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
     fn shutdown(&mut self) -> RobotResult<()> {
         if self.robot_impl.is_moving().unwrap_or(false) {
             self.stop()?;
-        } else {
-            self.robot_impl.command_handle.remove_closure();
         }
         Ok(())
     }
@@ -232,7 +259,6 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
     }
 
     fn stop(&mut self) -> RobotResult<()> {
-        self.robot_impl.command_handle.remove_closure();
         let result: RobotResult<()> = self.robot_impl._stop_move(())?.into();
         self.is_moving = false;
         result
@@ -259,8 +285,32 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
     }
 
     fn read_state(&mut self) -> RobotResult<Self::State> {
-        let state = self.robot_impl.robot_state.read().unwrap();
-        Ok((*state).into())
+        let (state, _, _) = self.robot_impl.recv_state()?;
+        Ok(state.into())
+    }
+}
+
+impl<T: FrankaType> ControlObservation for FrankaRobot<T> {
+    fn before<H>(&mut self, observer: H) -> &mut Self
+    where
+        H: FnMut(&Self::State, Duration) + Send + 'static,
+    {
+        self.before_observers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(Box::new(observer));
+        self
+    }
+
+    fn after<H>(&mut self, observer: H) -> &mut Self
+    where
+        H: FnMut(&Self::State, Duration) + Send + 'static,
+    {
+        self.after_observers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(Box::new(observer));
+        self
     }
 }
 
@@ -269,8 +319,8 @@ where
     FrankaRobot<T>: Joints<7> + EndPoint + MoveTo<JointSpace<7>> + MoveTo<FlangeSpace>,
 {
     fn state(&mut self) -> RobotResult<ArmState<FRANKA_DOF>> {
-        let state = self.robot_impl.robot_state.read().unwrap();
-        Ok((*state).into())
+        let (state, _, _) = self.robot_impl.recv_state()?;
+        Ok(state.into())
     }
     fn set_load(&mut self, load: LoadState) -> RobotResult<()> {
         self.robot_impl._set_load(load.into()).map(|_| ())
@@ -385,13 +435,8 @@ where
     Self: Joints<7>,
 {
     fn move_to(&mut self, target: [f64; FRANKA_DOF]) -> RobotResult<()> {
-        self.is_moving = true;
-        self.robot_impl._move(MotionType::Joint(target).into())?;
-        sleep(Duration::from_millis(2));
-
-        let state = self.robot_impl.robot_state.read().unwrap();
+        let (state, _, _) = self.robot_impl.recv_state()?;
         let joint = state.q_d;
-        drop(state);
         let target = match self.coord.get() {
             Coord::Relative => {
                 let mut result = [0.0; FRANKA_DOF];
@@ -409,16 +454,54 @@ where
         // let path_generate = path_generate::joint_trapezoid(&joint, &target, v_max, a_max);
 
         let mut duration = Duration::from_millis(0);
-        self.robot_impl.command_handle.set_closure(move |_, d| {
+        <Self as Control>::control_with::<JointPositionControl<7>, _>(self, move |_, d| {
             duration += d;
-            (MotionType::Joint(path_generate(duration)), duration > t_max).into()
-        });
-        Ok(())
+            (path_generate(duration), duration > t_max)
+        })
     }
 
-    fn move_to_sync(&mut self, target: [f64; FRANKA_DOF]) -> RobotResult<()> {
-        <Self as MoveTo<JointSpace<7>>>::move_to(self, target)?;
-        self.waiting_for_finish()
+    fn move_to_async(
+        &mut self,
+        target: [f64; FRANKA_DOF],
+    ) -> impl std::future::Future<Output = RobotResult<()>> {
+        async move {
+            let state = crate::realtime::tokio_udp::recv_state(&mut self.robot_impl).await?;
+            let joint = state.q_d;
+            let target = match self.coord.get() {
+                Coord::Relative => {
+                    let mut result = [0.0; FRANKA_DOF];
+                    for i in 0..FRANKA_DOF {
+                        result[i] = joint[i] + target[i];
+                    }
+                    result
+                }
+                _ => target,
+            };
+
+            let (v_max, a_max, j_max) =
+                (self.max_vel.get(), self.max_acc.get(), self.max_jerk.get());
+            let (path_generate, t_max) =
+                path_generate::joint_s_curve(&joint, &target, v_max, a_max, j_max);
+
+            let duration = std::cell::Cell::new(Duration::from_millis(0));
+            self.is_moving = true;
+            let result = crate::realtime::tokio_udp::control_async(
+                &mut self.robot_impl,
+                MotionType::Joint(target).into(),
+                async move |_, d| {
+                    let next_duration = duration.get() + d;
+                    duration.set(next_duration);
+                    (
+                        MotionType::Joint(path_generate(next_duration)),
+                        next_duration > t_max,
+                    )
+                        .into()
+                },
+            )
+            .await;
+            self.is_moving = false;
+            result
+        }
     }
 }
 
@@ -427,14 +510,8 @@ where
     Self: EndPoint,
 {
     fn move_to(&mut self, target: Pose) -> RobotResult<()> {
-        self.is_moving = true;
-        self.robot_impl
-            ._move(MotionType::<7>::Cartesian(target).into())?;
-        sleep(Duration::from_millis(1));
-
-        let state = self.robot_impl.robot_state.read().unwrap();
+        let (state, _, _) = self.robot_impl.recv_state()?;
         let pose: Pose = state.O_T_EE.into();
-        drop(state);
 
         let target = match self.coord.get() {
             Coord::Relative => pose * target,
@@ -447,20 +524,49 @@ where
             cartesian_quat_simple_4th_curve(pose.quat(), target.quat(), *v_max, *a_max);
 
         let mut duration = Duration::from_millis(0);
-        self.robot_impl.command_handle.set_closure(move |_, d| {
+        <Self as Control>::control_with::<CartesianPoseControl<7>, _>(self, move |_, d| {
             duration += d;
-            (
-                MotionType::Cartesian(path_generate(duration).into()),
-                duration > t_max,
-            )
-                .into()
-        });
-        Ok(())
+            (path_generate(duration).into(), duration > t_max)
+        })
     }
 
-    fn move_to_sync(&mut self, target: Pose) -> RobotResult<()> {
-        <Self as MoveTo<FlangeSpace>>::move_to(self, target)?;
-        self.waiting_for_finish()
+    fn move_to_async(
+        &mut self,
+        target: Pose,
+    ) -> impl std::future::Future<Output = RobotResult<()>> {
+        async move {
+            let state = crate::realtime::tokio_udp::recv_state(&mut self.robot_impl).await?;
+            let pose: Pose = state.O_T_EE.into();
+
+            let target = match self.coord.get() {
+                Coord::Relative => pose * target,
+                &Coord::Inertial => Pose::Position(pose.position()) * target,
+                _ => target,
+            };
+
+            let (v_max, a_max) = (self.max_cartesian_vel.get(), self.max_cartesian_acc.get());
+            let (path_generate, t_max) =
+                cartesian_quat_simple_4th_curve(pose.quat(), target.quat(), *v_max, *a_max);
+
+            let duration = std::cell::Cell::new(Duration::from_millis(0));
+            self.is_moving = true;
+            let result = crate::realtime::tokio_udp::control_async(
+                &mut self.robot_impl,
+                MotionType::<FRANKA_DOF>::Cartesian(target).into(),
+                async move |_, d| {
+                    let next_duration = duration.get() + d;
+                    duration.set(next_duration);
+                    (
+                        MotionType::Cartesian(path_generate(next_duration).into()),
+                        next_duration > t_max,
+                    )
+                        .into()
+                },
+            )
+            .await;
+            self.is_moving = false;
+            result
+        }
     }
 }
 
@@ -473,27 +579,20 @@ where
             return Ok(());
         }
 
-        self.is_moving = true;
-        <Self as MoveTo<JointSpace<7>>>::move_to(self, path[0])?;
-        let last = MotionType::Joint(*path.last().unwrap());
+        let last = *path.last().unwrap();
         let mut path = path.into_iter();
-        self.robot_impl._move(last.into())?;
-        sleep(Duration::from_millis(2));
 
-        self.robot_impl.command_handle.set_closure(move |_, _| {
+        <Self as Control>::control_with::<JointPositionControl<7>, _>(self, move |_, _| {
             if let Some(next) = path.next() {
-                (MotionType::Joint(next), false)
+                (next, false)
             } else {
                 (last, true)
             }
-            .into()
-        });
-        Ok(())
+        })
     }
 
     fn move_traj_sync(&mut self, path: Vec<[f64; FRANKA_DOF]>) -> RobotResult<()> {
-        <Self as MoveTraj<JointSpace<7>>>::move_traj(self, path)?;
-        self.waiting_for_finish()
+        <Self as MoveTraj<JointSpace<7>>>::move_traj(self, path)
     }
 
     fn move_path<F>(&mut self, path: F) -> RobotResult<()>
@@ -531,30 +630,50 @@ where
 
     fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
     where
-        F: FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool) + Send + 'static,
+        F: FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool),
     {
-        self.robot_impl
-            .command_handle
-            .set_closure(move |state, duration| {
-                let arm: ArmState<FRANKA_DOF> = (*state).into();
-                let (joint, done) = closure(arm.joint, duration);
-                (MotionType::Joint(joint), done).into()
-            });
         self.is_moving = true;
-        // The command value only selects Franka's joint-position generator.
-        // Per-cycle targets come from the closure and are rate-limited by
-        // `CommandFilter` before they leave the UDP command loop.
         let mode_selector = self.robot_impl.robot_state.read().unwrap().q_d;
-        if let Err(err) = self
-            .robot_impl
-            ._move(MotionType::Joint(mode_selector).into())
-        {
-            self.robot_impl.command_handle.remove_closure();
-            self.is_moving = false;
-            return Err(err);
-        }
-        sleep(Duration::from_millis(2));
-        Ok(())
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::std_udp::control(
+            &mut self.robot_impl,
+            MotionType::Joint(mode_selector).into(),
+            move |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let arm: ArmState<FRANKA_DOF> = state.into();
+                let (joint, done) = closure(arm.joint, duration);
+                notify_control_observers(&after_observers, &robot_state, duration);
+                (MotionType::Joint(joint), done).into()
+            },
+        );
+        self.is_moving = false;
+        result
+    }
+
+    fn control_with_async<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: async FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool),
+    {
+        self.is_moving = true;
+        let mode_selector = self.robot_impl.robot_state.read().unwrap().q_d;
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::tokio_udp::block_on_control_async(
+            &mut self.robot_impl,
+            MotionType::Joint(mode_selector).into(),
+            async |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let arm: ArmState<FRANKA_DOF> = state.into();
+                let (joint, done) = closure(arm.joint, duration).await;
+                notify_control_observers(&after_observers, &robot_state, duration);
+                (MotionType::Joint(joint), done).into()
+            },
+        );
+        self.is_moving = false;
+        result
     }
 }
 
@@ -565,26 +684,48 @@ impl<T: FrankaType> ControlWith<JointVelocityControl<7>> for FrankaRobot<T> {
 
     fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
     where
-        F: FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool) + Send + 'static,
+        F: FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool),
     {
         self.is_moving = true;
-        self.robot_impl
-            .command_handle
-            .set_closure(move |state, duration| {
-                let arm: ArmState<FRANKA_DOF> = (*state).into();
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::std_udp::control(
+            &mut self.robot_impl,
+            MotionType::JointVel([0.0; FRANKA_DOF]).into(),
+            move |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let arm: ArmState<FRANKA_DOF> = state.into();
                 let (velocity, done) = closure(arm.joint, duration);
+                notify_control_observers(&after_observers, &robot_state, duration);
                 (MotionType::JointVel(velocity), done).into()
-            });
-        if let Err(err) = self
-            .robot_impl
-            ._move(MotionType::JointVel([0.0; FRANKA_DOF]).into())
-        {
-            self.robot_impl.command_handle.remove_closure();
-            self.is_moving = false;
-            return Err(err);
-        }
-        sleep(Duration::from_millis(2));
-        Ok(())
+            },
+        );
+        self.is_moving = false;
+        result
+    }
+
+    fn control_with_async<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: async FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool),
+    {
+        self.is_moving = true;
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::tokio_udp::block_on_control_async(
+            &mut self.robot_impl,
+            MotionType::JointVel([0.0; FRANKA_DOF]).into(),
+            async |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let arm: ArmState<FRANKA_DOF> = state.into();
+                let (velocity, done) = closure(arm.joint, duration).await;
+                notify_control_observers(&after_observers, &robot_state, duration);
+                (MotionType::JointVel(velocity), done).into()
+            },
+        );
+        self.is_moving = false;
+        result
     }
 }
 
@@ -595,25 +736,46 @@ impl<T: FrankaType> ControlWith<CartesianVelocityControl<7>> for FrankaRobot<T> 
 
     fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
     where
-        F: FnMut(ArmState<FRANKA_DOF>, Duration) -> ([f64; 6], bool) + Send + 'static,
+        F: FnMut(ArmState<FRANKA_DOF>, Duration) -> ([f64; 6], bool),
     {
         self.is_moving = true;
-        self.robot_impl
-            .command_handle
-            .set_closure(move |state, duration| {
-                let (velocity, done) = closure((*state).into(), duration);
-                (MotionType::CartesianVel(velocity), done).into()
-            });
-        if let Err(err) = self
-            .robot_impl
-            ._move(MotionType::<FRANKA_DOF>::CartesianVel([0.0; 6]).into())
-        {
-            self.robot_impl.command_handle.remove_closure();
-            self.is_moving = false;
-            return Err(err);
-        }
-        sleep(Duration::from_millis(2));
-        Ok(())
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::std_udp::control(
+            &mut self.robot_impl,
+            MotionType::<FRANKA_DOF>::CartesianVel([0.0; 6]).into(),
+            move |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let (velocity, done) = closure(state.into(), duration);
+                notify_control_observers(&after_observers, &robot_state, duration);
+                (MotionType::<FRANKA_DOF>::CartesianVel(velocity), done).into()
+            },
+        );
+        self.is_moving = false;
+        result
+    }
+
+    fn control_with_async<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: async FnMut(ArmState<FRANKA_DOF>, Duration) -> ([f64; 6], bool),
+    {
+        self.is_moving = true;
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::tokio_udp::block_on_control_async(
+            &mut self.robot_impl,
+            MotionType::<FRANKA_DOF>::CartesianVel([0.0; 6]).into(),
+            async |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let (velocity, done) = closure(state.into(), duration).await;
+                notify_control_observers(&after_observers, &robot_state, duration);
+                (MotionType::<FRANKA_DOF>::CartesianVel(velocity), done).into()
+            },
+        );
+        self.is_moving = false;
+        result
     }
 }
 
@@ -630,28 +792,48 @@ impl<T: FrankaType> ControlWith<CartesianPoseControl<7>> for FrankaRobot<T> {
 
     fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
     where
-        F: FnMut(ArmState<FRANKA_DOF>, Duration) -> (Pose, bool) + Send + 'static,
+        F: FnMut(ArmState<FRANKA_DOF>, Duration) -> (Pose, bool),
     {
-        self.robot_impl
-            .command_handle
-            .set_closure(move |state, duration| {
-                let (pose, done) = closure((*state).into(), duration);
-                (MotionType::Cartesian(pose), done).into()
-            });
         self.is_moving = true;
-        // The command value only selects Franka's Cartesian pose generator.
-        // The closure supplies the actual per-cycle pose command.
         let mode_selector = Pose::Homo(self.robot_impl.robot_state.read().unwrap().O_T_EE);
-        if let Err(err) = self
-            .robot_impl
-            ._move(MotionType::<FRANKA_DOF>::Cartesian(mode_selector).into())
-        {
-            self.robot_impl.command_handle.remove_closure();
-            self.is_moving = false;
-            return Err(err);
-        }
-        sleep(Duration::from_millis(2));
-        Ok(())
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::std_udp::control(
+            &mut self.robot_impl,
+            MotionType::<FRANKA_DOF>::Cartesian(mode_selector).into(),
+            move |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let (pose, done) = closure(state.into(), duration);
+                notify_control_observers(&after_observers, &robot_state, duration);
+                (MotionType::<FRANKA_DOF>::Cartesian(pose), done).into()
+            },
+        );
+        self.is_moving = false;
+        result
+    }
+
+    fn control_with_async<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: async FnMut(ArmState<FRANKA_DOF>, Duration) -> (Pose, bool),
+    {
+        self.is_moving = true;
+        let mode_selector = Pose::Homo(self.robot_impl.robot_state.read().unwrap().O_T_EE);
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::tokio_udp::block_on_control_async(
+            &mut self.robot_impl,
+            MotionType::<FRANKA_DOF>::Cartesian(mode_selector).into(),
+            async |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let (pose, done) = closure(state.into(), duration).await;
+                notify_control_observers(&after_observers, &robot_state, duration);
+                (MotionType::<FRANKA_DOF>::Cartesian(pose), done).into()
+            },
+        );
+        self.is_moving = false;
+        result
     }
 }
 
@@ -667,26 +849,48 @@ impl<T: FrankaType> ControlWith<TorqueControl<7>> for FrankaRobot<T> {
 
     fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
     where
-        F: FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool) + Send + 'static,
+        F: FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool),
     {
         self.is_moving = true;
-        self.robot_impl
-            .command_handle
-            .set_closure(move |state, duration| {
-                let arm: ArmState<FRANKA_DOF> = (*state).into();
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::std_udp::control(
+            &mut self.robot_impl,
+            ControlType::Torque([0.0; FRANKA_DOF]).into(),
+            move |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let arm: ArmState<FRANKA_DOF> = state.into();
                 let (torque, done) = closure(arm.joint, duration);
+                notify_control_observers(&after_observers, &robot_state, duration);
                 (ControlType::Torque(torque), done).into()
-            });
-        if let Err(err) = self
-            .robot_impl
-            ._move(ControlType::Torque([0.0; FRANKA_DOF]).into())
-        {
-            self.robot_impl.command_handle.remove_closure();
-            self.is_moving = false;
-            return Err(err);
-        }
-        sleep(Duration::from_millis(2));
-        Ok(())
+            },
+        );
+        self.is_moving = false;
+        result
+    }
+
+    fn control_with_async<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: async FnMut(JointState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool),
+    {
+        self.is_moving = true;
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::tokio_udp::block_on_control_async(
+            &mut self.robot_impl,
+            ControlType::Torque([0.0; FRANKA_DOF]).into(),
+            async |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let arm: ArmState<FRANKA_DOF> = state.into();
+                let (torque, done) = closure(arm.joint, duration).await;
+                notify_control_observers(&after_observers, &robot_state, duration);
+                (ControlType::Torque(torque), done).into()
+            },
+        );
+        self.is_moving = false;
+        result
     }
 }
 
@@ -703,24 +907,45 @@ impl<T: FrankaType> ControlWith<ArmTorqueControl<7>> for FrankaRobot<T> {
 
     fn control_with<F>(&mut self, mut closure: F) -> RobotResult<()>
     where
-        F: FnMut(ArmState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool) + Send + 'static,
+        F: FnMut(ArmState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool),
     {
         self.is_moving = true;
-        self.robot_impl
-            .command_handle
-            .set_closure(move |state, duration| {
-                let (torque, done) = closure((*state).into(), duration);
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::std_udp::control(
+            &mut self.robot_impl,
+            ControlType::Torque([0.0; FRANKA_DOF]).into(),
+            move |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let (torque, done) = closure(state.into(), duration);
+                notify_control_observers(&after_observers, &robot_state, duration);
                 (ControlType::Torque(torque), done).into()
-            });
-        if let Err(err) = self
-            .robot_impl
-            ._move(ControlType::Torque([0.0; FRANKA_DOF]).into())
-        {
-            self.robot_impl.command_handle.remove_closure();
-            self.is_moving = false;
-            return Err(err);
-        }
-        sleep(Duration::from_millis(2));
-        Ok(())
+            },
+        );
+        self.is_moving = false;
+        result
+    }
+
+    fn control_with_async<F>(&mut self, mut closure: F) -> RobotResult<()>
+    where
+        F: async FnMut(ArmState<FRANKA_DOF>, Duration) -> ([f64; FRANKA_DOF], bool),
+    {
+        self.is_moving = true;
+        let before_observers = self.before_observers.clone();
+        let after_observers = self.after_observers.clone();
+        let result = crate::realtime::tokio_udp::block_on_control_async(
+            &mut self.robot_impl,
+            ControlType::Torque([0.0; FRANKA_DOF]).into(),
+            async |state, duration| {
+                let robot_state: RobotState = state.into();
+                notify_control_observers(&before_observers, &robot_state, duration);
+                let (torque, done) = closure(state.into(), duration).await;
+                notify_control_observers(&after_observers, &robot_state, duration);
+                (ControlType::Torque(torque), done).into()
+            },
+        );
+        self.is_moving = false;
+        result
     }
 }

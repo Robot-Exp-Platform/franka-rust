@@ -1,10 +1,10 @@
 #![feature(adt_const_params)]
 #![allow(incomplete_features)]
+#![feature(async_trait_bounds)]
 #![feature(generic_const_exprs)]
 
 mod gripper;
 // mod logger;
-mod command_handle;
 #[cfg(feature = "ffi")]
 pub mod ffi;
 pub mod franka;
@@ -12,6 +12,7 @@ pub mod model;
 mod network;
 pub mod once;
 mod params;
+mod realtime;
 mod robot;
 mod robot_impl;
 pub mod types;

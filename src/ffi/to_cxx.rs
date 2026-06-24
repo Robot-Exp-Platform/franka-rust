@@ -141,7 +141,7 @@ macro_rules! impl_franka_cxx_robot {
             }
 
             fn move_joint_sync(&mut self, target: [f64; 7]) -> RobotResult<()> {
-                <$inner as MoveTo<JointSpace<7>>>::move_to_sync(&mut self.0, target)
+                <$inner as MoveTo<JointSpace<7>>>::move_to(&mut self.0, target)
             }
 
             fn move_flange(&mut self, target: CxxPoseData) -> RobotResult<()> {
@@ -149,7 +149,7 @@ macro_rules! impl_franka_cxx_robot {
             }
 
             fn move_flange_sync(&mut self, target: CxxPoseData) -> RobotResult<()> {
-                <$inner as MoveTo<FlangeSpace>>::move_to_sync(&mut self.0, cxx_to_pose(target)?)
+                <$inner as MoveTo<FlangeSpace>>::move_to(&mut self.0, cxx_to_pose(target)?)
             }
         }
     };
