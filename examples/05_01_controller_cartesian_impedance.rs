@@ -1,11 +1,11 @@
-﻿use std::time::Duration;
+use std::time::Duration;
 
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{RobotResult, behavior::*, controller::cartesian_impedance_session};
+use robot_behavior::{RobotResult, behavior::*, controller::cartesian_impedance_control};
 
-#[tokio::main]
-async fn main() -> RobotResult<()> {
+fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
+
     robot.set_default_behavior()?;
     robot.set_collision_behavior(SetCollisionBehaviorData {
         lower_torque_thresholds_acceleration: [100.0; 7],
@@ -19,9 +19,10 @@ async fn main() -> RobotResult<()> {
     })?;
 
     let model = robot.model()?;
-    let (controller, handle) = cartesian_impedance_session::<_, 7>(
+    let target = robot.state()?.flange.meas.pose.unwrap_or_default();
+    let mut controller = cartesian_impedance_control(
         model,
-        None,
+        target,
         [150.0, 150.0, 150.0, 10.0, 10.0, 10.0],
         [
             2.0 * 150.0_f64.sqrt(),
@@ -32,11 +33,10 @@ async fn main() -> RobotResult<()> {
             2.0 * 10.0_f64.sqrt(),
         ],
     );
-    robot.control_with::<ArmTorqueControl<7>, _>(controller)?;
-
-    tokio::time::sleep(Duration::from_secs(10)).await;
-    handle.finish();
-    robot.waiting_for_finish()?;
-
-    Ok(())
+    let mut elapsed = Duration::ZERO;
+    robot.control_with::<ArmTorqueControl<7>, _>(move |state, dt| {
+        elapsed += dt;
+        let (tau, _) = controller(state, dt);
+        (tau, elapsed >= Duration::from_secs(5))
+    })
 }
