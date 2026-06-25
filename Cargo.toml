@@ -50,5 +50,10 @@ default = []
 debug = []
 ffi = []
 conservative_constraint = []
+# Select the FCI protocol version and the matching `Move::Status` layout.
+# Off (default): protocol version 5 (libfranka 0.9.2), 10-variant `MoveStatus`.
+# On (`fci_v8`): protocol version 8 (libfranka 0.14.0), which inserts two
+# safety-function variants at indices 3-4, giving a 12-variant `MoveStatus`.
+fci_v8 = []
 to_py = ["pyo3", "ffi", "robot_behavior/to_py"]
 to_cxx = ["cxx", "ffi", "robot_behavior/to_cxx"]

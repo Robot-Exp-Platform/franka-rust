@@ -68,7 +68,7 @@ where
             before_observers: control_observers(),
             after_observers: control_observers(),
             coord: OverrideOnce::new(Coord::OCS),
-            scale: OverrideOnce::new(1.0),
+            scale: OverrideOnce::new(0.1),
             max_vel: OverrideOnce::new(Self::JOINT_VEL_BOUND),
             max_acc: OverrideOnce::new(Self::JOINT_ACC_BOUND),
             max_jerk: OverrideOnce::new(Self::JOINT_JERK_BOUND),
@@ -84,12 +84,12 @@ where
         self.robot_impl = FrankaRobotImpl::new(ip);
         self.is_moving = false;
         self.coord = OverrideOnce::new(Coord::OCS);
-        self.scale = OverrideOnce::new(1.0);
-        self.max_vel = OverrideOnce::new(Self::JOINT_VEL_BOUND);
-        self.max_acc = OverrideOnce::new(Self::JOINT_ACC_BOUND);
-        self.max_jerk = OverrideOnce::new(Self::JOINT_JERK_BOUND);
-        self.max_cartesian_vel = OverrideOnce::new(Self::CARTESIAN_VEL_BOUND);
-        self.max_cartesian_acc = OverrideOnce::new(Self::CARTESIAN_ACC_BOUND);
+        self.scale = OverrideOnce::new(0.1);
+        self.max_vel = OverrideOnce::new(Self::JOINT_VEL_BOUND.map(|x| x * 0.1));
+        self.max_acc = OverrideOnce::new(Self::JOINT_ACC_BOUND.map(|x| x * 0.1));
+        self.max_jerk = OverrideOnce::new(Self::JOINT_JERK_BOUND.map(|x| x * 0.1));
+        self.max_cartesian_vel = OverrideOnce::new(Self::CARTESIAN_VEL_BOUND * 0.1);
+        self.max_cartesian_acc = OverrideOnce::new(Self::CARTESIAN_ACC_BOUND * 0.1);
 
         let _ = self.set_scale(0.1);
     }
@@ -430,6 +430,24 @@ where
     }
 }
 
+const PID_K: [f64; 7] = [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 300.0];
+const PID_D: [f64; 7] = [50.0, 50.0, 50.0, 50.0, 30.0, 25.0, 6.0];
+const PID_I: [f64; 7] = [6.0, 6.0, 6.0, 6.0, 2.0, 1.5, 500.01];
+
+fn sample_joint_trajectory<const N: usize>(
+    path: impl Fn(Duration) -> [f64; N],
+    t_max: Duration,
+) -> Vec<[f64; N]> {
+    const DT: Duration = Duration::from_millis(1);
+    let steps = (t_max.as_secs_f64() / DT.as_secs_f64()).ceil() as usize;
+    let mut traj = Vec::with_capacity(steps + 2);
+    for i in 0..=steps {
+        traj.push(path((DT * i as u32).min(t_max)));
+    }
+    traj.push(path(t_max));
+    traj
+}
+
 impl<T: FrankaType> MoveTo<JointSpace<7>> for FrankaRobot<T>
 where
     Self: Joints<7>,
@@ -449,15 +467,21 @@ where
         };
 
         let (v_max, a_max, j_max) = (self.max_vel.get(), self.max_acc.get(), self.max_jerk.get());
+
+        println!(
+            "Moving to joint target: {:?}, with v_max: {:?}, a_max: {:?}, j_max: {:?}",
+            target, v_max, a_max, j_max
+        );
         let (path_generate, t_max) =
             path_generate::joint_s_curve(&joint, &target, v_max, a_max, j_max);
-        // let path_generate = path_generate::joint_trapezoid(&joint, &target, v_max, a_max);
 
-        let mut duration = Duration::from_millis(0);
-        <Self as Control>::control_with::<JointPositionControl<7>, _>(self, move |_, d| {
-            duration += d;
-            (path_generate(duration), duration > t_max)
-        })
+        println!("t_max: {:?}", t_max);
+
+        let traj = sample_joint_trajectory(path_generate.as_ref(), t_max);
+        let controller =
+            robot_behavior::controller::joint_traj_pid_control(traj, PID_K, PID_I, PID_D);
+
+        <Self as Control>::control_with::<TorqueControl<7>, _>(self, controller)
     }
 
     fn move_to_async(
@@ -483,19 +507,20 @@ where
             let (path_generate, t_max) =
                 path_generate::joint_s_curve(&joint, &target, v_max, a_max, j_max);
 
-            let duration = std::cell::Cell::new(Duration::from_millis(0));
+            // Same torque-space realisation as the synchronous path: pre-sample
+            // the trajectory and run the PID controller per cycle.
+            let traj = sample_joint_trajectory(path_generate.as_ref(), t_max);
+            let mut controller =
+                robot_behavior::controller::joint_traj_pid_control(traj, PID_K, PID_I, PID_D);
+
             self.is_moving = true;
             let result = crate::realtime::tokio_udp::control_async(
                 &mut self.robot_impl,
-                MotionType::Joint(target).into(),
-                async move |_, d| {
-                    let next_duration = duration.get() + d;
-                    duration.set(next_duration);
-                    (
-                        MotionType::Joint(path_generate(next_duration)),
-                        next_duration > t_max,
-                    )
-                        .into()
+                ControlType::Torque([0.0; FRANKA_DOF]).into(),
+                async move |state, d| {
+                    let arm: ArmState<FRANKA_DOF> = state.into();
+                    let (torque, done) = controller(arm.joint, d);
+                    (ControlType::Torque(torque), done).into()
                 },
             )
             .await;

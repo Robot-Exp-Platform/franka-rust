@@ -162,6 +162,36 @@ pub struct MoveData {
     pub maximum_goal_deviation: MoveDeviation,
 }
 
+// NOTE: This enum must match the FCI protocol version negotiated in the
+// Connect command (`FRANKA_ROBOT_VERSION`). The layout is selected by the
+// `fci_v8` cargo feature so the two always stay in sync:
+//
+// * default (feature off): protocol version 5 (libfranka 0.9.2), whose
+//   `research_interface::robot::Move::Status` has 10 variants.
+// * `fci_v8`: protocol version 8 (libfranka 0.14.0), which inserts
+//   `PreemptedDueToActivatedSafetyFunctions` and
+//   `CommandRejectedDueToActivatedSafetyFunctions` at indices 3-4 and shifts the
+//   remaining variants by two, giving a 12-variant layout.
+//
+// Picking the wrong layout mis-decodes status bytes, e.g. byte 6
+// (`kReflexAborted` under v5) would be read as `StartAtSingularPoseRejected`.
+#[cfg(not(feature = "fci_v8"))]
+#[derive(Debug, Deserialize_repr, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum MoveStatus {
+    Success,
+    MotionStarted,
+    Preempted,
+    CommandNotPossibleRejected,
+    StartAtSingularPoseRejected,
+    InvalidArgumentRejected,
+    ReflexAborted,
+    EmergencyAborted,
+    InputErrorAborted,
+    Aborted,
+}
+
+#[cfg(feature = "fci_v8")]
 #[derive(Debug, Deserialize_repr, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum MoveStatus {

@@ -29,7 +29,7 @@ where
     let socket = UdpSocket::from_std(socket)?;
 
     robot._move(mode)?;
-    let session_result = run_udp_loop(robot, &socket, async |state, duration| {
+    let session_result = run_udp_loop(robot, &socket, mode, async |state, duration| {
         command(state, duration).await
     })
     .await;
@@ -75,12 +75,14 @@ pub(crate) async fn recv_state(robot: &mut FrankaRobotImpl) -> RobotResult<Robot
 async fn run_udp_loop<F>(
     robot: &mut FrankaRobotImpl,
     socket: &UdpSocket,
+    mode: MoveData,
     mut command: F,
 ) -> RobotResult<()>
 where
     F: async FnMut(RobotStateInter, Duration) -> RobotCommand,
 {
     let mut buffer = vec![0_u8; std::mem::size_of::<RobotStateInter>() * 5];
+    let mut started = false;
 
     loop {
         let (size, addr) = socket.recv_from(&mut buffer).await?;
@@ -91,6 +93,14 @@ where
         {
             let mut latest = robot.robot_state.write().unwrap();
             *latest = state;
+        }
+
+        if !started {
+            if FrankaRobotImpl::motion_started(&state, &mode) {
+                started = true;
+            } else {
+                continue;
+            }
         }
 
         let mut next = command(state, Duration::from_millis(1))

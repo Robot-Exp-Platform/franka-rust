@@ -117,6 +117,22 @@ impl FrankaRobotImpl {
         Ok(())
     }
 
+    pub(crate) fn motion_started(state: &RobotStateInter, mode: &MoveData) -> bool {
+        let expected_motion = match mode.motion_generator_mode {
+            MoveMotionGeneratorMode::JointPosition => MotionGeneratorMode::JointPosition,
+            MoveMotionGeneratorMode::JointVelocity => MotionGeneratorMode::JointVelocity,
+            MoveMotionGeneratorMode::CartesianPosition => MotionGeneratorMode::CartesianPosition,
+            MoveMotionGeneratorMode::CartesianVelocity => MotionGeneratorMode::CartesianVelocity,
+        };
+        let expected_controller = match mode.controller_mode {
+            MoveControllerMode::JointImpedance => ControllerMode::JointImpedance,
+            MoveControllerMode::CartesianImpedance => ControllerMode::CartesianImpedance,
+            MoveControllerMode::ExternalController => ControllerMode::ExternalController,
+        };
+        state.motion_generator_mode == expected_motion
+            && state.controller_mode == expected_controller
+    }
+
     pub fn is_moving(&mut self) -> RobotResult<bool> {
         let _ = self.recv_state();
         let state = self.robot_state.read().unwrap();
