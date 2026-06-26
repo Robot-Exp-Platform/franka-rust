@@ -101,20 +101,23 @@ impl FrankaRobotImpl {
         Ok((state, addr, start.elapsed()))
     }
 
-    pub(crate) fn send_command(
+    pub(crate) fn send_prepared_command(
         &mut self,
-        state: &RobotStateInter,
         addr: SocketAddr,
         command: RobotCommand,
     ) -> RobotResult<()> {
-        use crate::types::robot_types::{CommandFilter, CommandIDConfig};
-
-        let mut command = command.filter(state);
-        command.set_command_id(state.command_id());
         let data = bincode::serialize(&command)
             .map_err(|err| RobotException::CommandException(err.to_string()))?;
         self.udp_socket.send_to(&data, addr)?;
         Ok(())
+    }
+
+    pub(crate) fn prepare_command(state: &RobotStateInter, command: RobotCommand) -> RobotCommand {
+        use crate::types::robot_types::{CommandFilter, CommandIDConfig};
+
+        let mut command = command.filter(state);
+        command.set_command_id(state.command_id());
+        command
     }
 
     pub(crate) fn motion_started(state: &RobotStateInter, mode: &MoveData) -> bool {

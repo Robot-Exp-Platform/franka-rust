@@ -4,11 +4,7 @@ use tokio::{net::UdpSocket, runtime::Builder};
 
 use crate::{
     robot_impl::FrankaRobotImpl,
-    types::{
-        robot_command::RobotCommand,
-        robot_state::RobotStateInter,
-        robot_types::{CommandFilter, CommandIDConfig, MoveData},
-    },
+    types::{robot_command::RobotCommand, robot_state::RobotStateInter, robot_types::MoveData},
 };
 
 /// Async FCI realtime session whose per-cycle controller is async.
@@ -103,10 +99,10 @@ where
             }
         }
 
-        let mut next = command(state, Duration::from_millis(1))
-            .await
-            .filter(&state);
-        next.set_command_id(state.command_id());
+        let next = FrankaRobotImpl::prepare_command(
+            &state,
+            command(state, Duration::from_millis(1)).await,
+        );
         let done = next.motion.motion_generation_finished;
         let data = bincode::serialize(&next)
             .map_err(|err| RobotException::CommandException(err.to_string()))?;

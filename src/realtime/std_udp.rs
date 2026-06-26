@@ -35,46 +35,10 @@ where
             }
         }
 
-        let next = command(state, Duration::from_millis(1));
+        let next =
+            FrankaRobotImpl::prepare_command(&state, command(state, Duration::from_millis(1)));
         let done = next.motion.motion_generation_finished;
-        if let Err(err) = robot.send_command(&state, addr, next) {
-            break Err(err);
-        }
-        if done {
-            break robot.finish_current_motion();
-        }
-    };
-
-    if session_result.is_err() {
-        let _ = robot._stop_move(());
-    }
-
-    session_result
-}
-
-fn run_udp_loop<F>(robot: &mut FrankaRobotImpl, mode: MoveData, mut command: F) -> RobotResult<()>
-where
-    F: FnMut(RobotStateInter, Duration) -> RobotCommand,
-{
-    robot._move(mode)?;
-    let mut started = false;
-    let session_result = loop {
-        let (state, addr, _) = match robot.recv_state() {
-            Ok(result) => result,
-            Err(err) => break Err(err),
-        };
-
-        if !started {
-            if FrankaRobotImpl::motion_started(&state, &mode) {
-                started = true;
-            } else {
-                continue;
-            }
-        }
-
-        let next = command(state, Duration::from_millis(1));
-        let done = next.motion.motion_generation_finished;
-        if let Err(err) = robot.send_command(&state, addr, next) {
+        if let Err(err) = robot.send_prepared_command(addr, next) {
             break Err(err);
         }
         if done {

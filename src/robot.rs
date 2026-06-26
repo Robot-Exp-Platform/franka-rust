@@ -468,20 +468,19 @@ where
 
         let (v_max, a_max, j_max) = (self.max_vel.get(), self.max_acc.get(), self.max_jerk.get());
 
-        println!(
-            "Moving to joint target: {:?}, with v_max: {:?}, a_max: {:?}, j_max: {:?}",
-            target, v_max, a_max, j_max
-        );
         let (path_generate, t_max) =
             path_generate::joint_s_curve(&joint, &target, v_max, a_max, j_max);
 
-        println!("t_max: {:?}", t_max);
+        <Self as Control>::control_with::<JointPositionControl<7>, _>(self, move |_, d| {
+            let next = path_generate(d);
+            (next, d > t_max)
+        })
 
-        let traj = sample_joint_trajectory(path_generate.as_ref(), t_max);
-        let controller =
-            robot_behavior::controller::joint_traj_pid_control(traj, PID_K, PID_I, PID_D);
+        // let traj = sample_joint_trajectory(path_generate.as_ref(), t_max);
+        // let controller =
+        //     robot_behavior::controller::joint_traj_pid_control(traj, PID_K, PID_I, PID_D);
 
-        <Self as Control>::control_with::<TorqueControl<7>, _>(self, controller)
+        // <Self as Control>::control_with::<TorqueControl<7>, _>(self, controller)
     }
 
     fn move_to_async(
