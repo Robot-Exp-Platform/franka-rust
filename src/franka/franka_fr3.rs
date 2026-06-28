@@ -71,3 +71,5 @@ impl ArmForwardKinematics<FRANKA_DOF> for FrankaFR3 {
         DhParam::MDH { alpha: FRAC_PI_2, a: 0.088, theta: 0., d: 0. },
     ];
 }
+
+impl ArmInverseKinematics<FRANKA_DOF> for FrankaFR3 {}

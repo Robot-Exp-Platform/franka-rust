@@ -1,7 +1,4 @@
-use robot_behavior::{
-    utils::path_generate::{self, cartesian_quat_simple_4th_curve},
-    *,
-};
+use robot_behavior::{utils::path_generate, *};
 use std::{
     fs::File,
     io::Write,
@@ -533,11 +530,13 @@ where
 
 impl<T: FrankaType> MoveTo<FlangeSpace> for FrankaRobot<T>
 where
-    Self: EndPoint,
+    Self: EndPoint + ArmInverseKinematics<7>,
+    [(); 8]:,
 {
     fn move_to(&mut self, target: Pose) -> RobotResult<()> {
         let (state, _, _) = self.robot_impl.recv_state()?;
         let pose: Pose = state.O_T_EE.into();
+        let q_start = state.q_d;
 
         let target = match self.coord.get() {
             Coord::Relative => pose * target,
@@ -545,15 +544,17 @@ where
             _ => target,
         };
 
-        let (v_max, a_max) = (self.max_cartesian_vel.get(), self.max_cartesian_acc.get());
-        let (path_generate, t_max) =
-            cartesian_quat_simple_4th_curve(pose.quat(), target.quat(), *v_max, *a_max);
+        let traj = robot_behavior::utils::trajectory::plan_cartesian_line_traj_via_time_scaling::<
+            Self,
+            _,
+            7,
+        >(pose, target, q_start, self.get_scale(), |pose, seed| {
+            let q0 = JVec::<7>::from_row_slice(&seed);
+            let q = <Self as ArmInverseKinematics<7>>::ik_solve(&q0, &pose, Default::default());
+            Ok(q.as_slice().try_into().unwrap())
+        })?;
 
-        let mut duration = Duration::from_millis(0);
-        <Self as Control>::control_with::<CartesianPoseControl<7>, _>(self, move |_, d| {
-            duration += d;
-            (path_generate(duration).into(), duration > t_max)
-        })
+        <Self as MoveTraj<JointSpace<7>>>::move_traj(self, traj)
     }
 
     fn move_to_async(
@@ -563,6 +564,7 @@ where
         async move {
             let state = crate::realtime::tokio_udp::recv_state(&mut self.robot_impl).await?;
             let pose: Pose = state.O_T_EE.into();
+            let q_start = state.q_d;
 
             let target = match self.coord.get() {
                 Coord::Relative => pose * target,
@@ -570,23 +572,34 @@ where
                 _ => target,
             };
 
-            let (v_max, a_max) = (self.max_cartesian_vel.get(), self.max_cartesian_acc.get());
-            let (path_generate, t_max) =
-                cartesian_quat_simple_4th_curve(pose.quat(), target.quat(), *v_max, *a_max);
+            let traj =
+                robot_behavior::utils::trajectory::plan_cartesian_line_traj_via_time_scaling::<
+                    Self,
+                    _,
+                    7,
+                >(pose, target, q_start, self.get_scale(), |pose, seed| {
+                    let q0 = JVec::<7>::from_row_slice(&seed);
+                    let q =
+                        <Self as ArmInverseKinematics<7>>::ik_solve(&q0, &pose, Default::default());
+                    Ok(q.as_slice().try_into().unwrap())
+                })?;
 
-            let duration = std::cell::Cell::new(Duration::from_millis(0));
+            if traj.is_empty() {
+                return Ok(());
+            }
+
+            let last = *traj.last().unwrap();
+            let mut traj = traj.into_iter();
             self.is_moving = true;
             let result = crate::realtime::tokio_udp::control_async(
                 &mut self.robot_impl,
-                MotionType::<FRANKA_DOF>::Cartesian(target).into(),
-                async move |_, d| {
-                    let next_duration = duration.get() + d;
-                    duration.set(next_duration);
-                    (
-                        MotionType::Cartesian(path_generate(next_duration).into()),
-                        next_duration > t_max,
-                    )
-                        .into()
+                MotionType::<FRANKA_DOF>::Joint(q_start).into(),
+                async move |_, _| {
+                    if let Some(next) = traj.next() {
+                        (MotionType::Joint(next), false).into()
+                    } else {
+                        (MotionType::Joint(last), true).into()
+                    }
                 },
             )
             .await;
