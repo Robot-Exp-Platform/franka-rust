@@ -1,5 +1,6 @@
 use robot_behavior::{RobotException, RobotResult};
 use std::{
+    io::ErrorKind,
     net::{SocketAddr, UdpSocket},
     sync::{Arc, RwLock},
     thread::sleep,
@@ -89,16 +90,58 @@ impl FrankaRobotImpl {
 
     pub(crate) fn recv_state(&mut self) -> RobotResult<(RobotStateInter, SocketAddr, Duration)> {
         let mut buffer = vec![0_u8; std::mem::size_of::<RobotStateInter>() * 5];
+        self.recv_state_into(&mut buffer)
+    }
+
+    pub(crate) fn recv_state_into(
+        &mut self,
+        mut buffer: &mut [u8],
+    ) -> RobotResult<(RobotStateInter, SocketAddr, Duration)> {
         let start = Instant::now();
-        let (size, addr) = self.udp_socket.recv_from(&mut buffer)?;
-        let state: RobotStateInter = bincode::deserialize(&buffer[..size])
-            .map_err(|err| RobotException::DeserializeError(err.to_string()))?;
-        state.error_result()?;
+        let last_id = self.robot_state.read().unwrap().command_id();
+        let mut latest: Option<(RobotStateInter, SocketAddr)> = None;
+
+        self.udp_socket.set_nonblocking(true)?;
+        let drain_result: RobotResult<()> = loop {
+            match self.udp_socket.recv_from(&mut buffer) {
+                Ok((size, addr)) => {
+                    let candidate = Self::decode_state(&buffer[..size])?;
+                    if candidate.command_id() > last_id
+                        && latest.as_ref().map_or(true, |(state, _)| {
+                            candidate.command_id() > state.command_id()
+                        })
+                    {
+                        latest = Some((candidate, addr));
+                    }
+                }
+                Err(err) if err.kind() == ErrorKind::WouldBlock => break Ok(()),
+                Err(err) => break Err(err.into()),
+            }
+        };
+        self.udp_socket.set_nonblocking(false)?;
+        drain_result?;
+
+        while latest.is_none() {
+            let (size, addr) = self.udp_socket.recv_from(&mut buffer)?;
+            let candidate = Self::decode_state(&buffer[..size])?;
+            if candidate.command_id() > last_id {
+                latest = Some((candidate, addr));
+            }
+        }
+
+        let (state, latest_addr) = latest.unwrap();
         {
             let mut latest = self.robot_state.write().unwrap();
             *latest = state;
         }
-        Ok((state, addr, start.elapsed()))
+        Ok((state, latest_addr, start.elapsed()))
+    }
+
+    fn decode_state(data: &[u8]) -> RobotResult<RobotStateInter> {
+        let state: RobotStateInter = bincode::deserialize(data)
+            .map_err(|err| RobotException::DeserializeError(err.to_string()))?;
+        state.error_result()?;
+        Ok(state)
     }
 
     pub(crate) fn send_prepared_command(
@@ -112,10 +155,14 @@ impl FrankaRobotImpl {
         Ok(())
     }
 
-    pub(crate) fn prepare_command(state: &RobotStateInter, command: RobotCommand) -> RobotCommand {
-        use crate::types::robot_types::{CommandFilter, CommandIDConfig};
+    pub(crate) fn prepare_command(
+        state: &RobotStateInter,
+        command: RobotCommand,
+        mode: &MoveData,
+    ) -> RobotCommand {
+        use crate::types::robot_types::CommandIDConfig;
 
-        let mut command = command.filter(state);
+        let mut command = command.filter_for_mode(state, mode);
         command.set_command_id(state.command_id());
         command
     }

@@ -1,6 +1,6 @@
 ﻿use nalgebra as na;
 use robot_behavior::{
-    ArmState, JointSample, LoadState, Pose, RobotResult, SpatialSample, StateView,
+    ArmState, JointSample, JointState, LoadState, Pose, RobotResult, SpatialSample, StateView,
 };
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
@@ -448,6 +448,34 @@ impl From<RobotStateInter> for ArmState<7> {
                 wrench: Some(val.K_F_ext_hat_K),
             })),
             load: Some(LoadState { m, x, i }),
+        }
+    }
+}
+
+impl From<RobotStateInter> for JointState<7> {
+    fn from(val: RobotStateInter) -> Self {
+        StateView {
+            meas: JointSample {
+                q: Some(val.q),
+                dq: Some(val.dq),
+                ddq: None,
+                tau: Some(val.tau_J),
+                dtau: Some(val.dtau_J),
+            },
+            des: JointSample {
+                q: Some(val.q_d),
+                dq: Some(val.dq_d),
+                ddq: Some(val.ddq_d),
+                tau: Some(val.tau_J_d),
+                dtau: None,
+            },
+            cmd: JointSample {
+                q: Some(val.theta),
+                dq: Some(val.dtheta),
+                ddq: None,
+                tau: None,
+                dtau: None,
+            },
         }
     }
 }

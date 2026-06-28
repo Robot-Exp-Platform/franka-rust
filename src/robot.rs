@@ -28,6 +28,13 @@ fn control_observers() -> FrankaControlObservers {
     Arc::new(Mutex::new(Vec::new()))
 }
 
+fn has_control_observers(observers: &FrankaControlObservers) -> bool {
+    !observers
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .is_empty()
+}
+
 fn notify_control_observers(
     observers: &FrankaControlObservers,
     state: &RobotState,
@@ -655,15 +662,30 @@ where
         let mode_selector = self.robot_impl.robot_state.read().unwrap().q_d;
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::std_udp::control(
             &mut self.robot_impl,
             MotionType::Joint(mode_selector).into(),
             move |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
-                let arm: ArmState<FRANKA_DOF> = state.into();
-                let (joint, done) = closure(arm.joint, duration);
-                notify_control_observers(&after_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
+                let joint_state: JointState<FRANKA_DOF> = state.into();
+                let (joint, done) = closure(joint_state, duration);
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (MotionType::Joint(joint), done).into()
             },
         );
@@ -679,15 +701,30 @@ where
         let mode_selector = self.robot_impl.robot_state.read().unwrap().q_d;
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::tokio_udp::block_on_control_async(
             &mut self.robot_impl,
             MotionType::Joint(mode_selector).into(),
             async |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
-                let arm: ArmState<FRANKA_DOF> = state.into();
-                let (joint, done) = closure(arm.joint, duration).await;
-                notify_control_observers(&after_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
+                let joint_state: JointState<FRANKA_DOF> = state.into();
+                let (joint, done) = closure(joint_state, duration).await;
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (MotionType::Joint(joint), done).into()
             },
         );
@@ -708,15 +745,30 @@ impl<T: FrankaType> ControlWith<JointVelocityControl<7>> for FrankaRobot<T> {
         self.is_moving = true;
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::std_udp::control(
             &mut self.robot_impl,
             MotionType::JointVel([0.0; FRANKA_DOF]).into(),
             move |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
-                let arm: ArmState<FRANKA_DOF> = state.into();
-                let (velocity, done) = closure(arm.joint, duration);
-                notify_control_observers(&after_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
+                let joint_state: JointState<FRANKA_DOF> = state.into();
+                let (velocity, done) = closure(joint_state, duration);
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (MotionType::JointVel(velocity), done).into()
             },
         );
@@ -731,15 +783,30 @@ impl<T: FrankaType> ControlWith<JointVelocityControl<7>> for FrankaRobot<T> {
         self.is_moving = true;
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::tokio_udp::block_on_control_async(
             &mut self.robot_impl,
             MotionType::JointVel([0.0; FRANKA_DOF]).into(),
             async |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
-                let arm: ArmState<FRANKA_DOF> = state.into();
-                let (velocity, done) = closure(arm.joint, duration).await;
-                notify_control_observers(&after_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
+                let joint_state: JointState<FRANKA_DOF> = state.into();
+                let (velocity, done) = closure(joint_state, duration).await;
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (MotionType::JointVel(velocity), done).into()
             },
         );
@@ -760,14 +827,29 @@ impl<T: FrankaType> ControlWith<CartesianVelocityControl<7>> for FrankaRobot<T> 
         self.is_moving = true;
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::std_udp::control(
             &mut self.robot_impl,
             MotionType::<FRANKA_DOF>::CartesianVel([0.0; 6]).into(),
             move |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 let (velocity, done) = closure(state.into(), duration);
-                notify_control_observers(&after_observers, &robot_state, duration);
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (MotionType::<FRANKA_DOF>::CartesianVel(velocity), done).into()
             },
         );
@@ -782,14 +864,29 @@ impl<T: FrankaType> ControlWith<CartesianVelocityControl<7>> for FrankaRobot<T> 
         self.is_moving = true;
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::tokio_udp::block_on_control_async(
             &mut self.robot_impl,
             MotionType::<FRANKA_DOF>::CartesianVel([0.0; 6]).into(),
             async |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 let (velocity, done) = closure(state.into(), duration).await;
-                notify_control_observers(&after_observers, &robot_state, duration);
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (MotionType::<FRANKA_DOF>::CartesianVel(velocity), done).into()
             },
         );
@@ -817,14 +914,29 @@ impl<T: FrankaType> ControlWith<CartesianPoseControl<7>> for FrankaRobot<T> {
         let mode_selector = Pose::Homo(self.robot_impl.robot_state.read().unwrap().O_T_EE);
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::std_udp::control(
             &mut self.robot_impl,
             MotionType::<FRANKA_DOF>::Cartesian(mode_selector).into(),
             move |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 let (pose, done) = closure(state.into(), duration);
-                notify_control_observers(&after_observers, &robot_state, duration);
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (MotionType::<FRANKA_DOF>::Cartesian(pose), done).into()
             },
         );
@@ -840,14 +952,29 @@ impl<T: FrankaType> ControlWith<CartesianPoseControl<7>> for FrankaRobot<T> {
         let mode_selector = Pose::Homo(self.robot_impl.robot_state.read().unwrap().O_T_EE);
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::tokio_udp::block_on_control_async(
             &mut self.robot_impl,
             MotionType::<FRANKA_DOF>::Cartesian(mode_selector).into(),
             async |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 let (pose, done) = closure(state.into(), duration).await;
-                notify_control_observers(&after_observers, &robot_state, duration);
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (MotionType::<FRANKA_DOF>::Cartesian(pose), done).into()
             },
         );
@@ -873,15 +1000,30 @@ impl<T: FrankaType> ControlWith<TorqueControl<7>> for FrankaRobot<T> {
         self.is_moving = true;
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::std_udp::control(
             &mut self.robot_impl,
             ControlType::Torque([0.0; FRANKA_DOF]).into(),
             move |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
-                let arm: ArmState<FRANKA_DOF> = state.into();
-                let (torque, done) = closure(arm.joint, duration);
-                notify_control_observers(&after_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
+                let joint_state: JointState<FRANKA_DOF> = state.into();
+                let (torque, done) = closure(joint_state, duration);
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (ControlType::Torque(torque), done).into()
             },
         );
@@ -896,15 +1038,30 @@ impl<T: FrankaType> ControlWith<TorqueControl<7>> for FrankaRobot<T> {
         self.is_moving = true;
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::tokio_udp::block_on_control_async(
             &mut self.robot_impl,
             ControlType::Torque([0.0; FRANKA_DOF]).into(),
             async |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
-                let arm: ArmState<FRANKA_DOF> = state.into();
-                let (torque, done) = closure(arm.joint, duration).await;
-                notify_control_observers(&after_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
+                let joint_state: JointState<FRANKA_DOF> = state.into();
+                let (torque, done) = closure(joint_state, duration).await;
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (ControlType::Torque(torque), done).into()
             },
         );
@@ -931,14 +1088,29 @@ impl<T: FrankaType> ControlWith<ArmTorqueControl<7>> for FrankaRobot<T> {
         self.is_moving = true;
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::std_udp::control(
             &mut self.robot_impl,
             ControlType::Torque([0.0; FRANKA_DOF]).into(),
             move |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 let (torque, done) = closure(state.into(), duration);
-                notify_control_observers(&after_observers, &robot_state, duration);
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (ControlType::Torque(torque), done).into()
             },
         );
@@ -953,14 +1125,29 @@ impl<T: FrankaType> ControlWith<ArmTorqueControl<7>> for FrankaRobot<T> {
         self.is_moving = true;
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
+        let observe_before = has_control_observers(&before_observers);
+        let observe_after = has_control_observers(&after_observers);
         let result = crate::realtime::tokio_udp::block_on_control_async(
             &mut self.robot_impl,
             ControlType::Torque([0.0; FRANKA_DOF]).into(),
             async |state, duration| {
-                let robot_state: RobotState = state.into();
-                notify_control_observers(&before_observers, &robot_state, duration);
+                let robot_state =
+                    (observe_before || observe_after).then(|| RobotState::from(state));
+                if observe_before {
+                    notify_control_observers(
+                        &before_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 let (torque, done) = closure(state.into(), duration).await;
-                notify_control_observers(&after_observers, &robot_state, duration);
+                if observe_after {
+                    notify_control_observers(
+                        &after_observers,
+                        robot_state.as_ref().unwrap(),
+                        duration,
+                    );
+                }
                 (ControlType::Torque(torque), done).into()
             },
         );

@@ -4,7 +4,11 @@ use tokio::{net::UdpSocket, runtime::Builder};
 
 use crate::{
     robot_impl::FrankaRobotImpl,
-    types::{robot_command::RobotCommand, robot_state::RobotStateInter, robot_types::MoveData},
+    types::{
+        robot_command::RobotCommand,
+        robot_state::RobotStateInter,
+        robot_types::{CommandIDConfig, MoveData},
+    },
 };
 
 /// Async FCI realtime session whose per-cycle controller is async.
@@ -79,16 +83,57 @@ where
 {
     let mut buffer = vec![0_u8; std::mem::size_of::<RobotStateInter>() * 5];
     let mut started = false;
+    let mut finish_command: Option<RobotCommand> = None;
 
     loop {
-        let (size, addr) = socket.recv_from(&mut buffer).await?;
-        let state: RobotStateInter = bincode::deserialize(&buffer[..size])
-            .map_err(|err| RobotException::DeserializeError(err.to_string()))?;
-        state.error_result()?;
+        let last_id = robot.robot_state.read().unwrap().command_id();
+        let mut latest: Option<(RobotStateInter, std::net::SocketAddr)> = None;
 
+        loop {
+            match socket.try_recv_from(&mut buffer) {
+                Ok((size, addr)) => {
+                    let candidate: RobotStateInter = bincode::deserialize(&buffer[..size])
+                        .map_err(|err| RobotException::DeserializeError(err.to_string()))?;
+                    candidate.error_result()?;
+                    if candidate.command_id() > last_id
+                        && latest.as_ref().map_or(true, |(state, _)| {
+                            candidate.command_id() > state.command_id()
+                        })
+                    {
+                        latest = Some((candidate, addr));
+                    }
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(err) => return Err(err.into()),
+            }
+        }
+
+        while latest.is_none() {
+            let (size, addr) = socket.recv_from(&mut buffer).await?;
+            let candidate: RobotStateInter = bincode::deserialize(&buffer[..size])
+                .map_err(|err| RobotException::DeserializeError(err.to_string()))?;
+            candidate.error_result()?;
+            if candidate.command_id() > last_id {
+                latest = Some((candidate, addr));
+            }
+        }
+
+        let (state, latest_addr) = latest.unwrap();
         {
             let mut latest = robot.robot_state.write().unwrap();
             *latest = state;
+        }
+
+        if let Some(mut command) = finish_command {
+            if !FrankaRobotImpl::motion_started(&state, &mode) {
+                return robot.finish_current_motion();
+            }
+            command.set_command_id(state.command_id());
+            let data = bincode::serialize(&command)
+                .map_err(|err| RobotException::CommandException(err.to_string()))?;
+            socket.send_to(&data, latest_addr).await?;
+            finish_command = Some(command);
+            continue;
         }
 
         if !started {
@@ -102,14 +147,15 @@ where
         let next = FrankaRobotImpl::prepare_command(
             &state,
             command(state, Duration::from_millis(1)).await,
+            &mode,
         );
         let done = next.motion.motion_generation_finished;
         let data = bincode::serialize(&next)
             .map_err(|err| RobotException::CommandException(err.to_string()))?;
-        socket.send_to(&data, addr).await?;
+        socket.send_to(&data, latest_addr).await?;
 
         if done {
-            return robot.finish_current_motion();
+            finish_command = Some(next);
         }
     }
 }
