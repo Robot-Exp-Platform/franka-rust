@@ -4,8 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::{
     franka_limit_rate_cartesian_pose, franka_limit_rate_cartesian_velocity,
-    franka_limit_rate_joint_positions, franka_limit_rate_joint_velocities,
-    franka_limit_rate_torques,
+    franka_limit_rate_joint_velocities, franka_limit_rate_torques,
 };
 
 use super::{
@@ -79,10 +78,6 @@ impl MotionGeneratorCommand {
         match mode {
             MoveMotionGeneratorMode::JointPosition => {
                 let q_c = self.q_c;
-                let q_d = state.q_d;
-                let dq_d = state.dq_d;
-                let ddq_d = state.ddq_d;
-                let q_c = franka_limit_rate_joint_positions(&q_c, &q_d, &dq_d, &ddq_d);
                 MotionGeneratorCommand { q_c, ..self }
             }
             MoveMotionGeneratorMode::JointVelocity => {

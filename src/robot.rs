@@ -457,29 +457,35 @@ where
     Self: Joints<7>,
 {
     fn move_to(&mut self, target: [f64; FRANKA_DOF]) -> RobotResult<()> {
-        let (state, _, _) = self.robot_impl.recv_state()?;
-        let joint = state.q_d;
-        let target = match self.coord.get() {
-            Coord::Relative => {
-                let mut result = [0.0; FRANKA_DOF];
-                for i in 0..FRANKA_DOF {
-                    result[i] = joint[i] + target[i];
-                }
-                result
+        let coord = *self.coord.get();
+        let mut path_generate = path_generate::JointSCurve::new(
+            *self.max_vel.get(),
+            *self.max_acc.get(),
+            *self.max_jerk.get(),
+        );
+        let mut planned = false;
+        let mut elapsed = Duration::ZERO;
+
+        <Self as Control>::control_with::<JointPositionControl<7>, _>(self, move |state, dt| {
+            if !planned {
+                let joint = state.des.q.or(state.meas.q).unwrap_or([0.0; FRANKA_DOF]);
+                let target = match coord {
+                    Coord::Relative => {
+                        let mut result = target;
+                        for i in 0..FRANKA_DOF {
+                            result[i] += joint[i];
+                        }
+                        result
+                    }
+                    _ => target,
+                };
+                path_generate.plan(joint, target);
+                planned = true;
             }
-            _ => target,
-        };
 
-        let (v_max, a_max, j_max) = (self.max_vel.get(), self.max_acc.get(), self.max_jerk.get());
-
-        let (path_generate, t_max) =
-            path_generate::joint_s_curve(&joint, &target, v_max, a_max, j_max);
-
-        let traj = sample_joint_trajectory(path_generate.as_ref(), t_max);
-        let controller =
-            robot_behavior::controller::joint_traj_pid_control(traj, PID_K, PID_I, PID_D);
-
-        <Self as Control>::control_with::<TorqueControl<7>, _>(self, controller)
+            elapsed += dt;
+            path_generate.apply(elapsed)
+        })
     }
 
     fn move_to_async(

@@ -83,6 +83,7 @@ where
 {
     let mut buffer = vec![0_u8; std::mem::size_of::<RobotStateInter>() * 5];
     let mut started = false;
+    let mut previous_motion_time: Option<Duration> = None;
     let mut finish_command: Option<RobotCommand> = None;
 
     loop {
@@ -144,11 +145,16 @@ where
             }
         }
 
-        let next = FrankaRobotImpl::prepare_command(
-            &state,
-            command(state, Duration::from_millis(1)).await,
-            &mode,
-        );
+        let motion_time = state
+            .time()
+            .unwrap_or_else(|| Duration::from_millis(state.command_id()));
+        let period = previous_motion_time
+            .replace(motion_time)
+            .map_or(Duration::ZERO, |previous| {
+                motion_time.saturating_sub(previous)
+            });
+
+        let next = FrankaRobotImpl::prepare_command(&state, command(state, period).await, &mode);
         let done = next.motion.motion_generation_finished;
         let data = bincode::serialize(&next)
             .map_err(|err| RobotException::CommandException(err.to_string()))?;
