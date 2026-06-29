@@ -3,7 +3,8 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 
 use crate::utils::{
-    franka_limit_rate_cartesian_pose, franka_limit_rate_cartesian_velocity,
+    canonicalize_homogeneous_from_slice, franka_limit_rate_cartesian_pose,
+    franka_limit_rate_cartesian_velocity, franka_limit_rate_joint_positions,
     franka_limit_rate_joint_velocities, franka_limit_rate_torques,
 };
 
@@ -69,6 +70,13 @@ impl CommandIDConfig<u64> for RobotCommand {
     }
 }
 
+fn first_valid_homogeneous_or_last(candidates: &[[f64; 16]]) -> [f64; 16] {
+    candidates
+        .iter()
+        .find_map(canonicalize_homogeneous_from_slice)
+        .unwrap_or_else(|| *candidates.last().expect("at least one pose candidate"))
+}
+
 impl MotionGeneratorCommand {
     pub(crate) fn filter_for_mode(
         self,
@@ -78,18 +86,27 @@ impl MotionGeneratorCommand {
         match mode {
             MoveMotionGeneratorMode::JointPosition => {
                 let q_c = self.q_c;
+                let q_d = state.q_d;
+                let dq_d = state.dq_d;
+                let ddq_d = state.ddq_d;
+                let q_c = franka_limit_rate_joint_positions(&q_c, &q_d, &dq_d, &ddq_d);
                 MotionGeneratorCommand { q_c, ..self }
             }
             MoveMotionGeneratorMode::JointVelocity => {
                 let dq_c = self.dq_c;
-                let dq = state.dq;
+                let dq_d = state.dq_d;
                 let ddq_d = state.ddq_d;
-                let dq_c = franka_limit_rate_joint_velocities(&dq_c, &dq, &ddq_d);
+                let dq_c = franka_limit_rate_joint_velocities(&dq_c, &dq_d, &ddq_d);
                 MotionGeneratorCommand { dq_c, ..self }
             }
             MoveMotionGeneratorMode::CartesianPosition => {
                 let pose_o_to_ee_c = self.pose_o_to_ee_c;
-                let last_pose_o_to_ee_c = state.O_T_EE_c;
+                let last_pose_o_to_ee_c = first_valid_homogeneous_or_last(&[
+                    state.O_T_EE_c,
+                    state.O_T_EE_d,
+                    state.O_T_EE,
+                    pose_o_to_ee_c,
+                ]);
                 let last_dpose_o_to_ee_c = state.O_dP_EE_c;
                 let last_ddpose_o_to_ee_c = state.O_ddP_EE_c;
                 let pose_o_to_ee_c = franka_limit_rate_cartesian_pose(

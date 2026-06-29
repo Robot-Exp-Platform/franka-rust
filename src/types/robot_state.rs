@@ -7,6 +7,8 @@ use serde_big_array::BigArray;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{fmt::Display, time::Duration};
 
+use crate::utils::canonicalize_homogeneous_from_slice;
+
 use super::{
     robot_error::{ErrorFlag, FrankaError},
     robot_types::CommandIDConfig,
@@ -434,7 +436,7 @@ impl From<RobotStateInter> for ArmState<7> {
                     wrench: None,
                 },
                 cmd: SpatialSample {
-                    pose: Some(Pose::Homo(val.O_T_EE_c)),
+                    pose: valid_homogeneous_pose(val.O_T_EE_c),
                     vel: Some(val.O_dP_EE_c),
                     acc: Some(val.O_ddP_EE_c),
                     wrench: None,
@@ -508,6 +510,10 @@ fn combine_ee_load(
     let i_total = i_total.as_slice().try_into().unwrap();
 
     (m_total, x_total, i_total)
+}
+
+fn valid_homogeneous_pose(pose: [f64; 16]) -> Option<Pose> {
+    canonicalize_homogeneous_from_slice(&pose).map(Pose::Homo)
 }
 
 impl Default for RobotStateInter {

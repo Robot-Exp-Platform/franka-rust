@@ -1,4 +1,4 @@
-use std::{f64::consts::PI, time::Duration};
+use std::f64::consts::PI;
 
 use franka_rust::FrankaEmika;
 use robot_behavior::{RobotResult, behavior::*};
@@ -7,17 +7,26 @@ fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
 
     robot.set_default_behavior()?;
-    let mut time = Duration::ZERO;
-    robot.control_with::<JointVelocityControl<7>, _>(move |_, dt| {
-        time += dt;
+    robot
+        .with_scale(0.5)
+        .move_to::<JointSpace<7>>(FrankaEmika::JOINT_DEFAULT)?;
 
-        let t = time.as_secs_f64();
-        let cycle = (-1.0f64).powf(t.floor());
-        let omega = cycle * 0.5 * (1.0 - f64::cos(2.0 * PI * t));
+    println!("Finished moving to initial joint configuration.");
 
-        (
-            [0.0, 0.0, 0.0, omega, omega, omega, omega],
-            time > Duration::from_secs(2),
-        )
+    let mut time = 0.0;
+    let omega_max = 1.0;
+    let time_max = 1.0;
+    robot.control_with::<JointVelocityControl<7>, _>(move |_, time_step| {
+        time += time_step.as_secs_f64();
+
+        let cycle = (-1.0f64).powf((time / time_max).floor());
+        let omega = cycle * omega_max / 2.0 * (1.0 - f64::cos(2.0 * PI / time_max * time));
+        let out = [0.0, 0.0, 0.0, omega, omega, omega, omega];
+
+        if time >= 2.0 * time_max {
+            println!("Finished motion, shutting down example");
+            return (out, true);
+        }
+        (out, false)
     })
 }

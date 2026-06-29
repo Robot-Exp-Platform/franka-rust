@@ -1,14 +1,13 @@
 use robot_behavior::{RobotException, RobotResult};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
-    cmp::max,
     fmt::Debug,
     io::{Read, Write},
     net::TcpStream,
     sync::{Arc, Mutex},
 };
 
-use crate::types::robot_types::CommandIDConfig;
+use crate::types::robot_types::{Command, CommandHeader, CommandIDConfig};
 
 #[derive(Default, Clone)]
 pub struct Network {
@@ -99,28 +98,32 @@ impl Network {
         println!("request :{:?}", request);
 
         stream.write_all(&request)?;
-        let mut buffer = vec![0_u8; size_of::<S>() + 4];
-        stream.read_exact(&mut buffer)?;
-        let res = bincode::deserialize(&buffer)
+        let response_size = size_of::<S>() + 4;
+        let mut response_buffer = vec![0_u8; response_size];
+        stream.read_exact(&mut response_buffer)?;
+        let res: S = bincode::deserialize(&response_buffer)
             .map_err(|err| RobotException::DeserializeError(err.to_string()))?;
 
-        let mut receive_buffer = Vec::new();
-        let mut size_max = 0;
-        loop {
-            let mut buffer = vec![0_u8; 1024 * 5];
-            if let Ok(size) = stream.read(&mut buffer) {
-                receive_buffer.append(&mut buffer[..size].to_vec());
-                if size < size_max {
-                    break;
-                }
-                size_max = max(size_max, size);
-
-                #[cfg(feature = "debug")]
-                println!("size:{size}");
-            } else {
-                break;
-            }
+        let header_size = size_of::<CommandHeader<{ Command::LoadModelLibrary }>>() + 4;
+        let header: CommandHeader<{ Command::LoadModelLibrary }> =
+            bincode::deserialize(&response_buffer[..header_size])
+                .map_err(|err| RobotException::DeserializeError(err.to_string()))?;
+        if header.command_id != command_id {
+            return Err(RobotException::NetworkError(format!(
+                "unexpected TCP response command id: expected {command_id}, got {}",
+                header.command_id
+            )));
         }
+
+        let total_size = header.size as usize;
+        if total_size < response_size {
+            return Err(RobotException::DeserializeError(format!(
+                "invalid TCP response size: header reports {total_size} bytes, fixed response is {response_size} bytes"
+            )));
+        }
+
+        let mut receive_buffer = vec![0_u8; total_size - response_size];
+        stream.read_exact(&mut receive_buffer)?;
 
         #[cfg(feature = "debug")]
         println!("receive size:{}", receive_buffer.len());
