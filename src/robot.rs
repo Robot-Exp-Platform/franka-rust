@@ -103,6 +103,7 @@ where
     /// Forces or torques above the upper threshold are registered as collision and cause the robot to
     /// stop moving.
     pub fn set_collision_behavior(&mut self, data: SetCollisionBehaviorData) -> RobotResult<()> {
+        data.validate()?;
         self.robot_impl._set_collision_behavior(data)?.into()
     }
 
@@ -129,6 +130,20 @@ where
     /// If a flag is set to true, movement is unlocked.
     pub fn set_guiding_mode(&mut self, data: SetGuidingModeData) -> RobotResult<()> {
         self.robot_impl._set_guiding_mode(data)?.into()
+    }
+
+    /// Configures low-speed hand guiding with a distinct contact-to-collision threshold band.
+    ///
+    /// This keeps the standard contact sensitivity while reducing false collision reflexes caused
+    /// by estimated external wrench noise. It does not disable the robot's other safety functions.
+    /// The robot must be stationary before this method is called.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the collision profile or guiding-mode command is rejected by the robot.
+    pub fn set_guiding_behavior(&mut self, data: SetGuidingModeData) -> RobotResult<()> {
+        self.set_collision_behavior(SetCollisionBehaviorData::guiding())?;
+        self.set_guiding_mode(data)
     }
 
     pub fn set_ee_to_k(&mut self, data: SetEEToKData) -> RobotResult<()> {

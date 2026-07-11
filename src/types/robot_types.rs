@@ -232,6 +232,76 @@ impl Default for SetCollisionBehaviorData {
     }
 }
 
+impl SetCollisionBehaviorData {
+    /// Returns a collision profile for low-speed hand guiding.
+    ///
+    /// The lower thresholds retain the standard contact sensitivity, while the upper thresholds
+    /// provide a two-times-wide contact band before a collision reflex is triggered. This profile
+    /// does not alter self-collision, joint-limit, power, or sensor safety functions.
+    pub fn guiding() -> Self {
+        Self {
+            lower_torque_thresholds_acceleration: [20.; 7],
+            upper_torque_thresholds_acceleration: [40.; 7],
+            lower_torque_thresholds_nominal: [10.; 7],
+            upper_torque_thresholds_nominal: [20.; 7],
+            lower_force_thresholds_acceleration: [20.; 6],
+            upper_force_thresholds_acceleration: [40.; 6],
+            lower_force_thresholds_nominal: [10.; 6],
+            upper_force_thresholds_nominal: [20.; 6],
+        }
+    }
+
+    /// Validates that every threshold is finite and positive and that each lower threshold does
+    /// not exceed its corresponding upper threshold.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RobotException::InvalidInstruction`] if a threshold is non-finite, non-positive,
+    /// or if a lower threshold exceeds its corresponding upper threshold.
+    pub fn validate(&self) -> RobotResult<()> {
+        validate_threshold_pair(
+            "torque acceleration",
+            &self.lower_torque_thresholds_acceleration,
+            &self.upper_torque_thresholds_acceleration,
+        )?;
+        validate_threshold_pair(
+            "torque nominal",
+            &self.lower_torque_thresholds_nominal,
+            &self.upper_torque_thresholds_nominal,
+        )?;
+        validate_threshold_pair(
+            "force acceleration",
+            &self.lower_force_thresholds_acceleration,
+            &self.upper_force_thresholds_acceleration,
+        )?;
+        validate_threshold_pair(
+            "force nominal",
+            &self.lower_force_thresholds_nominal,
+            &self.upper_force_thresholds_nominal,
+        )
+    }
+}
+
+fn validate_threshold_pair<const N: usize>(
+    name: &str,
+    lower: &[f64; N],
+    upper: &[f64; N],
+) -> RobotResult<()> {
+    for (index, (&lower, &upper)) in lower.iter().zip(upper).enumerate() {
+        if !lower.is_finite() || !upper.is_finite() || lower <= 0.0 || upper <= 0.0 {
+            return Err(RobotException::InvalidInstruction(format!(
+                "{name} thresholds at index {index} must be finite and positive"
+            )));
+        }
+        if lower > upper {
+            return Err(RobotException::InvalidInstruction(format!(
+                "{name} lower threshold at index {index} exceeds its upper threshold"
+            )));
+        }
+    }
+    Ok(())
+}
+
 impl From<f64> for SetCollisionBehaviorData {
     fn from(value: f64) -> Self {
         SetCollisionBehaviorData {
@@ -618,5 +688,37 @@ mod tests {
     #[test]
     fn type_size() {
         println!("{}", LoadModelLibraryResponse::size());
+    }
+
+    #[test]
+    fn guiding_collision_profile_has_contact_band() {
+        let profile = SetCollisionBehaviorData::guiding();
+
+        assert!(profile.validate().is_ok());
+        assert!(
+            profile
+                .lower_torque_thresholds_nominal
+                .iter()
+                .zip(profile.upper_torque_thresholds_nominal)
+                .all(|(lower, upper)| *lower < upper)
+        );
+        assert!(
+            profile
+                .lower_force_thresholds_nominal
+                .iter()
+                .zip(profile.upper_force_thresholds_nominal)
+                .all(|(lower, upper)| *lower < upper)
+        );
+    }
+
+    #[test]
+    fn collision_profile_rejects_invalid_thresholds() {
+        let mut profile = SetCollisionBehaviorData::guiding();
+        profile.upper_force_thresholds_nominal[2] = f64::NAN;
+        assert!(profile.validate().is_err());
+
+        let mut profile = SetCollisionBehaviorData::guiding();
+        profile.lower_torque_thresholds_acceleration[4] = 41.0;
+        assert!(profile.validate().is_err());
     }
 }
