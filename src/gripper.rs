@@ -66,7 +66,33 @@ impl FrankaGripper {
     }
 
     pub fn grasp(&mut self, width: f64, speed: f64, force: f64) -> RobotResult<bool> {
-        let data = GraspData { width, epsilon: (0.01, 0.01), speed, force };
+        self.grasp_with_epsilon(width, speed, force, 0.01, 0.01)
+    }
+
+    /// Grasps with an explicit accepted-width tolerance.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use franka_rust::FrankaGripper;
+    ///
+    /// let mut gripper = FrankaGripper::new("172.16.0.3");
+    /// let _grasped = gripper.grasp_with_epsilon(0.0, 0.05, 60.0, 0.08, 0.08)?;
+    /// # Ok::<(), robot_behavior::RobotException>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the command is rejected or communication fails.
+    pub fn grasp_with_epsilon(
+        &mut self,
+        width: f64,
+        speed: f64,
+        force: f64,
+        epsilon_inner: f64,
+        epsilon_outer: f64,
+    ) -> RobotResult<bool> {
+        let data = GraspData { width, epsilon: (epsilon_inner, epsilon_outer), speed, force };
         self._grasp(data)?.into()
     }
 
