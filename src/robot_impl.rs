@@ -54,7 +54,7 @@ impl FrankaRobotImpl {
     cmd_fn!(_set_ne_to_ee, { Command::SetNEToEE }; data: SetNEToEEData; GetterSetterStatus);
     cmd_fn!(_set_load, { Command::SetLoad }; data: SetLoadData; GetterSetterStatus);
     cmd_fn!(_set_fliters, { Command::SetFilters }; data: SetFiltersData; GetterSetterStatus);
-    cmd_fn!(_automatic_error_recovery, { Command::AutomaticErrorRecovery }; data: (); GetterSetterStatus);
+    cmd_fn!(_automatic_error_recovery, { Command::AutomaticErrorRecovery }; data: (); AutomaticErrorRecoveryStatus);
     cmd_fn!(_stop_move, { Command::StopMove }; data: (); GetterSetterStatus);
     cmd_fn!(_get_cartesian_limit, { Command::GetCartesianLimit }; data: GetCartesianLimitData; GetCartesianLimitStatus);
 

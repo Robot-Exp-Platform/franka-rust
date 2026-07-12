@@ -630,6 +630,38 @@ impl From<GetterSetterStatus> for RobotResult<()> {
     }
 }
 
+impl From<AutomaticErrorRecoveryStatus> for RobotResult<()> {
+    fn from(value: AutomaticErrorRecoveryStatus) -> Self {
+        match value {
+            AutomaticErrorRecoveryStatus::Success => Ok(()),
+            AutomaticErrorRecoveryStatus::CommandNotPossibleRejected => {
+                Err(RobotException::UnprocessableInstructionError(
+                    "automatic recovery rejected: command not possible in current mode".to_string(),
+                ))
+            }
+            AutomaticErrorRecoveryStatus::CommandRejectedDueToActivatedSafetyFunctions => {
+                Err(RobotException::CommandException(
+                    "automatic recovery rejected by an activated safety function".to_string(),
+                ))
+            }
+            AutomaticErrorRecoveryStatus::ManualErrorRecoveryRequiredRejected => Err(
+                RobotException::CommandException("manual error recovery is required".to_string()),
+            ),
+            AutomaticErrorRecoveryStatus::ReflexAborted => Err(RobotException::CommandException(
+                "automatic recovery aborted by reflex".to_string(),
+            )),
+            AutomaticErrorRecoveryStatus::EmergencyAborted => {
+                Err(RobotException::CommandException(
+                    "automatic recovery aborted by emergency stop".to_string(),
+                ))
+            }
+            AutomaticErrorRecoveryStatus::Aborted => Err(RobotException::CommandException(
+                "automatic recovery aborted".to_string(),
+            )),
+        }
+    }
+}
+
 impl<const N: usize> From<MotionType<N>> for MoveData {
     fn from(value: MotionType<N>) -> Self {
         MoveData {

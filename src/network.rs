@@ -177,16 +177,15 @@ impl Network {
         let res_handle = res.clone();
 
         thread::spawn(move || {
-            if is_hardware_realtime() {
-                println!("you have realtime permission, enjoy it");
-                set_realtime_priority().unwrap();
-            } else {
-                println!(
-                    "you don't have realtime permission, which may cause communication latency"
-                );
+            if let Err(error) = set_realtime_priority() {
+                println!("realtime scheduling unavailable ({error}), communication may be delayed");
                 let _ = thread_priority::set_current_thread_priority(
                     thread_priority::ThreadPriority::Max,
                 );
+            } else if is_hardware_realtime() {
+                println!("realtime scheduling active on PREEMPT_RT kernel");
+            } else {
+                println!("SCHED_FIFO active on non-PREEMPT_RT kernel");
             }
 
             #[cfg(feature = "debug")]
