@@ -80,7 +80,25 @@ impl FrankaRobotImpl {
     }
 
     pub fn waiting_for_finish(&mut self) -> RobotResult<()> {
-        while self.is_moving()? {
+        loop {
+            let moving = {
+                let state = self.robot_state.read().map_err(|_| {
+                    RobotException::CommandException(
+                        "robot state lock poisoned while waiting for motion".to_string(),
+                    )
+                })?;
+                state.error_result()?;
+                if let Some(error) = motion_mode_error(state.robot_mode) {
+                    self.command_handle.remove_closure();
+                    return Err(error);
+                }
+                (state.motion_generator_mode != MotionGeneratorMode::Idle
+                    && state.motion_generator_mode != MotionGeneratorMode::None)
+                    || state.controller_mode == ControllerMode::ExternalController
+            };
+            if !moving {
+                break;
+            }
             sleep(Duration::from_millis(1));
         }
         self.command_handle.remove_closure();
@@ -93,5 +111,35 @@ impl FrankaRobotImpl {
                 "move failed with status: {status:?}"
             )))
         }
+    }
+}
+
+fn motion_mode_error(robot_mode: RobotMode) -> Option<RobotException> {
+    matches!(
+        robot_mode,
+        RobotMode::Reflux | RobotMode::UserStopped | RobotMode::AutomaticErrorRecovery
+    )
+    .then(|| {
+        RobotException::CommandException(format!(
+            "motion aborted because robot entered {robot_mode:?} mode"
+        ))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn waiting_mode_rejects_safety_and_recovery_modes() {
+        assert!(motion_mode_error(RobotMode::Reflux).is_some());
+        assert!(motion_mode_error(RobotMode::UserStopped).is_some());
+        assert!(motion_mode_error(RobotMode::AutomaticErrorRecovery).is_some());
+    }
+
+    #[test]
+    fn waiting_mode_accepts_idle_and_active_motion() {
+        assert!(motion_mode_error(RobotMode::Idle).is_none());
+        assert!(motion_mode_error(RobotMode::Move).is_none());
     }
 }
