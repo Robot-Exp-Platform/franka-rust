@@ -52,14 +52,18 @@ where
     FrankaRobot<T>: ArmParam<7>,
 {
     pub fn new(ip: &str) -> Self {
+        Self::try_new(ip).unwrap_or_else(|error| panic!("failed to connect to Franka: {error}"))
+    }
+
+    pub fn try_new(ip: &str) -> RobotResult<Self> {
         let joint_state_map: JointStateMap = Default::default();
         let map_hook = joint_state_map.clone();
         let mut robot = FrankaRobot {
             marker: PhantomData,
-            robot_impl: FrankaRobotImpl::new_with_hook(ip, move |state| {
+            robot_impl: FrankaRobotImpl::try_new_with_hook(ip, move |state| {
                 let arm_state: ArmState<FRANKA_DOF> = (*state).into();
                 update_joint_state_map(&map_hook, &T::JOINT_NAMES, &arm_state);
-            }),
+            })?,
             is_moving: false,
             coord: OverrideOnce::new(Coord::OCS),
             scale: OverrideOnce::new(1.0),
@@ -72,7 +76,7 @@ where
         };
         let _ = robot.set_scale(0.1);
 
-        robot
+        Ok(robot)
     }
 
     pub fn connect(&mut self, ip: &str) {

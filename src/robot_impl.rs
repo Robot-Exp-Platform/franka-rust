@@ -2,7 +2,7 @@ use robot_behavior::{RobotException, RobotResult};
 use std::{
     sync::{Arc, RwLock},
     thread::sleep,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -35,13 +35,25 @@ impl FrankaRobotImpl {
         Self::new_with_hook(ip, |_| {})
     }
 
+    pub fn try_new(ip: &str) -> RobotResult<Self> {
+        Self::try_new_with_hook(ip, |_| {})
+    }
+
     pub fn new_with_hook(ip: &str, on_update: impl Fn(&RobotStateInter) + Send + 'static) -> Self {
+        Self::try_new_with_hook(ip, on_update)
+            .unwrap_or_else(|error| panic!("failed to connect to Franka: {error}"))
+    }
+
+    pub fn try_new_with_hook(
+        ip: &str,
+        on_update: impl Fn(&RobotStateInter) + Send + 'static,
+    ) -> RobotResult<Self> {
         let (command_handle, robot_state, udp_port) =
             Network::spawn_udp_thread(PORT_ROBOT_UDP, on_update);
         let network = Network::new(ip, PORT_ROBOT_COMMAND);
         let mut robot = Self { network, command_handle, robot_state };
-        robot.connect_(udp_port).unwrap();
-        robot
+        robot.connect_(udp_port)?;
+        Ok(robot)
     }
 
     cmd_fn!(_connect, { Command::Connect }; data: ConnectData; ConnectStatus);
@@ -80,22 +92,43 @@ impl FrankaRobotImpl {
     }
 
     pub fn waiting_for_finish(&mut self) -> RobotResult<()> {
+        let mut last_message_id = None;
+        let mut last_state_update = Instant::now();
         loop {
-            let moving = {
-                let state = self.robot_state.read().map_err(|_| {
-                    RobotException::CommandException(
-                        "robot state lock poisoned while waiting for motion".to_string(),
-                    )
-                })?;
-                state.error_result()?;
+            let (moving, message_id) = {
+                let state = match self.robot_state.read() {
+                    Ok(state) => state,
+                    Err(_) => {
+                        self.command_handle.remove_closure();
+                        return Err(RobotException::CommandException(
+                            "robot state lock poisoned while waiting for motion".to_string(),
+                        ));
+                    }
+                };
+                if let Err(error) = state.error_result() {
+                    self.command_handle.remove_closure();
+                    return Err(error);
+                }
                 if let Some(error) = motion_mode_error(state.robot_mode) {
                     self.command_handle.remove_closure();
                     return Err(error);
                 }
-                (state.motion_generator_mode != MotionGeneratorMode::Idle
-                    && state.motion_generator_mode != MotionGeneratorMode::None)
-                    || state.controller_mode == ControllerMode::ExternalController
+                (
+                    (state.motion_generator_mode != MotionGeneratorMode::Idle
+                        && state.motion_generator_mode != MotionGeneratorMode::None)
+                        || state.controller_mode == ControllerMode::ExternalController,
+                    state.message_id,
+                )
             };
+            if last_message_id != Some(message_id) {
+                last_message_id = Some(message_id);
+                last_state_update = Instant::now();
+            } else if state_stream_stalled(last_state_update.elapsed()) {
+                self.command_handle.remove_closure();
+                return Err(RobotException::NetworkError(
+                    "robot state stopped updating for 100 ms while waiting for motion".to_string(),
+                ));
+            }
             if !moving {
                 break;
             }
@@ -112,6 +145,12 @@ impl FrankaRobotImpl {
             )))
         }
     }
+}
+
+const STATE_STREAM_TIMEOUT: Duration = Duration::from_millis(100);
+
+fn state_stream_stalled(elapsed: Duration) -> bool {
+    elapsed >= STATE_STREAM_TIMEOUT
 }
 
 fn motion_mode_error(robot_mode: RobotMode) -> Option<RobotException> {
@@ -141,5 +180,11 @@ mod tests {
     fn waiting_mode_accepts_idle_and_active_motion() {
         assert!(motion_mode_error(RobotMode::Idle).is_none());
         assert!(motion_mode_error(RobotMode::Move).is_none());
+    }
+
+    #[test]
+    fn waiting_state_stream_has_a_bounded_stale_timeout() {
+        assert!(!state_stream_stalled(Duration::from_millis(99)));
+        assert!(state_stream_stalled(Duration::from_millis(100)));
     }
 }

@@ -5,8 +5,9 @@ use std::cmp::max;
 use std::{
     fmt::{Debug, Display},
     io::{Read, Write},
-    net::TcpStream,
+    net::{TcpStream, ToSocketAddrs},
     sync::{Arc, Mutex, RwLock},
+    time::Duration,
 };
 use std::{net::UdpSocket, thread};
 
@@ -21,13 +22,20 @@ pub struct Network {
 
 impl Network {
     pub fn new(tcp_ip: &str, tcp_port: u16) -> Self {
-        let tcp_stream = TcpStream::connect(format!("{tcp_ip}:{tcp_port}")).ok();
+        let tcp_stream = (tcp_ip, tcp_port)
+            .to_socket_addrs()
+            .ok()
+            .and_then(|addresses| {
+                addresses.into_iter().find_map(|address| {
+                    TcpStream::connect_timeout(&address, Duration::from_secs(3)).ok()
+                })
+            });
 
-        if let Some(steam) = &tcp_stream {
-            // steam
+        if let Some(stream) = &tcp_stream {
+            // stream
             //     .set_read_timeout(Some(std::time::Duration::from_millis(10)))
             //     .unwrap();
-            steam
+            stream
                 .set_write_timeout(Some(std::time::Duration::from_millis(3)))
                 .unwrap();
         }
