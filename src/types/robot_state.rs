@@ -390,6 +390,11 @@ impl From<RobotStateInter> for RobotState {
 
 impl From<RobotStateInter> for ArmState<7> {
     fn from(val: RobotStateInter) -> Self {
+        // RobotStateInter is packed for the wire ABI. Copy array fields before
+        // iterating so Rust never creates an unaligned reference into it.
+        let joint_collision = val.joint_collision;
+        let cartesian_collision = val.cartesian_collision;
+        let reflex_reason = val.reflex_reason;
         let (m, x, i) = combine_ee_load(
             val.m_ee,
             val.F_x_Cee,
@@ -427,6 +432,13 @@ impl From<RobotStateInter> for ArmState<7> {
                 cartesian_vel: Some(val.O_dP_EE_c),
             },
             load: Some(LoadState { m, x, i }),
+            external_wrench: Some(val.O_F_ext_hat_K),
+            reflex_triggered: Some(
+                reflex_reason.iter().any(|triggered| *triggered)
+                    || joint_collision.iter().any(|level| *level > 0.0)
+                    || cartesian_collision.iter().any(|level| *level > 0.0),
+            ),
+            command_success_rate: Some(val.control_command_success_rate),
         }
     }
 }
@@ -669,5 +681,24 @@ mod test {
     fn display_robot_state() {
         let robot_state_inter = RobotStateInter::default();
         println!("{robot_state_inter}");
+    }
+
+    #[test]
+    fn arm_state_preserves_e2_safety_diagnostics() {
+        let mut source = RobotStateInter::default();
+        source.O_F_ext_hat_K = [1.0, -2.0, 3.0, -4.0, 5.0, -6.0];
+        source.control_command_success_rate = 0.875;
+        let mut joint_collision = [0.0; 7];
+        joint_collision[3] = 1.0;
+        source.joint_collision = joint_collision;
+
+        let arm_state: robot_behavior::ArmState<7> = source.into();
+
+        assert_eq!(
+            arm_state.external_wrench,
+            Some([1.0, -2.0, 3.0, -4.0, 5.0, -6.0])
+        );
+        assert_eq!(arm_state.reflex_triggered, Some(true));
+        assert_eq!(arm_state.command_success_rate, Some(0.875));
     }
 }

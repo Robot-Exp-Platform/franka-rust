@@ -17,6 +17,8 @@ pub struct FrankaRobotImpl {
     pub(crate) network: Network,
     pub(crate) command_handle: CommandHandle<RobotCommand, RobotStateInter>,
     pub robot_state: Arc<RwLock<RobotStateInter>>,
+    /// Robot command-server protocol version reported during the FCI handshake.
+    pub server_version: u16,
 }
 
 macro_rules! cmd_fn {
@@ -51,7 +53,7 @@ impl FrankaRobotImpl {
         let (command_handle, robot_state, udp_port) =
             Network::spawn_udp_thread(PORT_ROBOT_UDP, on_update);
         let network = Network::new(ip, PORT_ROBOT_COMMAND);
-        let mut robot = Self { network, command_handle, robot_state };
+        let mut robot = Self { network, command_handle, robot_state, server_version: 0 };
         robot.connect_(udp_port)?;
         Ok(robot)
     }
@@ -72,6 +74,7 @@ impl FrankaRobotImpl {
 
     fn connect_(&mut self, udp_port: u16) -> RobotResult<()> {
         let result = self._connect(ConnectData { version: FRANKA_ROBOT_VERSION, udp_port })?;
+        self.server_version = result.version;
         if let ConnectStatusEnum::Success = result.status {
             Ok(())
         } else {
