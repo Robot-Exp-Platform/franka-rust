@@ -13,7 +13,6 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    thread::sleep,
     time::Duration,
 };
 
@@ -397,9 +396,6 @@ where
     }
     fn move_joint_async(&mut self, target: &[f64; FRANKA_DOF]) -> RobotResult<()> {
         self.is_moving = true;
-        self.robot_impl._move(MotionType::Joint(*target).into())?;
-        sleep(Duration::from_millis(2));
-
         let state = self.robot_impl.robot_state.read().unwrap();
         let joint = state.q_d;
         drop(state);
@@ -420,10 +416,21 @@ where
         // let path_generate = path_generate::joint_trapezoid(&joint, &target, v_max, a_max);
 
         let mut duration = Duration::from_millis(0);
-        self.robot_impl.command_handle.set_closure(move |_, d| {
-            duration += d;
-            (MotionType::Joint(path_generate(duration)), duration > t_max).into()
-        });
+        let activation = self.robot_impl.command_handle.set_paused_closure(
+            (MotionType::Joint(joint), false).into(),
+            move |_, d| {
+                duration += d;
+                (MotionType::Joint(path_generate(duration)), duration > t_max).into()
+            },
+        );
+        if let Err(error) = self
+            .robot_impl
+            .start_motion(MotionType::Joint(target).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            return Err(error);
+        }
+        activation.activate();
         Ok(())
     }
     fn move_cartesian(&mut self, target: &Pose) -> RobotResult<()> {
@@ -433,10 +440,6 @@ where
     }
     fn move_cartesian_async(&mut self, target: &Pose) -> RobotResult<()> {
         self.is_moving = true;
-        self.robot_impl
-            ._move(MotionType::<7>::Cartesian(*target).into())?;
-        sleep(Duration::from_millis(1));
-
         let target = *target;
         let state = self.robot_impl.robot_state.read().unwrap();
         let pose: Pose = state.O_T_EE.into();
@@ -453,14 +456,25 @@ where
             cartesian_quat_simple_4th_curve(pose.quat(), target.quat(), *v_max, *a_max);
 
         let mut duration = Duration::from_millis(0);
-        self.robot_impl.command_handle.set_closure(move |_, d| {
-            duration += d;
-            (
-                MotionType::Cartesian(path_generate(duration).into()),
-                duration > t_max,
-            )
-                .into()
-        });
+        let activation = self.robot_impl.command_handle.set_paused_closure(
+            (MotionType::Cartesian(pose), false).into(),
+            move |_, d| {
+                duration += d;
+                (
+                    MotionType::Cartesian(path_generate(duration).into()),
+                    duration > t_max,
+                )
+                    .into()
+            },
+        );
+        if let Err(error) = self
+            .robot_impl
+            .start_motion(MotionType::<7>::Cartesian(target).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            return Err(error);
+        }
+        activation.activate();
         Ok(())
     }
 }
@@ -482,18 +496,24 @@ where
 
         self.move_to(path[0])?;
         let last = path.last().cloned().unwrap_or(MotionType::Stop);
+        let initial = path[0];
         let mut path = path.into_iter();
-        self.robot_impl._move(last.into())?;
-        sleep(Duration::from_millis(2));
-
-        self.robot_impl.command_handle.set_closure(move |_, _| {
-            if let Some(next) = path.next() {
-                (next.with_coord(&coord, &state), false)
-            } else {
-                (last, true)
-            }
-            .into()
-        });
+        let activation = self.robot_impl.command_handle.set_paused_closure(
+            (initial.with_coord(&coord, &state), false).into(),
+            move |_, _| {
+                if let Some(next) = path.next() {
+                    (next.with_coord(&coord, &state), false)
+                } else {
+                    (last, true)
+                }
+                .into()
+            },
+        );
+        if let Err(error) = self.robot_impl.start_motion(last.into()) {
+            self.robot_impl.command_handle.remove_closure();
+            return Err(error);
+        }
+        activation.activate();
         Ok(())
     }
 }
@@ -529,12 +549,14 @@ where
     type Handle = FrankaHandle;
     fn start_streaming(&mut self) -> RobotResult<Self::Handle> {
         self.is_moving = true;
-        self.robot_impl._move(MotionType::Joint([0.0; 7]).into())?;
-        sleep(Duration::from_millis(2));
         let state = self.robot_impl.robot_state.read().unwrap();
+        let initial = state.q_d;
+        drop(state);
         self.robot_impl
             .command_handle
-            .set_target((MotionType::Joint(state.q_d), false));
+            .set_target((MotionType::Joint(initial), false));
+        self.robot_impl
+            .start_motion(MotionType::Joint([0.0; 7]).into())?;
 
         Ok(FrankaHandle {
             command_handle: self.robot_impl.command_handle.clone(),
@@ -575,30 +597,39 @@ where
         let is_finished_clone = handle.is_finished.clone();
 
         self.is_moving = true;
-        self.robot_impl._move(ControlType::Torque([0.; 7]).into())?;
-
-        self.robot_impl.command_handle.set_closure(move |state, _| {
-            let q = state.q;
-            let dq = state.dq;
-            let target = {
-                let t = target_clone.lock().unwrap();
-                t.unwrap_or(q)
-            };
-            let stiffness = {
-                let s = stiffness_clone.lock().unwrap();
-                *s
-            };
-            let damping = {
-                let d = damping_clone.lock().unwrap();
-                *d
-            };
-            let torque = joint_impedance(&stiffness, &damping, target, q, dq);
-            (
-                ControlType::Torque(torque),
-                is_finished_clone.load(Ordering::SeqCst),
-            )
-                .into()
-        });
+        let activation = self.robot_impl.command_handle.set_paused_closure(
+            (ControlType::Torque([0.; 7]), false).into(),
+            move |state, _| {
+                let q = state.q;
+                let dq = state.dq;
+                let target = {
+                    let t = target_clone.lock().unwrap();
+                    t.unwrap_or(q)
+                };
+                let stiffness = {
+                    let s = stiffness_clone.lock().unwrap();
+                    *s
+                };
+                let damping = {
+                    let d = damping_clone.lock().unwrap();
+                    *d
+                };
+                let torque = joint_impedance(&stiffness, &damping, target, q, dq);
+                (
+                    ControlType::Torque(torque),
+                    is_finished_clone.load(Ordering::SeqCst),
+                )
+                    .into()
+            },
+        );
+        if let Err(error) = self
+            .robot_impl
+            .start_motion(ControlType::Torque([0.; 7]).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            return Err(error);
+        }
+        activation.activate();
         Ok(handle)
     }
     fn cartesian_impedance_async(
@@ -620,40 +651,49 @@ where
         let model = self.model()?;
 
         self.is_moving = true;
-        self.robot_impl._move(ControlType::Torque([0.; 7]).into())?;
-
-        self.robot_impl.command_handle.set_closure(move |state, _| {
-            let pose = state.O_T_EE;
-            let dq = state.dq;
-            let target = {
-                let t = target_clone.lock().unwrap();
-                t.unwrap_or(Pose::Homo(pose))
-            };
-            let stiffness = {
-                let s = stiffness_clone.lock().unwrap();
-                *s
-            };
-            let damping = {
-                let d = damping_clone.lock().unwrap();
-                *d
-            };
-            let jacobian = na::SMatrix::<f64, 6, 7>::from_column_slice(
-                &model.zero_jacobian_from_state(&Frame::EndEffector, &(*state).into()),
-            );
-            let force_torque = cartesian_impedance(
-                stiffness,
-                damping,
-                target.quat(),
-                jacobian,
-                dq,
-                Pose::Homo(pose).quat(),
-            );
-            (
-                ControlType::Torque(force_torque),
-                is_finished_clone.load(Ordering::SeqCst),
-            )
-                .into()
-        });
+        let activation = self.robot_impl.command_handle.set_paused_closure(
+            (ControlType::Torque([0.; 7]), false).into(),
+            move |state, _| {
+                let pose = state.O_T_EE;
+                let dq = state.dq;
+                let target = {
+                    let t = target_clone.lock().unwrap();
+                    t.unwrap_or(Pose::Homo(pose))
+                };
+                let stiffness = {
+                    let s = stiffness_clone.lock().unwrap();
+                    *s
+                };
+                let damping = {
+                    let d = damping_clone.lock().unwrap();
+                    *d
+                };
+                let jacobian = na::SMatrix::<f64, 6, 7>::from_column_slice(
+                    &model.zero_jacobian_from_state(&Frame::EndEffector, &(*state).into()),
+                );
+                let force_torque = cartesian_impedance(
+                    stiffness,
+                    damping,
+                    target.quat(),
+                    jacobian,
+                    dq,
+                    Pose::Homo(pose).quat(),
+                );
+                (
+                    ControlType::Torque(force_torque),
+                    is_finished_clone.load(Ordering::SeqCst),
+                )
+                    .into()
+            },
+        );
+        if let Err(error) = self
+            .robot_impl
+            .start_motion(ControlType::Torque([0.; 7]).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            return Err(error);
+        }
+        activation.activate();
 
         Ok(handle)
     }
@@ -753,12 +793,18 @@ where
     {
         self.is_moving = true;
         let example = ArmState::<FRANKA_DOF>::default();
-        self.robot_impl
-            ._move(closure(example, Duration::from_millis(0)).0.into())?;
-        sleep(Duration::from_millis(2));
-        self.robot_impl
+        let initial = closure(example, Duration::ZERO).0;
+        let activation = self
+            .robot_impl
             .command_handle
-            .set_closure(move |state, duration| closure((*state).into(), duration).into());
+            .set_paused_closure((initial, false).into(), move |state, duration| {
+                closure((*state).into(), duration).into()
+            });
+        if let Err(error) = self.robot_impl.start_motion(initial.into()) {
+            self.robot_impl.command_handle.remove_closure();
+            return Err(error);
+        }
+        activation.activate();
         Ok(())
     }
 
@@ -769,12 +815,18 @@ where
             + 'static,
     {
         self.is_moving = true;
-        self.robot_impl
-            .command_handle
-            .set_closure(move |state, duration| closure((*state).into(), duration).into());
-        self.robot_impl
-            ._move(ControlType::Torque([0.0; FRANKA_DOF]).into())?;
-        sleep(Duration::from_millis(2));
+        let activation = self.robot_impl.command_handle.set_paused_closure(
+            (ControlType::Torque([0.0; FRANKA_DOF]), false).into(),
+            move |state, duration| closure((*state).into(), duration).into(),
+        );
+        if let Err(error) = self
+            .robot_impl
+            .start_motion(ControlType::Torque([0.0; FRANKA_DOF]).into())
+        {
+            self.robot_impl.command_handle.remove_closure();
+            return Err(error);
+        }
+        activation.activate();
         Ok(())
     }
 }

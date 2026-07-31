@@ -51,6 +51,9 @@ pub struct Response<const C: Command, S> {
 pub trait CommandIDConfig<T> {
     fn command_id(&self) -> T;
     fn set_command_id(&mut self, id: T);
+    fn wire_size(&self) -> Option<usize> {
+        None
+    }
     fn time(&self) -> Option<Duration> {
         None
     }
@@ -608,6 +611,10 @@ impl<const C: Command, S> CommandIDConfig<u32> for Response<C, S> {
 
     fn set_command_id(&mut self, id: u32) {
         self.header.command_id = id;
+    }
+
+    fn wire_size(&self) -> Option<usize> {
+        Some(self.header.size as usize)
     }
 }
 

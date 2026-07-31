@@ -1,7 +1,6 @@
 use robot_behavior::{RobotException, RobotResult};
 use robot_behavior::{is_hardware_realtime, set_realtime_priority};
 use serde::{Serialize, de::DeserializeOwned};
-use std::cmp::max;
 use std::{
     fmt::{Debug, Display},
     io::{Read, Write},
@@ -114,24 +113,27 @@ impl Network {
             stream.write_all(&request)?;
             let mut buffer = vec![0_u8; size_of::<S>() + 4];
             stream.read_exact(&mut buffer)?;
-            let res = bincode::deserialize(&buffer)
+            let res: S = bincode::deserialize(&buffer)
                 .map_err(|e| RobotException::DeserializeError(e.to_string()))?;
-            let mut receive_buffer = Vec::new();
-            let mut size_max = 0;
-            loop {
-                let mut buffer = vec![0_u8; 1024 * 5];
-                if let Ok(size) = stream.read(&mut buffer) {
-                    receive_buffer.append(&mut buffer[..size].to_vec());
-                    if size < size_max {
-                        break;
-                    }
-                    size_max = max(size_max, size);
-                    #[cfg(feature = "debug")]
-                    println!("size:{size}");
-                } else {
-                    break;
-                }
+            if res.command_id() != command_id {
+                return Err(RobotException::NetworkError(format!(
+                    "response command id {} does not match request {command_id}",
+                    res.command_id()
+                )));
             }
+            let response_size = res.wire_size().ok_or_else(|| {
+                RobotException::NetworkError(
+                    "buffer response does not expose its wire size".to_string(),
+                )
+            })?;
+            if response_size < buffer.len() {
+                return Err(RobotException::NetworkError(format!(
+                    "invalid buffer response size {response_size}, header is {} bytes",
+                    buffer.len()
+                )));
+            }
+            let mut receive_buffer = vec![0_u8; response_size - buffer.len()];
+            stream.read_exact(&mut receive_buffer)?;
             println!("receive size:{}", receive_buffer.len());
             Ok((res, receive_buffer))
         } else {

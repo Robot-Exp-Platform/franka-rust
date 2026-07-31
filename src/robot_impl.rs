@@ -72,6 +72,11 @@ impl FrankaRobotImpl {
     cmd_fn!(_stop_move, { Command::StopMove }; data: (); GetterSetterStatus);
     cmd_fn!(_get_cartesian_limit, { Command::GetCartesianLimit }; data: GetCartesianLimitData; GetCartesianLimitStatus);
 
+    pub(crate) fn start_motion(&mut self, data: MoveData) -> RobotResult<()> {
+        let status = self._move(data)?;
+        move_start_error(status).map_or(Ok(()), Err)
+    }
+
     fn connect_(&mut self, udp_port: u16) -> RobotResult<()> {
         let result = self._connect(ConnectData { version: FRANKA_ROBOT_VERSION, udp_port })?;
         self.server_version = result.version;
@@ -97,6 +102,8 @@ impl FrankaRobotImpl {
     pub fn waiting_for_finish(&mut self) -> RobotResult<()> {
         let mut last_message_id = None;
         let mut last_state_update = Instant::now();
+        let start_wait = Instant::now();
+        let mut motion_seen = false;
         loop {
             let (moving, message_id) = {
                 let state = match self.robot_state.read() {
@@ -132,8 +139,15 @@ impl FrankaRobotImpl {
                     "robot state stopped updating for 100 ms while waiting for motion".to_string(),
                 ));
             }
-            if !moving {
+            if moving {
+                motion_seen = true;
+            } else if motion_seen {
                 break;
+            } else if start_wait.elapsed() >= MOTION_START_TIMEOUT {
+                self.command_handle.remove_closure();
+                return Err(RobotException::CommandException(
+                    "robot did not enter an active motion mode within 2 s".to_string(),
+                ));
             }
             sleep(Duration::from_millis(1));
         }
@@ -151,6 +165,7 @@ impl FrankaRobotImpl {
 }
 
 const STATE_STREAM_TIMEOUT: Duration = Duration::from_millis(100);
+const MOTION_START_TIMEOUT: Duration = Duration::from_secs(2);
 
 fn state_stream_stalled(elapsed: Duration) -> bool {
     elapsed >= STATE_STREAM_TIMEOUT
@@ -165,6 +180,12 @@ fn motion_mode_error(robot_mode: RobotMode) -> Option<RobotException> {
         RobotException::CommandException(format!(
             "motion aborted because robot entered {robot_mode:?} mode"
         ))
+    })
+}
+
+fn move_start_error(status: MoveStatus) -> Option<RobotException> {
+    (status != MoveStatus::MotionStarted).then(|| {
+        RobotException::CommandException(format!("move start failed with status: {status:?}"))
     })
 }
 
@@ -189,5 +210,12 @@ mod tests {
     fn waiting_state_stream_has_a_bounded_stale_timeout() {
         assert!(!state_stream_stalled(Duration::from_millis(99)));
         assert!(state_stream_stalled(Duration::from_millis(100)));
+    }
+
+    #[test]
+    fn move_start_requires_motion_started_status() {
+        assert!(move_start_error(MoveStatus::MotionStarted).is_none());
+        assert!(move_start_error(MoveStatus::StartAtSingularPoseRejected).is_some());
+        assert!(move_start_error(MoveStatus::ReflexAborted).is_some());
     }
 }

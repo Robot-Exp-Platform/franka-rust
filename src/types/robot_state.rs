@@ -390,11 +390,6 @@ impl From<RobotStateInter> for RobotState {
 
 impl From<RobotStateInter> for ArmState<7> {
     fn from(val: RobotStateInter) -> Self {
-        // RobotStateInter is packed for the wire ABI. Copy array fields before
-        // iterating so Rust never creates an unaligned reference into it.
-        let joint_collision = val.joint_collision;
-        let cartesian_collision = val.cartesian_collision;
-        let reflex_reason = val.reflex_reason;
         let (m, x, i) = combine_ee_load(
             val.m_ee,
             val.F_x_Cee,
@@ -433,11 +428,10 @@ impl From<RobotStateInter> for ArmState<7> {
             },
             load: Some(LoadState { m, x, i }),
             external_wrench: Some(val.O_F_ext_hat_K),
-            reflex_triggered: Some(
-                reflex_reason.iter().any(|triggered| *triggered)
-                    || joint_collision.iter().any(|level| *level > 0.0)
-                    || cartesian_collision.iter().any(|level| *level > 0.0),
-            ),
+            // `reflex_reason` 会保留上一次运动的记录，恢复后仍不会清零。
+            // 与 libfranka 和 ROS 执行器的实时语义保持一致：只有当前机器人模式
+            // 能表示反射保护仍处于触发状态。
+            reflex_triggered: Some(val.robot_mode == RobotMode::Reflux),
             command_success_rate: Some(val.control_command_success_rate),
         }
     }
@@ -688,9 +682,7 @@ mod test {
         let mut source = RobotStateInter::default();
         source.O_F_ext_hat_K = [1.0, -2.0, 3.0, -4.0, 5.0, -6.0];
         source.control_command_success_rate = 0.875;
-        let mut joint_collision = [0.0; 7];
-        joint_collision[3] = 1.0;
-        source.joint_collision = joint_collision;
+        source.robot_mode = RobotMode::Reflux;
 
         let arm_state: robot_behavior::ArmState<7> = source.into();
 
@@ -700,5 +692,18 @@ mod test {
         );
         assert_eq!(arm_state.reflex_triggered, Some(true));
         assert_eq!(arm_state.command_success_rate, Some(0.875));
+    }
+
+    #[test]
+    fn arm_state_ignores_historical_reflex_reason_after_recovery() {
+        let mut source = RobotStateInter::default();
+        let mut reflex_reason = [false; 41];
+        reflex_reason[10] = true;
+        source.reflex_reason = reflex_reason;
+        source.robot_mode = RobotMode::Idle;
+
+        let arm_state: robot_behavior::ArmState<7> = source.into();
+
+        assert_eq!(arm_state.reflex_triggered, Some(false));
     }
 }
