@@ -1,4 +1,4 @@
-﻿use nalgebra as na;
+use nalgebra as na;
 use robot_behavior::{
     ArmState, JointSample, JointState, LoadState, Pose, RobotResult, SpatialSample, StateView,
 };
@@ -444,6 +444,9 @@ impl From<RobotStateInter> for JointState<7> {
     }
 }
 
+// Input inertias are about each body's center of mass; positions are expressed
+// in the flange frame. Model::mass/coriolis require the combined inertia about
+// the combined center of mass, not about the flange origin.
 fn combine_ee_load(
     m_ee: f64,
     x_ee: [f64; 3],
@@ -452,21 +455,42 @@ fn combine_ee_load(
     x_load: [f64; 3],
     i_load: [f64; 9],
 ) -> (f64, [f64; 3], [f64; 9]) {
+    let m_total = m_ee + m_load;
+    // Match libfranka's zero-mass convention, including stale inertia fields.
+    if m_total == 0.0 {
+        return (m_total, [0.0; 3], [0.0; 9]);
+    }
+
     let x_ee = na::Vector3::from_column_slice(&x_ee);
     let x_load = na::Vector3::from_column_slice(&x_load);
-    let i_ee = na::Matrix3::from_column_slice(&i_ee);
-    let i_load = na::Matrix3::from_column_slice(&i_load);
+    let i_ee = if m_ee == 0.0 {
+        na::Matrix3::zeros()
+    } else {
+        na::Matrix3::from_column_slice(&i_ee)
+    };
+    let i_load = if m_load == 0.0 {
+        na::Matrix3::zeros()
+    } else {
+        na::Matrix3::from_column_slice(&i_load)
+    };
+    let x_total = if m_total > 0.0 {
+        (m_ee * x_ee + m_load * x_load) / m_total
+    } else {
+        // Follow libfranka's convention; physical-parameter validation belongs
+        // at the configuration boundary, not in this state conversion helper.
+        na::Vector3::zeros()
+    };
 
-    let m_total = m_ee + m_load;
-    let x_total = (m_ee * x_ee + m_load * x_load) / m_total;
+    // Apply the parallel-axis theorem directly at the combined center of mass.
+    // This is equivalent to shifting both inertias to the flange, summing, then
+    // subtracting the total body's flange offset, without that cancellation.
+    let parallel_axis = |offset: na::Vector3<f64>| {
+        na::Matrix3::from_diagonal_element(offset.norm_squared()) - offset * offset.transpose()
+    };
     let i_total = i_ee
         + i_load
-        + m_ee
-            * (na::Matrix3::from_diagonal_element((x_ee.transpose() * x_ee)[(0, 0)])
-                - x_ee * x_ee.transpose())
-        + m_load
-            * (na::Matrix3::from_diagonal_element((x_load.transpose() * x_load)[(0, 0)])
-                - x_load * x_load.transpose());
+        + m_ee * parallel_axis(x_ee - x_total)
+        + m_load * parallel_axis(x_load - x_total);
 
     let x_total = x_total.as_slice().try_into().unwrap();
     let i_total = i_total.as_slice().try_into().unwrap();
@@ -575,6 +599,15 @@ mod test {
 
     use super::*;
 
+    fn assert_close<const N: usize>(actual: [f64; N], expected: [f64; N]) {
+        for (index, (actual, expected)) in actual.into_iter().zip(expected).enumerate() {
+            assert!(
+                (actual - expected).abs() < 1e-10,
+                "component {index}: actual {actual}, expected {expected}"
+            );
+        }
+    }
+
     #[test]
     fn test_combine_ee_load() {
         let m_ee = 1.0;
@@ -587,8 +620,81 @@ mod test {
         let (m_total, x_total, i_total) = combine_ee_load(m_ee, x_ee, i_ee, m_load, x_load, i_load);
 
         assert_eq!(m_total, 3.0);
-        assert_eq!(x_total, [1.5, 2.5, 3.5]);
-        assert_eq!(i_total, [3.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 3.0]);
+        assert_close(x_total, [5.0 / 3.0, 8.0 / 3.0, 11.0 / 3.0]);
+        // The two-body offset term is reduced_mass * (||d||² I - d dᵀ):
+        // reduced_mass = 2/3, d = [1, 1, 1], added to 3 I.
+        assert_close(
+            i_total,
+            [
+                13.0 / 3.0,
+                -2.0 / 3.0,
+                -2.0 / 3.0,
+                -2.0 / 3.0,
+                13.0 / 3.0,
+                -2.0 / 3.0,
+                -2.0 / 3.0,
+                -2.0 / 3.0,
+                13.0 / 3.0,
+            ],
+        );
+    }
+
+    #[test]
+    fn combine_ee_load_single_body_keeps_its_center_inertia() {
+        let center = [0.3, -0.4, 0.5];
+        let inertia = [0.1, 0.01, 0.02, 0.01, 0.2, 0.03, 0.02, 0.03, 0.25];
+        // A zero-mass body's stored position and inertia must not add a load.
+        for (mass, center_out, inertia_out) in [
+            combine_ee_load(2.0, center, inertia, 0.0, [9.0; 3], [8.0; 9]),
+            combine_ee_load(0.0, [9.0; 3], [8.0; 9], 2.0, center, inertia),
+        ] {
+            assert_eq!(mass, 2.0);
+            assert_close(center_out, center);
+            assert_close(inertia_out, inertia);
+        }
+    }
+
+    #[test]
+    fn combine_ee_load_zero_mass_has_finite_zero_properties() {
+        let (mass, center, inertia) =
+            combine_ee_load(0.0, [1.0; 3], [4.0; 9], 0.0, [2.0; 3], [5.0; 9]);
+        assert_eq!(mass, 0.0);
+        assert_eq!(center, [0.0; 3]);
+        assert_eq!(inertia, [0.0; 9]);
+    }
+
+    #[test]
+    fn combine_ee_load_translation_preserves_center_inertia() {
+        let x_ee = [0.1, -0.2, 0.3];
+        let x_load = [0.6, 0.4, -0.5];
+        let shift = [100.0, -3.0, 7.0];
+        let i_ee = [0.1, 0.01, 0.02, 0.01, 0.2, 0.03, 0.02, 0.03, 0.25];
+        let i_load = [0.2, 0.0, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.4];
+        let (mass, center, inertia) = combine_ee_load(1.0, x_ee, i_ee, 2.0, x_load, i_load);
+        let translated_ee = std::array::from_fn(|i| x_ee[i] + shift[i]);
+        let translated_load = std::array::from_fn(|i| x_load[i] + shift[i]);
+        let (translated_mass, translated_center, translated_inertia) =
+            combine_ee_load(1.0, translated_ee, i_ee, 2.0, translated_load, i_load);
+        assert_eq!(translated_mass, mass);
+        assert_close(
+            translated_center,
+            std::array::from_fn(|i| center[i] + shift[i]),
+        );
+        assert_close(translated_inertia, inertia);
+    }
+
+    #[test]
+    fn combine_ee_load_swapping_bodies_preserves_result() {
+        let x_ee = [0.1, -0.2, 0.3];
+        let x_load = [0.6, 0.4, -0.5];
+        let i_ee = [0.1, 0.01, 0.02, 0.01, 0.2, 0.03, 0.02, 0.03, 0.25];
+        let i_load = [0.2, 0.0, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.4];
+        let (mass, center, inertia) = combine_ee_load(1.0, x_ee, i_ee, 2.0, x_load, i_load);
+        let (swapped_mass, swapped_center, swapped_inertia) =
+            combine_ee_load(2.0, x_load, i_load, 1.0, x_ee, i_ee);
+        assert_eq!(swapped_mass, mass);
+        assert_close(swapped_center, center);
+        assert_close(swapped_inertia, inertia);
     }
 
     #[derive(Serialize, Default, Deserialize, Debug, Copy, Clone)]
