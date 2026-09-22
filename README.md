@@ -21,6 +21,8 @@ typed behavior spaces and scoped controller closures.
 - `control_with_async` sessions whose per-cycle controller closure can be
   asynchronous while the robot resource remains borrowed for the whole control
   session.
+- Native `AsyncControlWith::control_native_async` sessions that await both the
+  TCP session protocol and UDP cycles on the caller's Tokio executor.
 - Franka-specific configuration such as collision behavior, internal impedance,
   guiding mode, load and frame settings.
 - Access to the downloaded Franka model library for kinematics and dynamics.
@@ -71,12 +73,60 @@ Errors from both execution and cleanup are retained in
 `RobotException::ControlSession` when both fail. The existing local runtime,
 UDP timing and blocking ownership model are unchanged.
 
-The Franka async-callback entry constructs a local Tokio runtime and calls
-`block_on`. Calling it from an already entered Tokio runtime can panic due to
-nested runtime entry. Consequently, the shared ControlRhythm is not yet a
-drop-in Franka driver for an arbitrary Tokio System context. Resolving this
-existing runtime boundary is a separate design task; mock System tests do not
-validate that hardware execution context.
+The legacy Franka async-callback entry still constructs a local Tokio runtime
+and calls `block_on`. Do not call it inside an entered Tokio runtime; use the
+native capability below. Synchronous `move_to` and the existing blocking
+controller contracts remain available.
+
+## Native Async Sessions
+
+`AsyncControlWith<S>::control_native_async(&mut callback)` returns a `Send`
+future for the whole device session. Supported spaces are `JointPositionControl`,
+`JointVelocityControl`, `CartesianPoseControl`, `CartesianVelocityControl`,
+`TorqueControl` and `ArmTorqueControl` (all with 7 joints).
+
+Await it inside a Tokio runtime with I/O and time enabled. The driver borrows the
+robot and callback until the session finishes; it creates no nested runtime,
+worker thread, task or boxed callback future. Startup, normal completion and
+cancellation all await TCP/UDP I/O. The two async entry points share the same
+session state machine; the ordinary synchronous path keeps its direct std loop.
+`move_to_async` also uses this nonblocking session protocol, while connection,
+configuration and trajectory planning remain separate synchronous work.
+
+```rust,no_run
+use franka_rust::FrankaEmika;
+use robot_behavior::{AsyncControlCallback, AsyncControlWith, JointPositionControl,
+                     JointState, RobotResult};
+
+async fn run<C>(robot: &mut FrankaEmika, controller: &mut C) -> RobotResult<()>
+where C: AsyncControlCallback<JointState<7>, [f64; 7]>
+{
+    <FrankaEmika as AsyncControlWith<JointPositionControl<7>>>::control_native_async(
+        robot, controller,
+    ).await
+}
+```
+
+`AsyncControlCallback` supports statically dispatched controllers that borrow
+their own state across `await`. Ordinary `FnMut(Obs, Duration) -> Fut` closures
+work when their future is `Send`; for lending mutable state use a named controller
+struct implementing the trait. The returned `ControlFlow` has the same command,
+`done` and `Break` meanings described above.
+
+With `robot_behavior/roplat`, use **AsyncControlRhythm** inside an asynchronous
+`#[roplat::system]` graph. Its per-cycle domain may await child nodes and domains;
+the robot session completes its protocol before returning. The legacy
+`ControlRhythm` uses the blocking interface and keeps the runtime restriction.
+
+Socket leases exclusively borrow the existing connections and restore blocking
+mode on exit or Drop; synchronous and native sessions may alternate on the same
+robot. Dropping a future does **not** perform async StopMove cleanup. An uncertain
+start or unfinished motion blocks another session until reconnection; a partially
+consumed TCP frame also invalidates the connection. Cooperatively return `Break`
+when session termination and resource recovery are required. The cancellation
+network deadline is three seconds, and async writes retain the configured TCP
+write timeout (currently three milliseconds). These are network bounds, not
+physical stopping guarantees. Ordinary startup/finish reads have no new timeout.
 
 Offline loopback regression tests exercise these actual TCP/UDP paths without
 connecting to hardware (`cargo test -p franka_rust --lib realtime::tests`). They
@@ -87,9 +137,8 @@ real-device stopping behavior and timing still need hardware acceptance.
 
 - `robot_behavior` defines the behavior traits and controller utilities used by
   this driver.
-- Enable `robot_behavior/roplat` to use the shared `ControlRhythm`. A drive
-  holds the robot for one blocking control session; an async controller does
-  not make the surrounding session nonblocking.
+- Enable `robot_behavior/roplat` for `AsyncControlRhythm` and the legacy
+  `ControlRhythm`. Choose the native rhythm for asynchronous System graphs.
 - `rsbullet` and `libjaka-rs` are sibling backends in the same workspace; they
   target the same behavior vocabulary but use their own transport kernels.
 
@@ -187,3 +236,17 @@ commands physically safe. Before hardware tests:
 `franka_rust` is an experimental hardware driver. The Rust API is currently more
 important than preserving old names, so minor releases may still reshape public
 interfaces while the Robot-Exp driver stack settles.
+
+## Offline Loopback Measurement
+
+```sh
+ROPLAT_SKIP_ASSET_EXPORT=1 cargo test -p franka_rust --release --lib native_loopback_performance -- --ignored --nocapture --test-threads=1
+```
+
+The ignored, finite test compares public std, blocking async-callback and native
+async sessions. It rotates their order and reports whole-session time separately
+from peer-observed cycle RTT p50/p99 for one and 1000 cycles. Native runs reuse
+the caller runtime; the legacy wrapper constructs its runtime per session. The
+fixed FCI packet sizes are printed. Loopback RTT includes host scheduling and
+codec/filter work; it is not one-way communication latency or a hardware result.
+Set `FRANKA_PERF_ROUNDS` and `FRANKA_PERF_CYCLES` to repeat it. Run it alone.

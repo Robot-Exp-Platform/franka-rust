@@ -270,7 +270,7 @@ fn two_cancelled_sessions_consume_their_own_move_responses() {
         })
         .unwrap();
         assert!(robot.motion_command_id.is_none());
-        assert_udp_mode(&robot.udp_socket, true);
+        assert_udp_mode(&robot.udp_socket, false);
         assert_eq!(server.join().unwrap(), 0);
     });
 }
@@ -311,7 +311,7 @@ fn assert_deadline(omit: Omit, use_async: bool) {
         "server EOF must not terminate cleanup: {elapsed:?}"
     );
     assert_eq!(robot.udp_socket.read_timeout().unwrap(), None);
-    assert_udp_mode(&robot.udp_socket, use_async);
+    assert_udp_mode(&robot.udp_socket, false);
     assert!(robot.motion_command_id.is_some());
     let retry = std_udp::control_flow(&mut robot, MoveData::default(), |_, _| {
         panic!("unconfirmed session must not restart")
@@ -329,3 +329,5 @@ fn missing_idle_udp_returns_error_by_total_deadline() {
 fn missing_terminal_tcp_returns_error_by_total_deadline() {
     run_bounded(|| assert_deadline(Omit::TerminalResponse, true));
 }
+
+mod native;

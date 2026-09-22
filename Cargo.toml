@@ -15,7 +15,7 @@ name = "franka_rust"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-robot_behavior = "0.6.0"
+robot_behavior = { version = "0.6.0", git = "ssh://git@github.com/Robot-Exp-Platform/robot_behavior.git", rev = "79a3820af143a3ab75dfd3b308469482aac534c0" }
 pyo3 = { version = "0.28.3", optional = true, features = [
     "extension-module",
     "multiple-pymethods",
@@ -37,7 +37,7 @@ libloading = "0.8"
 libc = "0.2"
 strum = "0.27"
 strum_macros = "0.27"
-tokio = { version = "1.48.0", features = ["net", "rt", "time"] }
+tokio = { version = "1.48.0", features = ["net", "rt", "time", "io-util"] }
 anyhow = "1.0.100"
 
 [build-dependencies]
@@ -56,3 +56,8 @@ conservative_constraint = []
 fci_v8 = []
 to_py = ["pyo3", "ffi", "robot_behavior/to_py"]
 to_cxx = ["cxx", "ffi", "robot_behavior/to_cxx"]
+
+# Integration tests exercise the optional System adapter; ordinary builds stay native.
+[dev-dependencies]
+robot_behavior = { version = "0.6.0", git = "ssh://git@github.com/Robot-Exp-Platform/robot_behavior.git", rev = "79a3820af143a3ab75dfd3b308469482aac534c0", features = ["roplat"] }
+roplat = { version = "0.2.2", git = "ssh://git@github.com/Robot-Exp-Platform/roplat.git", rev = "b47f7b6aa54a230417331e4b85cefcc8eff9e128" }

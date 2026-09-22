@@ -99,14 +99,7 @@ impl FrankaRobotImpl {
 
     pub(crate) fn finish_current_motion(&mut self) -> RobotResult<()> {
         let response = self.receive_motion_end()?;
-        if response.status == MoveStatus::Success {
-            Ok(())
-        } else {
-            Err(RobotException::CommandException(format!(
-                "move failed with status: {:?}",
-                response.status
-            )))
-        }
+        crate::realtime::check_finished(response.status)
     }
 
     /// Cancel without inventing an algorithm command. StopMove performs the
@@ -115,7 +108,7 @@ impl FrankaRobotImpl {
     pub(crate) fn cancel_current_motion(&mut self, was_nonblocking: bool) -> RobotResult<()> {
         // A network waiting bound, not a physical stopping deadline. This path
         // runs only on cancellation / failed sessions, never per normal cycle.
-        const CLEANUP_TIMEOUT: Duration = Duration::from_secs(3);
+        use crate::realtime::CLEANUP_TIMEOUT;
         let deadline = Instant::now() + CLEANUP_TIMEOUT;
         let previous_udp_timeout = self.udp_socket.read_timeout()?;
         let previous_deadline = self.network.replace_receive_deadline(Some(deadline));
@@ -136,20 +129,12 @@ impl FrankaRobotImpl {
                     continue;
                 }
                 *latest = state;
-                let running = (state.motion_generator_mode != MotionGeneratorMode::Idle
-                    && state.motion_generator_mode != MotionGeneratorMode::None)
-                    || state.controller_mode == ControllerMode::ExternalController;
-                if !running {
+                if !crate::realtime::motion_running(&state) {
                     break;
                 }
             }
             let response = self.receive_motion_end()?;
-            match response.status {
-                MoveStatus::Success | MoveStatus::Preempted => Ok(()),
-                status => Err(RobotException::CommandException(format!(
-                    "cancelled move ended with status: {status:?}"
-                ))),
-            }
+            crate::realtime::check_cancelled(response.status)
         })();
         self.network.replace_receive_deadline(previous_deadline);
         let restore_timeout = self.udp_socket.set_read_timeout(previous_udp_timeout);
