@@ -15,7 +15,6 @@ name = "franka_rust"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-roplat = "0.2.2"
 robot_behavior = "0.6.0"
 pyo3 = { version = "0.28.3", optional = true, features = [
     "extension-module",

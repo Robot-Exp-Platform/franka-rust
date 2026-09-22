@@ -37,8 +37,8 @@ Franka FCI 接入 `robot_behavior` 的统一行为特征，让真机、仿真器
 ## 与其他库的关系
 
 - `robot_behavior` 提供通用行为特征、状态模型和控制器工具。
-- `roplat` 集成共享同一套行为词汇；Franka 原生实时节律需要和 roplat
-  的异步执行边界一起设计，不应该简单包一层阻塞控制循环。
+- 开启 `robot_behavior/roplat` 后可使用公共 `ControlRhythm`。一次 drive
+  持有机器人并完成一次阻塞控制会话；异步回调不会令外围会话变为非阻塞。
 - `rsbullet`、`libjaka-rs` 是同一 workspace 内的其他后端，它们共享行为词汇，
   但各自使用适合自身的通讯内核。
 
@@ -131,3 +131,30 @@ fn main() -> RobotResult<()> {
 
 `franka_rust` 仍是实验性真机驱动。现阶段更重视 API 与 `robot_behavior`
 抽象的契合度，而不是保留旧接口名称；在驱动栈稳定前，小版本仍可能调整公开接口。
+
+## 控制会话的提前退出
+
+`control_with_flow` / `control_with_flow_async` 的回调返回
+`ControlFlow<(), (Command, bool)>`，两个入口都会阻塞到会话结束；`async`
+描述每周期回调。
+
+- `Continue((command, false))`：发送有效命令并继续。
+- `Continue((command, true))`：发送最后一条命令，完成正常 FCI 结束握手。
+- `Break(())`：本周期不发送算法命令；通过 TCP `StopMove` 结束会话，等设备
+  退出运行模式并消费 Move 终结响应。此处不会伪造零命令，也不等同于急停保证。
+
+原 tuple 回调的 `control_with` / `control_with_async` 包装同一条循环。执行与
+收尾同时失败时，`RobotException::ControlSession` 保留两个错误。局部 runtime、
+UDP 周期和阻塞所有权语义保持原有设计。
+
+`cargo test -p franka_rust --lib realtime::tests` 在临时 loopback TCP/UDP 端口
+验证真实生产循环，不连接硬件。测试通过不能替代真机停机行为和时序验收。
+
+取消或失败收尾的 StopMove 应答、idle 状态和 Move 终结响应共用 **3 秒总网络等待
+期限**，这不是物理安全停止时间保证。超时返回错误；会话结束尚未确认时，新的
+控制会话会明确拒绝并要求重新连接，防止把旧响应错当成新会话结束。收尾后恢复
+socket 原有读超时与非阻塞设置，正常周期 I/O 不变。可配置期限留作后续工作。
+
+### 执行上下文限制
+
+Franka 的 async 回调入口内部创建本地 Tokio runtime 并调用 `block_on`。从已进入的 Tokio runtime 直接调用可能因嵌套 runtime 而 panic，因此当前共享 ControlRhythm 尚不能作为任意 Tokio System 上下文中的即插即用真机入口。这是已有边界，后续需单独设计；本轮 mock System 通过不代表验证了该真机执行上下文。

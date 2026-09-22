@@ -34,7 +34,7 @@ impl FrankaGripper {
             .unwrap();
         let udp_port = udp_socket.local_addr().unwrap().port();
         let mut gripper = FrankaGripper {
-            network: Network::new(ip, PORT_GRIPPER_COMMAND),
+            network: Network::new(ip, PORT_GRIPPER_COMMAND).for_gripper(),
             udp_socket,
             gripper_state: GripperStateInter::default(),
             udp_port,

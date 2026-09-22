@@ -1,5 +1,5 @@
 use robot_behavior::RobotResult;
-use std::time::Duration;
+use std::{ops::ControlFlow, time::Duration};
 
 use crate::{
     robot_impl::FrankaRobotImpl,
@@ -15,15 +15,15 @@ use crate::{
 /// No background forwarding thread is involved: the controller closure is
 /// called directly after receiving each state packet, then its command is sent
 /// back through the same socket.
-pub(crate) fn control<F>(
+pub(crate) fn control_flow<F>(
     robot: &mut FrankaRobotImpl,
     mode: MoveData,
     mut command: F,
 ) -> RobotResult<()>
 where
-    F: FnMut(RobotStateInter, Duration) -> RobotCommand,
+    F: FnMut(RobotStateInter, Duration) -> ControlFlow<(), RobotCommand>,
 {
-    robot._move(mode)?;
+    super::start_session(robot, mode)?;
     let mut started = false;
     let mut previous_motion_time: Option<Duration> = None;
     let mut finish_command: Option<RobotCommand> = None;
@@ -36,7 +36,7 @@ where
 
         if let Some(mut command) = finish_command {
             if !FrankaRobotImpl::motion_started(&state, &mode) {
-                break robot.finish_current_motion();
+                break Ok(super::SessionEnd::Finished(robot.finish_current_motion()));
             }
             command.set_command_id(state.command_id());
             if let Err(err) = robot.send_prepared_command(addr, command) {
@@ -63,7 +63,10 @@ where
                 motion_time.saturating_sub(previous)
             });
 
-        let next = FrankaRobotImpl::prepare_command(&state, command(state, period), &mode);
+        let ControlFlow::Continue(next) = command(state, period) else {
+            break Ok(super::SessionEnd::Cancelled);
+        };
+        let next = FrankaRobotImpl::prepare_command(&state, next, &mode);
         let done = next.motion.motion_generation_finished;
         if let Err(err) = robot.send_prepared_command(addr, next) {
             break Err(err);
@@ -73,9 +76,5 @@ where
         }
     };
 
-    if session_result.is_err() {
-        let _ = robot._stop_move(());
-    }
-
-    session_result
+    super::finish_session(robot, session_result, false)
 }

@@ -1,5 +1,5 @@
 use robot_behavior::{RobotException, RobotResult};
-use std::time::Duration;
+use std::{ops::ControlFlow, time::Duration};
 use tokio::{net::UdpSocket, runtime::Builder};
 
 use crate::{
@@ -16,6 +16,29 @@ use crate::{
 /// The session reuses the robot's single UDP endpoint by cloning the socket
 /// handle into Tokio. No second local port is created and the robot is not
 /// reconnected to a competing UDP receiver.
+pub(crate) async fn control_flow_async<F>(
+    robot: &mut FrankaRobotImpl,
+    mode: MoveData,
+    mut command: F,
+) -> RobotResult<()>
+where
+    F: async FnMut(RobotStateInter, Duration) -> ControlFlow<(), RobotCommand>,
+{
+    let socket = robot.udp_socket.try_clone()?;
+    socket.set_nonblocking(true)?;
+    let socket = UdpSocket::from_std(socket)?;
+
+    super::start_session(robot, mode)?;
+    let session_result = run_udp_loop(robot, &socket, mode, async |state, duration| {
+        command(state, duration).await
+    })
+    .await;
+
+    super::finish_session(robot, session_result, true)
+}
+
+// Existing trajectory helpers always produce a valid command. Keep this
+// convenience path over the same canonical, flow-aware session loop.
 pub(crate) async fn control_async<F>(
     robot: &mut FrankaRobotImpl,
     mode: MoveData,
@@ -24,33 +47,22 @@ pub(crate) async fn control_async<F>(
 where
     F: async FnMut(RobotStateInter, Duration) -> RobotCommand,
 {
-    let socket = robot.udp_socket.try_clone()?;
-    socket.set_nonblocking(true)?;
-    let socket = UdpSocket::from_std(socket)?;
-
-    robot._move(mode)?;
-    let session_result = run_udp_loop(robot, &socket, mode, async |state, duration| {
-        command(state, duration).await
+    control_flow_async(robot, mode, async |state, duration| {
+        ControlFlow::Continue(command(state, duration).await)
     })
-    .await;
-
-    if session_result.is_err() {
-        let _ = robot._stop_move(());
-    }
-
-    session_result
+    .await
 }
 
-pub(crate) fn block_on_control_async<F>(
+pub(crate) fn block_on_control_flow_async<F>(
     robot: &mut FrankaRobotImpl,
     mode: MoveData,
     command: F,
 ) -> RobotResult<()>
 where
-    F: async FnMut(RobotStateInter, Duration) -> RobotCommand,
+    F: async FnMut(RobotStateInter, Duration) -> ControlFlow<(), RobotCommand>,
 {
     let runtime = Builder::new_current_thread().enable_io().build()?;
-    runtime.block_on(control_async(robot, mode, command))
+    runtime.block_on(control_flow_async(robot, mode, command))
 }
 
 pub(crate) async fn recv_state(robot: &mut FrankaRobotImpl) -> RobotResult<RobotStateInter> {
@@ -77,9 +89,9 @@ async fn run_udp_loop<F>(
     socket: &UdpSocket,
     mode: MoveData,
     mut command: F,
-) -> RobotResult<()>
+) -> RobotResult<super::SessionEnd>
 where
-    F: async FnMut(RobotStateInter, Duration) -> RobotCommand,
+    F: async FnMut(RobotStateInter, Duration) -> ControlFlow<(), RobotCommand>,
 {
     let mut buffer = vec![0_u8; std::mem::size_of::<RobotStateInter>() * 5];
     let mut started = false;
@@ -127,7 +139,7 @@ where
 
         if let Some(mut command) = finish_command {
             if !FrankaRobotImpl::motion_started(&state, &mode) {
-                return robot.finish_current_motion();
+                return Ok(super::SessionEnd::Finished(robot.finish_current_motion()));
             }
             command.set_command_id(state.command_id());
             let data = bincode::serialize(&command)
@@ -154,7 +166,10 @@ where
                 motion_time.saturating_sub(previous)
             });
 
-        let next = FrankaRobotImpl::prepare_command(&state, command(state, period).await, &mode);
+        let ControlFlow::Continue(next) = command(state, period).await else {
+            return Ok(super::SessionEnd::Cancelled);
+        };
+        let next = FrankaRobotImpl::prepare_command(&state, next, &mode);
         let done = next.motion.motion_generation_finished;
         let data = bincode::serialize(&next)
             .map_err(|err| RobotException::CommandException(err.to_string()))?;

@@ -45,13 +45,51 @@ The result is intentionally small: the robot type is not split into sync and
 async variants, and realtime controllers are not routed through a shared
 background closure store.
 
+## Ending A Controller Session
+
+`control_with_flow` and `control_with_flow_async` accept
+`ControlFlow<(), (Command, bool)>`. Both calls block until the device session
+has ended; `async` describes the per-cycle callback.
+
+- `Continue((command, false))` sends the command and continues.
+- `Continue((command, true))` sends the final command and completes the normal
+  FCI finish handshake.
+- `Break(())` sends no command from that cycle. The driver uses TCP `StopMove`,
+  waits for the device to leave its running modes, and consumes the terminal
+  Move response before returning. This is a device session stop, not a fabricated
+  zero command or a claim of an emergency-stop guarantee.
+
+Cancellation / failure cleanup has a shared three-second network waiting deadline
+for StopMove, idle-state reception and the terminal Move response. This does not
+guarantee a physical stopping time. Timeout returns an error; if session completion
+was not confirmed, new control sessions are rejected until the robot is reconnected.
+Read-timeout and nonblocking socket settings are restored on exit. Normal per-cycle
+I/O is unchanged. Configurable cleanup deadlines remain future work.
+
+The tuple-based `control_with` and `control_with_async` APIs wrap the same loop.
+Errors from both execution and cleanup are retained in
+`RobotException::ControlSession` when both fail. The existing local runtime,
+UDP timing and blocking ownership model are unchanged.
+
+The Franka async-callback entry constructs a local Tokio runtime and calls
+`block_on`. Calling it from an already entered Tokio runtime can panic due to
+nested runtime entry. Consequently, the shared ControlRhythm is not yet a
+drop-in Franka driver for an arbitrary Tokio System context. Resolving this
+existing runtime boundary is a separate design task; mock System tests do not
+validate that hardware execution context.
+
+Offline loopback regression tests exercise these actual TCP/UDP paths without
+connecting to hardware (`cargo test -p franka_rust --lib realtime::tests`). They
+verify command suppression, the final-command handshake and StopMove rejection;
+real-device stopping behavior and timing still need hardware acceptance.
+
 ## Relationship To Other Crates
 
 - `robot_behavior` defines the behavior traits and controller utilities used by
   this driver.
-- `roplat` integration shares the same behavior vocabulary; a Franka-native
-  realtime rhythm should be designed together with the roplat async execution
-  boundary instead of wrapping another blocking loop.
+- Enable `robot_behavior/roplat` to use the shared `ControlRhythm`. A drive
+  holds the robot for one blocking control session; an async controller does
+  not make the surrounding session nonblocking.
 - `rsbullet` and `libjaka-rs` are sibling backends in the same workspace; they
   target the same behavior vocabulary but use their own transport kernels.
 

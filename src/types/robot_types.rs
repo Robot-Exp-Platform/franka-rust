@@ -218,6 +218,7 @@ pub type StopMoveResponse = Response<{ Command::StopMove }, StopMoveStatus>;
 pub enum StopMoveStatus {
     Success,
     CommandNotPossibleRejected,
+    #[cfg(feature = "fci_v8")]
     CommandRejectedDueToActivatedSafetyFunctions,
     EmergencyAborted,
     ReflexAborted,
@@ -528,6 +529,12 @@ impl<'de, const C: Command> Deserialize<'de> for CommandHeader<C> {
         }
 
         let helper = CommandHeaderInternal::deserialize(deserializer)?;
+        if helper.command != C {
+            return Err(serde::de::Error::custom(format!(
+                "unexpected response command: expected {C:?}, got {:?}",
+                helper.command
+            )));
+        }
         Ok(CommandHeader { command_id: helper.command_id, size: helper.size })
     }
 }
@@ -632,6 +639,17 @@ impl<const N: usize> From<ControlType<N>> for MoveData {
             motion_generator_mode: MoveMotionGeneratorMode::JointVelocity,
             maximum_path_deviation: MoveDeviation::default(),
             maximum_goal_deviation: MoveDeviation::default(),
+        }
+    }
+}
+
+impl From<StopMoveStatus> for RobotResult<()> {
+    fn from(value: StopMoveStatus) -> Self {
+        match value {
+            StopMoveStatus::Success => Ok(()),
+            status => Err(RobotException::CommandException(format!(
+                "stop move failed with status: {status:?}"
+            ))),
         }
     }
 }

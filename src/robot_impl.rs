@@ -17,6 +17,7 @@ pub struct FrankaRobotImpl {
     pub(crate) network: Network,
     pub robot_state: Arc<RwLock<RobotStateInter>>,
     pub(crate) udp_socket: UdpSocket,
+    pub(crate) motion_command_id: Option<u32>,
 }
 
 macro_rules! cmd_fn {
@@ -39,13 +40,33 @@ impl FrankaRobotImpl {
             network,
             robot_state: Arc::new(RwLock::new(RobotStateInter::default())),
             udp_socket,
+            motion_command_id: None,
         };
         robot.connect_(udp_port).unwrap();
         robot
     }
 
     cmd_fn!(_connect, { Command::Connect }; data: ConnectData; ConnectStatus);
-    cmd_fn!(_move, { Command::Move }; data: MoveData; MoveStatus);
+    pub(crate) fn _move(&mut self, mode: MoveData) -> RobotResult<MoveStatus> {
+        if self.motion_command_id.is_some() {
+            return Err(RobotException::CommandException(
+                "previous control session was not confirmed finished; reconnect before starting a new session".into()));
+        }
+        let mut request = MoveRequest::from(mode);
+        let response: RobotResult<MoveResponse> = self.network.tcp_send_and_recv(&mut request);
+        // Keep the request id after an uncertain transport failure: issuing a
+        // second motion cannot safely assume that the first one never started.
+        self.motion_command_id = (request.command_id() != 0).then_some(request.command_id());
+        match response {
+            Ok(response) => {
+                if response.status != MoveStatus::MotionStarted {
+                    self.motion_command_id = None;
+                }
+                Ok(response.status)
+            }
+            Err(error) => Err(error),
+        }
+    }
     cmd_fn!(_set_collision_behavior, { Command::SetCollisionBehavior }; data: SetCollisionBehaviorData; GetterSetterStatus);
     cmd_fn!(_set_joint_impedance, { Command::SetJointImpedance }; data: SetJointImpedanceData; GetterSetterStatus);
     cmd_fn!(_set_cartesian_impedance, { Command::SetCartesianImpedance }; data: SetCartesianImpedanceData; GetterSetterStatus);
@@ -55,7 +76,7 @@ impl FrankaRobotImpl {
     cmd_fn!(_set_load, { Command::SetLoad }; data: SetLoadData; GetterSetterStatus);
     cmd_fn!(_set_fliters, { Command::SetFilters }; data: SetFiltersData; GetterSetterStatus);
     cmd_fn!(_automatic_error_recovery, { Command::AutomaticErrorRecovery }; data: (); GetterSetterStatus);
-    cmd_fn!(_stop_move, { Command::StopMove }; data: (); GetterSetterStatus);
+    cmd_fn!(_stop_move, { Command::StopMove }; data: (); StopMoveStatus);
     cmd_fn!(_get_cartesian_limit, { Command::GetCartesianLimit }; data: GetCartesianLimitData; GetCartesianLimitStatus);
 
     fn bind_udp_socket(preferred_port: u16) -> RobotResult<UdpSocket> {
@@ -77,7 +98,7 @@ impl FrankaRobotImpl {
     }
 
     pub(crate) fn finish_current_motion(&mut self) -> RobotResult<()> {
-        let response = self.network.tcp_blocking_recv::<MoveResponse>()?;
+        let response = self.receive_motion_end()?;
         if response.status == MoveStatus::Success {
             Ok(())
         } else {
@@ -86,6 +107,70 @@ impl FrankaRobotImpl {
                 response.status
             )))
         }
+    }
+
+    /// Cancel without inventing an algorithm command. StopMove performs the
+    /// device's stop protocol; wait until its running modes end, then consume
+    /// the cancelled Move response so the next session starts with clean TCP state.
+    pub(crate) fn cancel_current_motion(&mut self, was_nonblocking: bool) -> RobotResult<()> {
+        // A network waiting bound, not a physical stopping deadline. This path
+        // runs only on cancellation / failed sessions, never per normal cycle.
+        const CLEANUP_TIMEOUT: Duration = Duration::from_secs(3);
+        let deadline = Instant::now() + CLEANUP_TIMEOUT;
+        let previous_udp_timeout = self.udp_socket.read_timeout()?;
+        let previous_deadline = self.network.replace_receive_deadline(Some(deadline));
+        let result = (|| {
+            let stop: RobotResult<()> = self._stop_move(())?.into();
+            stop?;
+            self.udp_socket.set_nonblocking(false)?;
+            let mut buffer = vec![0; std::mem::size_of::<RobotStateInter>() * 5];
+            loop {
+                let remaining = crate::network::remaining(deadline)?;
+                self.udp_socket.set_read_timeout(Some(
+                    previous_udp_timeout.map_or(remaining, |old| old.min(remaining)),
+                ))?;
+                let (size, _) = self.udp_socket.recv_from(&mut buffer)?;
+                let state = Self::decode_state(&buffer[..size])?;
+                let mut latest = self.robot_state.write().unwrap();
+                if state.command_id() <= latest.command_id() {
+                    continue;
+                }
+                *latest = state;
+                let running = (state.motion_generator_mode != MotionGeneratorMode::Idle
+                    && state.motion_generator_mode != MotionGeneratorMode::None)
+                    || state.controller_mode == ControllerMode::ExternalController;
+                if !running {
+                    break;
+                }
+            }
+            let response = self.receive_motion_end()?;
+            match response.status {
+                MoveStatus::Success | MoveStatus::Preempted => Ok(()),
+                status => Err(RobotException::CommandException(format!(
+                    "cancelled move ended with status: {status:?}"
+                ))),
+            }
+        })();
+        self.network.replace_receive_deadline(previous_deadline);
+        let restore_timeout = self.udp_socket.set_read_timeout(previous_udp_timeout);
+        let restore_mode = self.udp_socket.set_nonblocking(was_nonblocking);
+        let restore: RobotResult<()> = restore_timeout.and(restore_mode).map_err(Into::into);
+        match (result, restore) {
+            (Ok(()), result) | (result, Ok(())) => result,
+            (Err(primary), Err(cleanup)) => Err(RobotException::ControlSession {
+                primary: Box::new(primary),
+                cleanup: Box::new(cleanup),
+            }),
+        }
+    }
+
+    fn receive_motion_end(&mut self) -> RobotResult<MoveResponse> {
+        let id = self.motion_command_id.ok_or_else(|| {
+            RobotException::CommandException("no active control session to finish".into())
+        })?;
+        let response = self.network.tcp_blocking_recv::<MoveResponse>(id)?;
+        self.motion_command_id = None;
+        Ok(response)
     }
 
     pub(crate) fn recv_state(&mut self) -> RobotResult<(RobotStateInter, SocketAddr, Duration)> {
