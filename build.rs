@@ -4,6 +4,7 @@ use std::{
 };
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=ROPLAT_SKIP_ASSET_EXPORT");
     #[cfg(feature = "to_cxx")]
     {
         cxx_build::bridge("src/ffi/to_cxx.rs")
@@ -11,6 +12,11 @@ fn main() {
             .compile("franka_rust_cxx");
 
         println!("cargo:rerun-if-changed=src/ffi/to_cxx.rs");
+    }
+
+    // CI and offline validation can build bindings without copying user assets.
+    if env::var("ROPLAT_SKIP_ASSET_EXPORT").as_deref() == Ok("1") {
+        return;
     }
 
     let manifest_dir = match env::var("CARGO_MANIFEST_DIR") {
