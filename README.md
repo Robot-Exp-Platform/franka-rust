@@ -90,6 +90,20 @@ For Roplat graphs, use `AsyncControlRhythm` with the native interface or `Contro
 
 This remains an experimental driver. API availability does not prove firmware coverage, real-time performance, or physical stop behavior. Each host/controller combination and model library requires its own validation.
 
+## Citation
+
+If you use this project in your research, please cite it using the following BibTeX entry:
+
+```bibtex
+@misc{Jizhou2025FrankaRust,
+  author = {Yan, Jizhou},
+  title = {Franka-{R}ust: An instantiation interface for {Franka} in the general robot behavior library},
+  year = {2025},
+  publisher = {GitHub},
+  howpublished = {\url{https://github.com/Robot-Exp-Platform/franka-rust}}
+}
+```
+
 ## Source builds, assets, and license
 
 Checkout manifests pin development dependencies to Git revisions and require access to those sources; registry installation uses published dependencies. `ROPLAT_SKIP_ASSET_EXPORT=1` skips optional build-time copying of example assets to the user data directory, useful for checks and CI.

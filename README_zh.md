@@ -90,6 +90,20 @@ Flow 回调返回 `ControlFlow<(), (Command, bool)>`：`Continue((command, false
 
 本库仍是实验性驱动。API 存在不代表固件覆盖、实时性能或物理停止行为已经验证。具体主机、控制器组合及模型库都需要各自验证。
 
+## 引用
+
+如果您在研究中使用了本项目，请使用以下 BibTeX 条目引用：
+
+```bibtex
+@misc{Jizhou2025FrankaRust,
+  author = {Yan, Jizhou},
+  title = {Franka-{R}ust: An instantiation interface for {Franka} in the general robot behavior library},
+  year = {2025},
+  publisher = {GitHub},
+  howpublished = {\url{https://github.com/Robot-Exp-Platform/franka-rust}}
+}
+```
+
 ## 源码、资源与许可
 
 checkout manifest 将开发依赖固定到 Git revision，需要访问相应源码；registry 安装使用已发布依赖。设置 `ROPLAT_SKIP_ASSET_EXPORT=1` 可跳过构建时向用户数据目录复制示例资源，适用于检查与 CI。
