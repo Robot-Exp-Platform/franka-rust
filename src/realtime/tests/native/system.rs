@@ -2,7 +2,7 @@
 //! only the loopback FCI peer. The application's executor has one thread.
 use super::{gated_fixture, public_robot, run_bounded, runtime};
 use crate::FrankaEmika;
-use robot_behavior::{JointPositionControl, JointState, RobotResult, roplat::AsyncControlRhythm};
+use robot_behavior::{JointPositionControl, JointState, roplat::AsyncControlRhythm};
 use roplat::{Lifecycle, Node, RoplatError, RoplatResult};
 use std::{
     sync::{Arc, Mutex, atomic::Ordering},
@@ -43,42 +43,18 @@ impl Node for Controller {
     }
 }
 
-struct Source {
-    robot: Option<FrankaEmika>,
-    events: Events,
-}
-impl Lifecycle for Source {
-    type Error = RoplatError;
-    async fn on_init(&mut self) -> RoplatResult<()> {
-        self.events.lock().unwrap().push("source-init");
-        Ok(())
-    }
-    async fn on_shutdown(&mut self) -> RoplatResult<()> {
-        assert!(self.robot.is_none());
-        self.events.lock().unwrap().push("source-shutdown");
-        Ok(())
-    }
-}
-impl Node for Source {
-    type Input = ();
-    type Output = RobotResult<FrankaEmika>;
-    async fn process(&mut self, (): ()) -> Self::Output {
-        Ok(self.robot.take().expect("source executes once"))
-    }
-}
-
+/// The robot is lent to the native session and returned by its Output.
 #[roplat::system]
 async fn native_system(
     robot: FrankaEmika,
     mut controller: Controller,
-    events: Events,
 ) -> RoplatResult<(FrankaEmika, Controller)> {
-    let mut source = Source { robot: Some(robot), events };
     let mut control = NativeRhythm::new();
 
-    source >> control >> |state| state >> controller;
+    &mut robot >> control >> |state| state >> controller;
+    control >> &mut robot;
 
-    Ok((control.output, controller))
+    Ok((robot.into_inner(), controller))
 }
 
 fn assert_send<T: Send>(value: T) -> T {
@@ -99,11 +75,7 @@ fn native_franka_system_is_send_returns_nodes_and_keeps_creator_lifecycle() {
             // This is the controller's creating layer. The child System and
             // its native drive must neither reactivate nor close the controller.
             controller.on_init().await.unwrap();
-            let system = tokio::spawn(assert_send(native_system(
-                robot,
-                controller,
-                events.clone(),
-            )));
+            let system = tokio::spawn(assert_send(native_system(robot, controller)));
             let progress = async {
                 let mut last = 0;
                 loop {
@@ -132,21 +104,14 @@ fn native_franka_system_is_send_returns_nodes_and_keeps_creator_lifecycle() {
             assert!(robot.robot_impl.motion_command_id.is_none());
             assert_eq!(
                 *events.lock().unwrap(),
-                [
-                    "controller-init",
-                    "source-init",
-                    "controller-process",
-                    "source-shutdown"
-                ]
+                ["controller-init", "controller-process"]
             );
             controller.on_shutdown().await.unwrap();
             assert_eq!(
                 *events.lock().unwrap(),
                 [
                     "controller-init",
-                    "source-init",
                     "controller-process",
-                    "source-shutdown",
                     "controller-shutdown"
                 ]
             );
