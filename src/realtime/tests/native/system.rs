@@ -35,7 +35,8 @@ impl Lifecycle for Controller {
 impl Node for Controller {
     type Input = (JointState<7>, Duration);
     type Output = ([f64; 7], bool);
-    async fn process(&mut self, _: Self::Input) -> Self::Output {
+    type Resources = ();
+    async fn process(&mut self, _: Self::Input, _resources: ()) -> Self::Output {
         tokio::task::yield_now().await;
         self.state.calls += 1;
         self.events.lock().unwrap().push("controller-process");
@@ -43,18 +44,18 @@ impl Node for Controller {
     }
 }
 
-/// The robot is lent to the native session and returned by its Output.
+/// The native session borrows the externally owned robot for its drive.
 #[roplat::system]
 async fn native_system(
-    robot: FrankaEmika,
+    mut robot: FrankaEmika,
     mut controller: Controller,
 ) -> RoplatResult<(FrankaEmika, Controller)> {
     let mut control = NativeRhythm::new();
 
-    &mut robot >> control >> |state| state >> controller;
-    control >> &mut robot;
+    &mut robot >> control.resources.0;
+    control >> |state| state >> controller;
 
-    Ok((robot.into_inner(), controller))
+    Ok((robot, controller))
 }
 
 fn assert_send<T: Send>(value: T) -> T {
