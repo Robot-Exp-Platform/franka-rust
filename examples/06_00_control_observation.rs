@@ -4,7 +4,7 @@ use std::{
 };
 
 use franka_rust::FrankaEmika;
-use robot_behavior::{RobotResult, behavior::*};
+use roplat_behavior::{RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -26,7 +26,7 @@ fn main() -> RobotResult<()> {
     let mut target = None;
     robot.control_with::<JointPositionControl<7>, _>(move |state, dt| {
         elapsed += dt;
-        let target = *target.get_or_insert_with(|| state.meas.q.unwrap_or([0.0; 7]));
+        let target = *target.get_or_insert_with(|| state.meas.q().unwrap_or([0.0; 7]));
         (target, elapsed >= Duration::from_secs(3))
     })?;
 

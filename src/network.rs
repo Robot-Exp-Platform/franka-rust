@@ -1,4 +1,4 @@
-use robot_behavior::{RobotException, RobotResult};
+use roplat_behavior::{RobotException, RobotResult};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
     collections::VecDeque,
@@ -255,22 +255,13 @@ impl AsyncNetwork<'_> {
         R: Serialize + CommandIDConfig<u32>,
         S: DeserializeOwned,
     {
-        use tokio::io::AsyncWriteExt;
         self.operation_pending = true;
         let data = bincode::serialize(request)
             .map_err(|error| RobotException::CommandException(error.to_string()))?;
         // SO_SNDTIMEO does not bound Tokio's nonblocking write. Preserve the
         // configured synchronous write limit explicitly in the async path.
         let timeout = self.network.tcp_stream.as_ref().unwrap().write_timeout()?;
-        if let Some(timeout) = timeout {
-            tokio::time::timeout(timeout, self.stream.write_all(&data))
-                .await
-                .map_err(|_| {
-                    RobotException::NetworkError("TCP request write timed out".into())
-                })??;
-        } else {
-            self.stream.write_all(&data).await?;
-        }
+        write_request(&mut self.stream, &data, timeout).await?;
         self.receive(request.command_id()).await
     }
 
@@ -318,6 +309,22 @@ impl Drop for AsyncNetwork<'_> {
         self.network.interrupted |= self.operation_pending;
         let _ = self.restore();
     }
+}
+
+async fn write_request<W: tokio::io::AsyncWrite + Unpin>(
+    stream: &mut W,
+    data: &[u8],
+    timeout: Option<Duration>,
+) -> RobotResult<()> {
+    use tokio::io::AsyncWriteExt;
+    if let Some(timeout) = timeout {
+        tokio::time::timeout(timeout, stream.write_all(data))
+            .await
+            .map_err(|_| RobotException::NetworkError("TCP request write timed out".into()))??;
+    } else {
+        stream.write_all(data).await?;
+    }
+    Ok(())
 }
 
 fn receive_response(
@@ -544,6 +551,10 @@ mod tests {
         });
     }
 
+    // Windows loopback can buffer the full request even with small SO_SNDBUF /
+    // SO_RCVBUF, then waits for a response. The bounded duplex test below covers
+    // the same timeout helper without relying on OS-specific socket buffering.
+    #[cfg(unix)]
     #[test]
     fn async_write_preserves_the_configured_deadline() {
         #[derive(Serialize)]
@@ -570,12 +581,42 @@ mod tests {
         let start = Instant::now();
         runtime.block_on(async {
             let mut lease = network.async_session().unwrap();
-            let result: RobotResult<MoveResponse> = lease.send_and_recv(&request).await;
+            let result: RobotResult<MoveResponse> = tokio::time::timeout(
+                Duration::from_secs(1),
+                lease.send_and_recv(&request),
+            )
+            .await
+            .expect("write deadline must fire before waiting for a response");
             assert!(matches!(result, Err(error) if error.to_string().contains("write timed out")));
         });
         assert!(start.elapsed() < Duration::from_secs(2));
         assert!(network.interrupted);
         #[cfg(unix)]
         assert_tcp_mode(network.tcp_stream.as_ref().unwrap(), false);
+    }
+
+    #[test]
+    fn async_write_timeout_bounds_backpressure() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (mut writer, mut unread_peer) = tokio::io::duplex(1024);
+            let result = tokio::time::timeout(
+                Duration::from_secs(1),
+                write_request(&mut writer, &[0; 2048], Some(Duration::from_millis(3))),
+            )
+            .await
+            .expect("configured write timeout must bound backpressure");
+            assert!(matches!(result, Err(error) if error.to_string().contains("write timed out")));
+            use tokio::io::AsyncReadExt;
+            let mut received = [1; 1024];
+            tokio::time::timeout(Duration::from_secs(1), unread_peer.read_exact(&mut received))
+                .await
+                .expect("the first partial write must already be buffered")
+                .unwrap();
+            assert_eq!(received, [0; 1024]);
+        });
     }
 }

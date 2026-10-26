@@ -1,5 +1,5 @@
 use nalgebra::{Matrix4, SMatrix};
-use robot_behavior::{
+use roplat_behavior::{
     ArmState, CoriolisInput, CoriolisInputSpace, FlangeSpace, GravityInput, GravityInputSpace,
     JMat, Jaco, JacobianSpace, JointSpace, JointTorqueSpace, LoadState, MassMatrixSpace, Pose,
     RobotResult, SpaceMap,
@@ -103,11 +103,11 @@ impl FrankaModel {
     pub fn new<S: AsRef<Path>>(model_filename: S) -> RobotResult<Self> {
         Ok(FrankaModel {
             library: ModelLibrary::new(model_filename.as_ref())?,
-            load: LoadState { m: 0.0, x: [0.0; 3], i: [0.0; 9] },
+            load: LoadState { mass: 0.0, center_of_mass: [0.0; 3], inertia: [0.0; 9] },
         })
     }
 
-    /// Configure the payload used by the generic [`DynamicsModel`](robot_behavior::DynamicsModel)
+    /// Configure the payload used by the generic [`DynamicsModel`](roplat_behavior::DynamicsModel)
     /// adapter. The explicit `mass` / `coriolis` / `gravity` methods still
     /// accept per-call payload parameters when finer control is needed.
     pub fn with_load(mut self, load: LoadState) -> Self {
@@ -299,24 +299,20 @@ impl FrankaModel {
         frame: &Frame,
         arm_state: &ArmState<7>,
     ) -> [f64; 42] {
-        let pose_f_to_ee = if let Some(Pose::Homo(pose)) = arm_state.flange.meas.pose {
-            pose
-        } else {
-            [0.; 16]
-        };
+        let pose_f_to_ee = arm_state
+            .flange
+            .meas
+            .pose()
+            .map_or([0.; 16], |pose| pose.homo());
 
-        let pose_ee_to_k = if let Some(Pose::Homo(pose)) = arm_state
+        let pose_ee_to_k = arm_state
             .stiffness
             .as_ref()
-            .and_then(|stiffness| stiffness.meas.pose)
-        {
-            pose
-        } else {
-            [0.; 16]
-        };
+            .and_then(|stiffness| stiffness.meas.pose())
+            .map_or([0.; 16], |pose| pose.homo());
         self.zero_jacobian(
             frame,
-            &arm_state.joint.meas.q.unwrap(),
+            &arm_state.joint.meas.q().unwrap(),
             &pose_f_to_ee,
             &pose_ee_to_k,
         )
@@ -398,11 +394,11 @@ impl FrankaModel {
     }
     pub fn coriolis_from_arm_state(&self, arm_state: &ArmState<7>) -> [f64; 7] {
         self.coriolis(
-            &arm_state.joint.meas.q.unwrap(),
-            &arm_state.joint.meas.dq.unwrap(),
-            &arm_state.load.as_ref().unwrap().i,
-            arm_state.load.as_ref().unwrap().m,
-            &arm_state.load.as_ref().unwrap().x,
+            &arm_state.joint.meas.q().unwrap(),
+            &arm_state.joint.meas.dq().unwrap(),
+            &arm_state.load.as_ref().unwrap().inertia,
+            arm_state.load.as_ref().unwrap().mass,
+            &arm_state.load.as_ref().unwrap().center_of_mass,
         )
     }
     ///  Calculates the gravity vector. Unit: \[Nm\].
@@ -453,12 +449,12 @@ impl FrankaModel {
         gravity_earth: Grav,
     ) -> [f64; 7] {
         self.gravity(
-            &arm_state.joint.meas.q.unwrap(),
-            arm_state.load.as_ref().unwrap().m,
-            &arm_state.load.as_ref().unwrap().x,
+            &arm_state.joint.meas.q().unwrap(),
+            arm_state.load.as_ref().unwrap().mass,
+            &arm_state.load.as_ref().unwrap().center_of_mass,
             gravity_earth
                 .into()
-                .unwrap_or(&arm_state.load.as_ref().unwrap().x),
+                .unwrap_or(&arm_state.load.as_ref().unwrap().center_of_mass),
         )
     }
 }
@@ -478,7 +474,7 @@ impl SpaceMap<JointSpace<7>, FlangeSpace> for FrankaModel {
 
     fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
         let identity = identity_transform();
-        Ok(Pose::Homo(self.pose(
+        Ok(Pose::from_homo(self.pose(
             &Frame::Flange,
             &input,
             &identity,
@@ -506,9 +502,9 @@ impl SpaceMap<JointSpace<7>, MassMatrixSpace<7>> for FrankaModel {
     fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
         Ok(SMatrix::<f64, 7, 7>::from_column_slice(&self.mass(
             &input,
-            &self.load.i,
-            self.load.m,
-            &self.load.x,
+            &self.load.inertia,
+            self.load.mass,
+            &self.load.center_of_mass,
         )))
     }
 }
@@ -518,7 +514,13 @@ impl SpaceMap<CoriolisInputSpace<7>, JointTorqueSpace<7>> for FrankaModel {
     type Output = [f64; 7];
 
     fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
-        Ok(self.coriolis(&input.q, &input.dq, &self.load.i, self.load.m, &self.load.x))
+        Ok(self.coriolis(
+            &input.q,
+            &input.dq,
+            &self.load.inertia,
+            self.load.mass,
+            &self.load.center_of_mass,
+        ))
     }
 }
 
@@ -527,6 +529,11 @@ impl SpaceMap<GravityInputSpace<7>, JointTorqueSpace<7>> for FrankaModel {
     type Output = [f64; 7];
 
     fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
-        Ok(self.gravity(&input.q, self.load.m, &self.load.x, &input.gravity))
+        Ok(self.gravity(
+            &input.q,
+            self.load.mass,
+            &self.load.center_of_mass,
+            &input.gravity,
+        ))
     }
 }

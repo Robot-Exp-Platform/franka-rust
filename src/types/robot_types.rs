@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use robot_behavior::{LoadState, Pose, RobotException, RobotResult};
+use roplat_behavior::{LoadState, Pose, RobotException, RobotResult};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -396,7 +396,11 @@ pub struct SetLoadData {
 
 impl From<LoadState> for SetLoadData {
     fn from(value: LoadState) -> Self {
-        SetLoadData { m_load: value.m, x_load: value.x, i_load: value.i }
+        SetLoadData {
+            m_load: value.mass,
+            x_load: value.center_of_mass,
+            i_load: value.inertia,
+        }
     }
 }
 

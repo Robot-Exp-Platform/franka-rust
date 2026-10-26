@@ -1,4 +1,6 @@
-use robot_behavior::{utils::path_generate, *};
+use roplat_behavior::*;
+use roplat_kinematics::ArmInverseKinematics;
+use roplat_trajectory::path_generate;
 use std::{
     fs::File,
     io::Write,
@@ -381,7 +383,7 @@ where
     }
 
     fn get_endpoint(&self) -> Pose {
-        Pose::Homo(self.robot_impl.robot_state.read().unwrap().O_T_EE)
+        Pose::from_homo(self.robot_impl.robot_state.read().unwrap().O_T_EE)
     }
 
     fn with_cartesian_vel(mut self, vel_bound: f64) -> Self {
@@ -491,7 +493,11 @@ where
 
         <Self as Control>::control_with::<JointPositionControl<7>, _>(self, move |state, dt| {
             if !planned {
-                let joint = state.des.q.or(state.meas.q).unwrap_or([0.0; FRANKA_DOF]);
+                let joint = state
+                    .des
+                    .q()
+                    .or(state.meas.q())
+                    .unwrap_or([0.0; FRANKA_DOF]);
                 let target = match coord {
                     Coord::Relative => {
                         let mut result = target;
@@ -537,8 +543,7 @@ where
             // Retain this API's existing torque-space realisation: pre-sample
             // the trajectory and run the PID controller per cycle.
             let traj = sample_joint_trajectory(path_generate.as_ref(), t_max);
-            let mut controller =
-                robot_behavior::controller::joint_traj_pid_control(traj, PID_K, PID_I, PID_D);
+            let mut controller = roplat_control::joint_traj_pid_control(traj, PID_K, PID_I, PID_D);
 
             self.is_moving = true;
             let _moving = MovingSession(&mut self.is_moving);
@@ -568,19 +573,21 @@ where
 
         let target = match self.coord.get() {
             Coord::Relative => pose * target,
-            &Coord::Inertial => Pose::Position(pose.position()) * target,
+            &Coord::Inertial => Pose::from_position(pose.position()) * target,
             _ => target,
         };
 
-        let traj = robot_behavior::utils::trajectory::plan_cartesian_line_traj_via_time_scaling::<
-            Self,
-            _,
-            7,
-        >(pose, target, q_start, self.get_scale(), |pose, seed| {
-            let q0 = JVec::<7>::from_row_slice(&seed);
-            let q = <Self as ArmInverseKinematics<7>>::ik_solve(&q0, &pose, Default::default());
-            Ok(q.as_slice().try_into().unwrap())
-        })?;
+        let traj = roplat_trajectory::plan_cartesian_line_traj_via_time_scaling::<Self, _, 7>(
+            pose,
+            target,
+            q_start,
+            self.get_scale(),
+            |pose, seed| {
+                let q0 = JVec::<7>::from_row_slice(&seed);
+                let q = <Self as ArmInverseKinematics<7>>::ik_solve(&q0, &pose, Default::default());
+                Ok(q.as_slice().try_into().unwrap())
+            },
+        )?;
 
         <Self as MoveTraj<JointSpace<7>>>::move_traj(self, traj)
     }
@@ -596,21 +603,22 @@ where
 
             let target = match self.coord.get() {
                 Coord::Relative => pose * target,
-                &Coord::Inertial => Pose::Position(pose.position()) * target,
+                &Coord::Inertial => Pose::from_position(pose.position()) * target,
                 _ => target,
             };
 
-            let traj =
-                robot_behavior::utils::trajectory::plan_cartesian_line_traj_via_time_scaling::<
-                    Self,
-                    _,
-                    7,
-                >(pose, target, q_start, self.get_scale(), |pose, seed| {
+            let traj = roplat_trajectory::plan_cartesian_line_traj_via_time_scaling::<Self, _, 7>(
+                pose,
+                target,
+                q_start,
+                self.get_scale(),
+                |pose, seed| {
                     let q0 = JVec::<7>::from_row_slice(&seed);
                     let q =
                         <Self as ArmInverseKinematics<7>>::ik_solve(&q0, &pose, Default::default());
                     Ok(q.as_slice().try_into().unwrap())
-                })?;
+                },
+            )?;
 
             if traj.is_empty() {
                 return Ok(());
@@ -665,7 +673,7 @@ where
     where
         F: Fn(f64) -> Option<[f64; FRANKA_DOF]>,
     {
-        let traj = robot_behavior::utils::trajectory::plan_path_traj_via_copp::<Self, F, FRANKA_DOF>(
+        let traj = roplat_trajectory::plan_path_traj_via_copp::<Self, F, FRANKA_DOF>(
             &path,
             self.get_scale(),
         )?;
@@ -673,10 +681,10 @@ where
     }
 
     fn move_waypoints(&mut self, waypoints: Vec<[f64; FRANKA_DOF]>) -> RobotResult<()> {
-        let traj = robot_behavior::utils::trajectory::plan_waypoints_traj_via_copp::<
-            Self,
-            FRANKA_DOF,
-        >(&waypoints, self.get_scale())?;
+        let traj = roplat_trajectory::plan_waypoints_traj_via_copp::<Self, FRANKA_DOF>(
+            &waypoints,
+            self.get_scale(),
+        )?;
         <Self as MoveTraj<JointSpace<7>>>::move_traj(self, traj)
     }
 }
@@ -688,9 +696,9 @@ where
     fn hold_command(state: &JointState<FRANKA_DOF>) -> [f64; FRANKA_DOF] {
         state
             .cmd
-            .q
-            .or(state.des.q)
-            .or(state.meas.q)
+            .q()
+            .or(state.des.q())
+            .or(state.meas.q())
             .unwrap_or([0.0; FRANKA_DOF])
     }
 
@@ -944,9 +952,9 @@ impl<T: FrankaType> ControlWith<CartesianPoseControl<7>> for FrankaRobot<T> {
         state
             .flange
             .cmd
-            .pose
-            .or(state.flange.des.pose)
-            .or(state.flange.meas.pose)
+            .pose()
+            .or(state.flange.des.pose())
+            .or(state.flange.meas.pose())
             .unwrap_or_default()
     }
 
@@ -955,7 +963,7 @@ impl<T: FrankaType> ControlWith<CartesianPoseControl<7>> for FrankaRobot<T> {
         F: FnMut(ArmState<FRANKA_DOF>, Duration) -> ControlStep<Pose>,
     {
         self.is_moving = true;
-        let mode_selector = Pose::Homo(self.robot_impl.robot_state.read().unwrap().O_T_EE);
+        let mode_selector = Pose::from_homo(self.robot_impl.robot_state.read().unwrap().O_T_EE);
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
         let observe_before = has_control_observers(&before_observers);
@@ -995,7 +1003,7 @@ impl<T: FrankaType> ControlWith<CartesianPoseControl<7>> for FrankaRobot<T> {
         F: async FnMut(ArmState<FRANKA_DOF>, Duration) -> ControlStep<Pose>,
     {
         self.is_moving = true;
-        let mode_selector = Pose::Homo(self.robot_impl.robot_state.read().unwrap().O_T_EE);
+        let mode_selector = Pose::from_homo(self.robot_impl.robot_state.read().unwrap().O_T_EE);
         let before_observers = self.before_observers.clone();
         let after_observers = self.after_observers.clone();
         let observe_before = has_control_observers(&before_observers);
@@ -1035,9 +1043,9 @@ impl<T: FrankaType> ControlWith<TorqueControl<7>> for FrankaRobot<T> {
     fn hold_command(state: &JointState<FRANKA_DOF>) -> [f64; FRANKA_DOF] {
         state
             .cmd
-            .tau
-            .or(state.des.tau)
-            .or(state.meas.tau)
+            .tau()
+            .or(state.des.tau())
+            .or(state.meas.tau())
             .unwrap_or([0.0; FRANKA_DOF])
     }
 
@@ -1123,9 +1131,9 @@ impl<T: FrankaType> ControlWith<ArmTorqueControl<7>> for FrankaRobot<T> {
         state
             .joint
             .cmd
-            .tau
-            .or(state.joint.des.tau)
-            .or(state.joint.meas.tau)
+            .tau()
+            .or(state.joint.des.tau())
+            .or(state.joint.meas.tau())
             .unwrap_or([0.0; FRANKA_DOF])
     }
 
@@ -1309,7 +1317,7 @@ impl<T: FrankaType + Send> AsyncControlWith<CartesianPoseControl<7>> for FrankaR
     where
         C: AsyncControlCallback<ArmState<FRANKA_DOF>, Pose>,
     {
-        let mode = MotionType::<FRANKA_DOF>::Cartesian(Pose::Homo(
+        let mode = MotionType::<FRANKA_DOF>::Cartesian(Pose::from_homo(
             self.robot_impl.robot_state.read().unwrap().O_T_EE,
         ))
         .into();

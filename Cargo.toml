@@ -1,6 +1,6 @@
 [package]
 name = "franka_rust"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 authors = ["Yixing <yanjizhou312@163.com>"]
 readme = "README.md"
@@ -15,7 +15,10 @@ name = "franka_rust"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-robot_behavior = { version = "0.8.0", git = "ssh://git@github.com/Robot-Exp-Platform/robot_behavior.git", rev = "1f6bf80e6fa18cfb331ea5c18db790cc85ef8e8d" }
+roplat_behavior = "0.9.0"
+roplat_kinematics = "0.9.0"
+roplat_control = "0.9.0"
+roplat_trajectory = "0.9.0"
 pyo3 = { version = "0.28.3", optional = true, features = [
     "extension-module",
     "multiple-pymethods",
@@ -54,10 +57,10 @@ conservative_constraint = []
 # On (`fci_v8`): protocol version 8 (libfranka 0.14.0), which inserts two
 # safety-function variants at indices 3-4, giving a 12-variant `MoveStatus`.
 fci_v8 = []
-to_py = ["pyo3", "ffi", "robot_behavior/to_py"]
-to_cxx = ["cxx", "ffi", "robot_behavior/to_cxx"]
+to_py = ["pyo3", "ffi", "roplat_behavior/to_py"]
+to_cxx = ["cxx", "ffi", "roplat_behavior/to_cxx"]
 
 # Integration tests exercise the optional System adapter; ordinary builds stay native.
 [dev-dependencies]
-robot_behavior = { version = "0.8.0", git = "ssh://git@github.com/Robot-Exp-Platform/robot_behavior.git", rev = "1f6bf80e6fa18cfb331ea5c18db790cc85ef8e8d", features = ["roplat"] }
-roplat = { version = "0.5.0", git = "ssh://git@github.com/Robot-Exp-Platform/roplat.git", rev = "d6484b1c595b7d69e8727dc04d471f4bbf57def4" }
+roplat_behavior = { version = "0.9.0", features = ["roplat"] }
+roplat = "0.5.0"

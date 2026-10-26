@@ -1,6 +1,7 @@
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
-use robot_behavior::{DhParam, behavior::*};
+use roplat_behavior::behavior::*;
+use roplat_kinematics::{ArmForwardKinematics, ArmInverseKinematics, DhParam};
 
 use crate::{FRANKA_DOF, FrankaRobot, robot::FrankaType};
 
@@ -65,6 +66,7 @@ impl ArmForwardKinematics<FRANKA_DOF> for FrankaEmika {
         DhParam::MDH { alpha: FRAC_PI_2, a: 0.088, theta: 0., d: 0. },
     ];
 }
+roplat_kinematics::dh_kinematics!(FrankaEmika, FRANKA_DOF, inverse);
 
 // Use the default iterative IK pipeline (DLS / LM / Newton / JT) provided by
 // the trait — no analytic family registered.

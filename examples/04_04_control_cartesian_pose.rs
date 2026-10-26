@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{RobotResult, behavior::*};
+use roplat_behavior::{RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -31,9 +31,9 @@ fn main() -> RobotResult<()> {
             state
                 .flange
                 .cmd
-                .pose
-                .or(state.flange.des.pose)
-                .or(state.flange.meas.pose)
+                .pose()
+                .or(state.flange.des.pose())
+                .or(state.flange.meas.pose())
                 .expect("first control frame did not contain a valid Cartesian pose")
                 .homo()
         });
@@ -49,8 +49,8 @@ fn main() -> RobotResult<()> {
 
         if time >= 10.0 {
             println!("Finished motion, shutting down example");
-            return (Pose::Homo(out), true);
+            return (Pose::from_homo(out), true);
         }
-        (Pose::Homo(out), false)
+        (Pose::from_homo(out), false)
     })
 }

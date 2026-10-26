@@ -1,5 +1,5 @@
 use pyo3::{PyResult, exceptions::PyException, pyclass, pymethods};
-use robot_behavior::{
+use roplat_behavior::{
     RobotException, py_arm, py_arm_torque_control, py_cartesian_pose_control,
     py_cartesian_velocity_control, py_flange_move, py_joint_motion, py_joint_position_control,
     py_joint_torque_control, py_joint_velocity_control, py_robot,

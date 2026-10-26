@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use franka_rust::{FrankaEmika, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{RobotResult, behavior::*, controller::cartesian_impedance_control};
+use roplat_behavior::{RobotResult, behavior::*};
+use roplat_control::cartesian_impedance_control;
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -19,7 +20,7 @@ fn main() -> RobotResult<()> {
     })?;
 
     let model = robot.model()?;
-    let target = robot.state()?.flange.meas.pose.unwrap_or_default();
+    let target = robot.state()?.flange.meas.pose().unwrap_or_default();
     let mut controller = cartesian_impedance_control(
         model,
         target,

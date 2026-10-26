@@ -1,6 +1,7 @@
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
-use robot_behavior::{DhParam, behavior::*};
+use roplat_behavior::behavior::*;
+use roplat_kinematics::{ArmForwardKinematics, ArmInverseKinematics, DhParam};
 
 use crate::{FRANKA_DOF, FrankaRobot, robot::FrankaType};
 
@@ -71,5 +72,6 @@ impl ArmForwardKinematics<FRANKA_DOF> for FrankaFR3 {
         DhParam::MDH { alpha: FRAC_PI_2, a: 0.088, theta: 0., d: 0. },
     ];
 }
+roplat_kinematics::dh_kinematics!(FrankaFR3, FRANKA_DOF, inverse);
 
 impl ArmInverseKinematics<FRANKA_DOF> for FrankaFR3 {}

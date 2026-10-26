@@ -1,7 +1,8 @@
 use std::f64::consts::PI;
 
 use franka_rust::FrankaEmika;
-use robot_behavior::{RobotResult, behavior::*, controller::joint_traj_impedance_control};
+use roplat_behavior::{RobotResult, behavior::*};
+use roplat_control::joint_traj_impedance_control;
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");

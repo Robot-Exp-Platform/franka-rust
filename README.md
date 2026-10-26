@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README_zh.md)
 
-`franka_rust` connects Rust applications to Franka controllers through FCI. It provides state reading, joint and Cartesian motion, controller sessions, grippers, and model loading through the common [`robot_behavior`](https://github.com/Robot-Exp-Platform/robot_behavior) interfaces. Use it to share application-level motion and control code across Robot-Exp drivers while keeping Franka-specific settings accessible.
+`franka_rust` connects Rust applications to Franka controllers through FCI. It provides state reading, joint and Cartesian motion, controller sessions, grippers, and model loading through the common [`roplat_behavior`](https://github.com/Robot-Exp-Platform/roplat_behavior) interfaces. Use it to share application-level motion and control code across Robot-Exp drivers while keeping Franka-specific settings accessible.
 
 The published crate is **`franka_rust 0.2.0`**. This is an independent implementation, not the official C++ `libfranka` package. Model aliases such as `FrankaEmika`/`FrankaPanda`, `FrankaFR3`, and `FrankaFP3` provide API types; an alias does not establish compatibility with a controller firmware.
 
@@ -20,11 +20,13 @@ Use Rust nightly: the current driver and behavior library use unstable Rust feat
 
 ```toml
 [dependencies]
-franka_rust = "0.2.0"
-robot_behavior = "0.6.1"
+franka_rust = "0.5.0"
+roplat_behavior = "0.9.0"
 ```
 
-The direct behavior dependency supplies the imported traits and selects the published 0.6.1 fixes. Registry installation does not need the parent `drives` workspace or an official C++ SDK installation.
+> `roplat_behavior` 0.9 (the renamed `robot_behavior`) and this release are not on crates.io yet; until they are, build from the [drives](https://github.com/Robot-Exp-Platform/drives) workspace. See the [migration notes](https://github.com/Robot-Exp-Platform/roplat_behavior/blob/main/MIGRATION.md).
+
+The direct behavior dependency supplies the imported traits. Registry installation does not need the parent `drives` workspace or an official C++ SDK installation.
 
 The controller must be reachable with FCI enabled. The default selects **FCI protocol 5** (libfranka 0.9.2 layout); `features = ["fci_v8"]` selects **protocol 8** (libfranka 0.14.0 layout). Choose using the controller's compatibility information, not its Rust model alias. See [protocol constants](src/params.rs) and [response types](src/types/robot_types.rs).
 
@@ -38,7 +40,7 @@ Model loading is separate: `model()` downloads a controller-provided library usi
 | `to_cxx` | CXX bindings; requires a C++ toolchain. |
 | `debug` | Additional diagnostics. |
 
-Binding features are not complete Python/C++ deployment packages. Roplat integration is enabled on **`robot_behavior`** with its `roplat` feature.
+Binding features are not complete Python/C++ deployment packages. Roplat integration is enabled on **`roplat_behavior`** with its `roplat` feature.
 
 ## First program: read one state
 
@@ -46,7 +48,7 @@ Put this in `src/main.rs`. Replace the address before deliberately running it. I
 
 ```rust,no_run
 use franka_rust::FrankaEmika;
-use robot_behavior::{Robot, RobotResult};
+use roplat_behavior::{Robot, RobotResult};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.2");
@@ -80,7 +82,7 @@ Do not invoke the legacy wrapper inside an entered Tokio runtime. Native control
 
 Flow callbacks return `ControlFlow<(), (Command, bool)>`: `Continue((command, false))` sends and continues; `Continue((command, true))` sends a final command; `Break(())` sends no algorithm command that cycle and terminates the device session. Cleanup uses `StopMove`, idle-state reception, and the terminal Move response with a shared three-second network deadline. This does not guarantee a physical stopping time. Dropping a native future does not perform async cleanup; an uncertain or unfinished session requires reconnection before another motion.
 
-For Roplat graphs, use `AsyncControlRhythm` with the native interface or `ControlRhythm` with the blocking interface, after enabling `robot_behavior/roplat`. See the [behavior guide](https://github.com/Robot-Exp-Platform/robot_behavior#readme).
+For Roplat graphs, use `AsyncControlRhythm` with the native interface or `ControlRhythm` with the blocking interface, after enabling `roplat_behavior/roplat`. See the [behavior guide](https://github.com/Robot-Exp-Platform/roplat_behavior#readme).
 
 ## Next steps and limits
 
@@ -106,6 +108,6 @@ If you use this project in your research, please cite it using the following Bib
 
 ## Source builds, assets, and license
 
-Checkout manifests pin development dependencies to Git revisions and require access to those sources; registry installation uses published dependencies. `ROPLAT_SKIP_ASSET_EXPORT=1` skips optional build-time copying of example assets to the user data directory, useful for checks and CI.
+Checkout manifests, including the development dependencies for System tests, use the same crates.io sources as the registry installation. `ROPLAT_SKIP_ASSET_EXPORT=1` skips optional build-time copying of example assets to the user data directory, useful for checks and CI.
 
 The driver is maintained by Robot-Exp-Platform under [Apache-2.0](LICENSE). Franka is the manufacturer's name. Panda model assets retain [their notice](assets/franka_panda/LICENSE.txt); controller firmware and downloaded model libraries are separate vendor components with their own terms.

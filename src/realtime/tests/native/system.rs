@@ -2,8 +2,8 @@
 //! only the loopback FCI peer. The application's executor has one thread.
 use super::{gated_fixture, public_robot, run_bounded, runtime};
 use crate::FrankaEmika;
-use robot_behavior::{JointPositionControl, JointState, roplat::AsyncControlRhythm};
 use roplat::{Lifecycle, Node, RoplatError, RoplatResult};
+use roplat_behavior::{JointPositionControl, JointState, roplat::AsyncControlRhythm};
 use std::{
     sync::{Arc, Mutex, atomic::Ordering},
     time::Duration,
