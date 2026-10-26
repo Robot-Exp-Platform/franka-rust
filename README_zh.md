@@ -106,6 +106,6 @@ Flow 回调返回 `ControlFlow<(), (Command, bool)>`：`Continue((command, false
 
 ## 源码、资源与许可
 
-checkout manifest 将开发依赖固定到 Git revision，需要访问相应源码；registry 安装使用已发布依赖。设置 `ROPLAT_SKIP_ASSET_EXPORT=1` 可跳过构建时向用户数据目录复制示例资源，适用于检查与 CI。
+checkout manifest（包括 System 测试使用的开发依赖）与 registry 安装使用相同的 crates.io 来源。设置 `ROPLAT_SKIP_ASSET_EXPORT=1` 可跳过构建时向用户数据目录复制示例资源，适用于检查与 CI。
 
 驱动由 Robot-Exp-Platform 维护，使用 [Apache-2.0](LICENSE)。Franka 是设备厂商名称。Panda 模型资源保留[自己的声明](assets/franka_panda/LICENSE.txt)；控制器固件和下载的模型库是厂商组件，适用各自条款。

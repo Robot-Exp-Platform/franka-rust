@@ -1402,7 +1402,8 @@ dependencies = [
 [[package]]
 name = "robot_behavior"
 version = "0.8.0"
-source = "git+ssh://git@github.com/Robot-Exp-Platform/robot_behavior.git?rev=1f6bf80e6fa18cfb331ea5c18db790cc85ef8e8d#1f6bf80e6fa18cfb331ea5c18db790cc85ef8e8d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc9a57ffd6018bb8b36c94ae80d20cf9a9cb78aa65bb8ae901f40fae3a8915df"
 dependencies = [
  "anyhow",
  "copp",
@@ -1423,7 +1424,8 @@ dependencies = [
 [[package]]
 name = "roplat"
 version = "0.5.0"
-source = "git+ssh://git@github.com/Robot-Exp-Platform/roplat.git?rev=d6484b1c595b7d69e8727dc04d471f4bbf57def4#d6484b1c595b7d69e8727dc04d471f4bbf57def4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fe5583a25e75b1a21b93cfda1f623b3f37736f75d9a631eda70f9e5fce54661"
 dependencies = [
  "async-trait",
  "bincode",
@@ -1441,7 +1443,8 @@ dependencies = [
 [[package]]
 name = "roplat_launch"
 version = "0.5.0"
-source = "git+ssh://git@github.com/Robot-Exp-Platform/roplat.git?rev=d6484b1c595b7d69e8727dc04d471f4bbf57def4#d6484b1c595b7d69e8727dc04d471f4bbf57def4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c51e31d2b1ca61083bbcc4da7d069b44f8dc23adbd82cf80895fea81c6c1cf0d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1455,7 +1458,8 @@ dependencies = [
 [[package]]
 name = "roplat_macros"
 version = "0.5.0"
-source = "git+ssh://git@github.com/Robot-Exp-Platform/roplat.git?rev=d6484b1c595b7d69e8727dc04d471f4bbf57def4#d6484b1c595b7d69e8727dc04d471f4bbf57def4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d075b45cf48c79c9fc01283382b9dbfb9e786daacb41a25e5f665b51702a2e0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1468,7 +1472,8 @@ dependencies = [
 [[package]]
 name = "roplat_system"
 version = "0.5.0"
-source = "git+ssh://git@github.com/Robot-Exp-Platform/roplat.git?rev=d6484b1c595b7d69e8727dc04d471f4bbf57def4#d6484b1c595b7d69e8727dc04d471f4bbf57def4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81c63625603ddf607c0dac3cc4d94853233ccd247d8decea8c8cb97fe465d953"
 dependencies = [
  "proc-macro2",
  "quote",
