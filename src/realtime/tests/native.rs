@@ -2,7 +2,7 @@
 //! executor. The mock TCP/UDP peer runs on loopback, never a physical device.
 use super::*;
 use crate::{FrankaEmika, FrankaRobot};
-use robot_behavior::{
+use roplat_behavior::{
     AsyncControlCallback, AsyncControlWith, ControlStep, ControlWith, JointPositionControl,
     JointState,
 };
@@ -520,7 +520,7 @@ fn existing_move_to_async_awaits_state_start_and_finish_on_callers_runtime() {
                     }
                 }
             });
-            <_ as robot_behavior::MoveTo<robot_behavior::JointSpace<7>>>::move_to_async(
+            <_ as roplat_behavior::MoveTo<roplat_behavior::JointSpace<7>>>::move_to_async(
                 &mut robot, [0.0; 7],
             )
             .await

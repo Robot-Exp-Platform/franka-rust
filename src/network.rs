@@ -1,4 +1,4 @@
-use robot_behavior::{RobotException, RobotResult};
+use roplat_behavior::{RobotException, RobotResult};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
     collections::VecDeque,

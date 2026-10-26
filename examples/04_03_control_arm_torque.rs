@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use franka_rust::{FrankaEmika, model::Frame, types::robot_types::SetCollisionBehaviorData};
-use robot_behavior::{RobotResult, behavior::*};
+use roplat_behavior::{RobotResult, behavior::*};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
@@ -20,9 +20,9 @@ fn main() -> RobotResult<()> {
     })?;
 
     let initial = robot.state()?;
-    let initial_position = initial.flange.meas.pose.unwrap_or_default().position();
+    let initial_position = initial.flange.meas.pose().unwrap_or_default().position();
     let initial_gravity = model.gravity_from_arm_state(&initial, None::<&[f64; 3]>);
-    let initial_tau = initial.joint.meas.tau.unwrap_or([0.0; 7]);
+    let initial_tau = initial.joint.meas.tau().unwrap_or([0.0; 7]);
     let initial_tau_ext: [f64; 7] = std::array::from_fn(|i| initial_tau[i] - initial_gravity[i]);
 
     let mut elapsed = Duration::ZERO;
@@ -31,7 +31,7 @@ fn main() -> RobotResult<()> {
     robot.control_with::<ArmTorqueControl<7>, _>(move |state, dt| {
         elapsed += dt;
 
-        let position = state.flange.meas.pose.unwrap_or_default().position();
+        let position = state.flange.meas.pose().unwrap_or_default().position();
         let drift = position
             .iter()
             .zip(initial_position)
@@ -44,7 +44,7 @@ fn main() -> RobotResult<()> {
 
         let jacobian = model.zero_jacobian_from_arm_state(&Frame::EndEffector, &state);
         let gravity = model.gravity_from_arm_state(&state, None::<&[f64; 3]>);
-        let tau_meas = state.joint.meas.tau.unwrap_or([0.0; 7]);
+        let tau_meas = state.joint.meas.tau().unwrap_or([0.0; 7]);
         let mut tau_d = [0.0; 7];
         for joint in 0..7 {
             tau_d[joint] = jacobian[2 + 6 * joint] * desired_mass * -9.81;

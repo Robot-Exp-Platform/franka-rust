@@ -1,5 +1,5 @@
 use franka_rust::{FrankaEmika, model::Frame};
-use robot_behavior::{RobotResult, behavior::*};
+use roplat_behavior::{RobotResult, behavior::*};
 use strum::IntoEnumIterator;
 
 fn main() -> RobotResult<()> {

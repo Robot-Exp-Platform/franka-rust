@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use robot_behavior::{RobotException, RobotResult};
+use roplat_behavior::{RobotException, RobotResult};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::marker::ConstParamTy;

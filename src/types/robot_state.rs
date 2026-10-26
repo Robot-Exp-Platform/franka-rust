@@ -1,5 +1,5 @@
 use nalgebra as na;
-use robot_behavior::{
+use roplat_behavior::{
     ArmState, JointSample, JointState, LoadState, Pose, RobotResult, SpatialSample, StateView,
 };
 use serde::{Deserialize, Serialize};
@@ -272,7 +272,7 @@ impl RobotStateInter {
         if flags.is_empty() {
             Ok(())
         } else {
-            Err(robot_behavior::RobotException::CommandException(format!(
+            Err(roplat_behavior::RobotException::CommandException(format!(
                 "{flags}"
             )))
         }
@@ -355,63 +355,51 @@ impl From<RobotStateInter> for ArmState<7> {
         );
         ArmState {
             joint: StateView {
-                meas: JointSample {
-                    q: Some(val.q),
-                    dq: Some(val.dq),
-                    ddq: None,
-                    tau: Some(val.tau_J),
-                    dtau: Some(val.dtau_J),
-                },
-                des: JointSample {
-                    q: Some(val.q_d),
-                    dq: Some(val.dq_d),
-                    ddq: Some(val.ddq_d),
-                    tau: Some(val.tau_J_d),
-                    dtau: None,
-                },
-                cmd: JointSample {
-                    q: Some(val.theta),
-                    dq: Some(val.dtheta),
-                    ddq: None,
-                    tau: None,
-                    dtau: None,
-                },
+                meas: JointSample::EMPTY
+                    .with_q(val.q)
+                    .with_dq(val.dq)
+                    .with_tau(val.tau_J)
+                    .with_dtau(val.dtau_J),
+                des: JointSample::EMPTY
+                    .with_q(val.q_d)
+                    .with_dq(val.dq_d)
+                    .with_ddq(val.ddq_d)
+                    .with_tau(val.tau_J_d),
+                cmd: JointSample::EMPTY.with_q(val.theta).with_dq(val.dtheta),
             },
             flange: StateView {
-                meas: SpatialSample {
-                    pose: Some(Pose::Homo(val.O_T_EE)),
-                    vel: None,
-                    acc: None,
-                    wrench: Some(val.O_F_ext_hat_K),
-                },
-                des: SpatialSample {
-                    pose: Some(Pose::Homo(val.O_T_EE_d)),
-                    vel: Some(val.O_dP_EE_d),
-                    acc: Some([
-                        val.O_ddP_O[0],
-                        val.O_ddP_O[1],
-                        val.O_ddP_O[2],
-                        0.0,
-                        0.0,
-                        0.0,
-                    ]),
-                    wrench: None,
-                },
-                cmd: SpatialSample {
-                    pose: valid_homogeneous_pose(val.O_T_EE_c),
-                    vel: Some(val.O_dP_EE_c),
-                    acc: Some(val.O_ddP_EE_c),
-                    wrench: None,
+                meas: SpatialSample::EMPTY
+                    .with_pose(Pose::from_homo(val.O_T_EE))
+                    .with_wrench((val.O_F_ext_hat_K).into()),
+                des: SpatialSample::EMPTY
+                    .with_pose(Pose::from_homo(val.O_T_EE_d))
+                    .with_twist((val.O_dP_EE_d).into())
+                    .with_accel(
+                        ([
+                            val.O_ddP_O[0],
+                            val.O_ddP_O[1],
+                            val.O_ddP_O[2],
+                            0.0,
+                            0.0,
+                            0.0,
+                        ])
+                        .into(),
+                    ),
+                cmd: {
+                    let mut sample = SpatialSample::EMPTY;
+                    sample.set_pose(valid_homogeneous_pose(val.O_T_EE_c));
+                    sample.set_twist(Some(val.O_dP_EE_c.into()));
+                    sample.set_accel(Some(val.O_ddP_EE_c.into()));
+                    sample
                 },
             },
             tcp: None,
-            stiffness: Some(StateView::from_meas(SpatialSample {
-                pose: Some(Pose::Homo(val.EE_T_K)),
-                vel: None,
-                acc: None,
-                wrench: Some(val.K_F_ext_hat_K),
-            })),
-            load: Some(LoadState { m, x, i }),
+            stiffness: Some(StateView::from_meas(
+                SpatialSample::EMPTY
+                    .with_pose(Pose::from_homo(val.EE_T_K))
+                    .with_wrench((val.K_F_ext_hat_K).into()),
+            )),
+            load: Some(LoadState { mass: m, center_of_mass: x, inertia: i }),
         }
     }
 }
@@ -419,27 +407,17 @@ impl From<RobotStateInter> for ArmState<7> {
 impl From<RobotStateInter> for JointState<7> {
     fn from(val: RobotStateInter) -> Self {
         StateView {
-            meas: JointSample {
-                q: Some(val.q),
-                dq: Some(val.dq),
-                ddq: None,
-                tau: Some(val.tau_J),
-                dtau: Some(val.dtau_J),
-            },
-            des: JointSample {
-                q: Some(val.q_d),
-                dq: Some(val.dq_d),
-                ddq: Some(val.ddq_d),
-                tau: Some(val.tau_J_d),
-                dtau: None,
-            },
-            cmd: JointSample {
-                q: Some(val.theta),
-                dq: Some(val.dtheta),
-                ddq: None,
-                tau: None,
-                dtau: None,
-            },
+            meas: JointSample::EMPTY
+                .with_q(val.q)
+                .with_dq(val.dq)
+                .with_tau(val.tau_J)
+                .with_dtau(val.dtau_J),
+            des: JointSample::EMPTY
+                .with_q(val.q_d)
+                .with_dq(val.dq_d)
+                .with_ddq(val.ddq_d)
+                .with_tau(val.tau_J_d),
+            cmd: JointSample::EMPTY.with_q(val.theta).with_dq(val.dtheta),
         }
     }
 }
@@ -499,7 +477,7 @@ fn combine_ee_load(
 }
 
 fn valid_homogeneous_pose(pose: [f64; 16]) -> Option<Pose> {
-    canonicalize_homogeneous_from_slice(&pose).map(Pose::Homo)
+    canonicalize_homogeneous_from_slice(&pose).map(Pose::from_homo)
 }
 
 impl Default for RobotStateInter {

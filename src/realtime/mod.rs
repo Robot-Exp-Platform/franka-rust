@@ -12,7 +12,7 @@ use crate::{
     robot_impl::FrankaRobotImpl,
     types::robot_types::{MoveData, MoveStatus},
 };
-use robot_behavior::{RobotException, RobotResult};
+use roplat_behavior::{RobotException, RobotResult};
 use std::time::Duration;
 // A finished handshake has already consumed Move's terminal response, even
 // when that response reports an error. Do not issue a second stop in that case.
