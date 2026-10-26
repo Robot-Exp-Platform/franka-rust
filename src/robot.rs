@@ -564,7 +564,6 @@ where
 impl<T: FrankaType> MoveTo<FlangeSpace> for FrankaRobot<T>
 where
     Self: EndPoint + ArmInverseKinematics<7>,
-    [(); 8]:,
 {
     fn move_to(&mut self, target: Pose) -> RobotResult<()> {
         let (state, _, _) = self.robot_impl.recv_state()?;
