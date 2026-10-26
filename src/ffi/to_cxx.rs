@@ -1,4 +1,4 @@
-use robot_behavior::{Arm, FlangeSpace, JointSpace, LoadState, MoveTo, Pose, Robot, RobotResult};
+use roplat_behavior::{Arm, FlangeSpace, JointSpace, LoadState, MoveTo, Pose, Robot, RobotResult};
 
 struct FrankaEmika(crate::FrankaEmika);
 struct FrankaFR3(crate::FrankaFR3);
@@ -125,7 +125,10 @@ macro_rules! impl_franka_cxx_robot {
             }
 
             fn set_load(&mut self, m: f64, x: [f64; 3], i: [f64; 9]) -> RobotResult<()> {
-                <$inner as Arm<7>>::set_load(&mut self.0, LoadState { m, x, i })
+                <$inner as Arm<7>>::set_load(
+                    &mut self.0,
+                    LoadState { mass: m, center_of_mass: x, inertia: i },
+                )
             }
 
             fn get_joint(&self) -> [f64; 7] {
@@ -158,55 +161,32 @@ macro_rules! impl_franka_cxx_robot {
 impl_franka_cxx_robot!(FrankaEmika, crate::FrankaEmika);
 impl_franka_cxx_robot!(FrankaFR3, crate::FrankaFR3);
 
+/// Since roplat_behavior 0.9 a pose has one representation; C++ receives the
+/// `Quat` form `[x, y, z, qx, qy, qz, qw]`.
 fn pose_to_cxx(pose: Pose) -> CxxPoseData {
-    match pose {
-        Pose::Euler(tran, rot) => {
-            let mut values = Vec::with_capacity(6);
-            values.extend_from_slice(&tran);
-            values.extend_from_slice(&rot);
-            CxxPoseData { kind: CxxPoseKind::Euler, values }
-        }
-        Pose::Quat(pose) => {
-            let mut values = Vec::with_capacity(7);
-            values.extend_from_slice(pose.translation.vector.as_slice());
-            values.extend_from_slice(pose.rotation.coords.as_slice());
-            CxxPoseData { kind: CxxPoseKind::Quat, values }
-        }
-        Pose::Homo(values) => CxxPoseData { kind: CxxPoseKind::Homo, values: values.to_vec() },
-        Pose::AxisAngle(tran, axis, angle) => {
-            let mut values = Vec::with_capacity(7);
-            values.extend_from_slice(&tran);
-            values.extend_from_slice(&axis);
-            values.push(angle);
-            CxxPoseData { kind: CxxPoseKind::AxisAngle, values }
-        }
-        Pose::Position(tran) => CxxPoseData { kind: CxxPoseKind::Position, values: tran.to_vec() },
-    }
+    let (tran, rot) = pose.quat_array();
+    let mut values = Vec::with_capacity(7);
+    values.extend_from_slice(&tran);
+    values.extend_from_slice(&rot);
+    CxxPoseData { kind: CxxPoseKind::Quat, values }
 }
 
 fn cxx_to_pose(data: CxxPoseData) -> RobotResult<Pose> {
-    match (data.kind, data.values.len()) {
-        (CxxPoseKind::Euler, 6) => Ok(Pose::Euler(
-            data.values[..3].try_into().unwrap(),
-            data.values[3..6].try_into().unwrap(),
+    let v = data.values.as_slice();
+    match (data.kind, v.len()) {
+        (CxxPoseKind::Euler, 6) => Ok(Pose::from_euler([v[0], v[1], v[2]], [v[3], v[4], v[5]])),
+        (CxxPoseKind::Quat, 7) => Ok(Pose::from_quat_array(
+            [v[0], v[1], v[2]],
+            [v[3], v[4], v[5], v[6]],
         )),
-        (CxxPoseKind::Quat, 7) => Ok(Pose::from([
-            data.values[0],
-            data.values[1],
-            data.values[2],
-            data.values[3],
-            data.values[4],
-            data.values[5],
-            data.values[6],
-        ])),
-        (CxxPoseKind::Homo, 16) => Ok(Pose::Homo(data.values.try_into().unwrap())),
-        (CxxPoseKind::AxisAngle, 7) => Ok(Pose::AxisAngle(
-            data.values[..3].try_into().unwrap(),
-            data.values[3..6].try_into().unwrap(),
-            data.values[6],
+        (CxxPoseKind::Homo, 16) => Ok(Pose::from_homo(v.try_into().unwrap())),
+        (CxxPoseKind::AxisAngle, 7) => Ok(Pose::from_axis_angle(
+            [v[0], v[1], v[2]],
+            [v[3], v[4], v[5]],
+            v[6],
         )),
-        (CxxPoseKind::Position, 3) => Ok(Pose::Position(data.values.try_into().unwrap())),
-        _ => Err(robot_behavior::RobotException::InvalidFFIData(
+        (CxxPoseKind::Position, 3) => Ok(Pose::from_position([v[0], v[1], v[2]])),
+        _ => Err(roplat_behavior::RobotException::InvalidFFIData(
             "invalid CxxPoseData length for pose kind".into(),
         )),
     }

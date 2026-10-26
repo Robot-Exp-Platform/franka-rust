@@ -1,7 +1,7 @@
 #[cfg(target_os = "linux")]
 use libloading::os;
 use libloading::{Library, Symbol};
-use robot_behavior::{RobotException, RobotResult};
+use roplat_behavior::{RobotException, RobotResult};
 use std::path::Path;
 
 pub struct ModelLibrary {

@@ -1,4 +1,4 @@
-use robot_behavior::RobotResult;
+use roplat_behavior::RobotResult;
 use std::{ops::ControlFlow, time::Duration};
 
 use crate::{

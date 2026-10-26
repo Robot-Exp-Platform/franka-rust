@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use franka_rust::FrankaGripper;
-use robot_behavior::RobotResult;
+use roplat_behavior::RobotResult;
 
 fn main() -> RobotResult<()> {
     let mut gripper = FrankaGripper::new("172.16.0.3");

@@ -1,6 +1,6 @@
 from typing import Callable
 
-from robot_behavior import (
+from roplat_behavior import (
     Arm,
     ArmState,
     ArmTorqueControl,

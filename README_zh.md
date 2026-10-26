@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README_zh.md)
 
-`franka_rust` 通过 FCI 连接 Rust 应用与 Franka 控制器，提供状态读取、关节与笛卡尔运动、控制会话、夹爪和模型加载，并接入统一的 [`robot_behavior`](https://github.com/Robot-Exp-Platform/robot_behavior) 接口。它适合在不同 Robot-Exp 驱动间复用应用层运动和控制代码，同时保留 Franka 专有设置的场景。
+`franka_rust` 通过 FCI 连接 Rust 应用与 Franka 控制器，提供状态读取、关节与笛卡尔运动、控制会话、夹爪和模型加载，并接入统一的 [`roplat_behavior`](https://github.com/Robot-Exp-Platform/roplat_behavior) 接口。它适合在不同 Robot-Exp 驱动间复用应用层运动和控制代码，同时保留 Franka 专有设置的场景。
 
 已发布版本为 **`franka_rust 0.2.0`**。这是独立实现，并非官方 C++ `libfranka` 软件包。`FrankaEmika`/`FrankaPanda`、`FrankaFR3`、`FrankaFP3` 等机型别名提供 API 类型，不代表已经匹配控制器固件。
 
@@ -20,11 +20,13 @@
 
 ```toml
 [dependencies]
-franka_rust = "0.2.0"
-robot_behavior = "0.6.1"
+franka_rust = "0.5.0"
+roplat_behavior = "0.9.0"
 ```
 
-直接依赖行为库可导入 trait，并选择已发布的 0.6.1 修复。registry 安装不需要父级 `drives` 工作区，也不要求安装官方 C++ SDK。
+> `roplat_behavior` 0.9（由 `robot_behavior` 改名）与本版本尚未发布到 crates.io；发布前请使用 [drives](https://github.com/Robot-Exp-Platform/drives) 工作区源码。变更见[迁移说明](https://github.com/Robot-Exp-Platform/roplat_behavior/blob/main/MIGRATION_zh.md)。
+
+直接依赖行为库可导入 trait。registry 安装不需要父级 `drives` 工作区，也不要求安装官方 C++ SDK。
 
 设备必须可达并已启用 FCI。默认选择 **FCI 协议 5**（libfranka 0.9.2 布局）；`features = ["fci_v8"]` 选择 **协议 8**（libfranka 0.14.0 布局）。应依据控制器兼容性信息选择，而不是 Rust 机型别名。见[协议常量](src/params.rs)与[响应类型](src/types/robot_types.rs)。
 
@@ -38,7 +40,7 @@ robot_behavior = "0.6.1"
 | `to_cxx` | CXX 绑定，需要 C++ 工具链。 |
 | `debug` | 额外诊断。 |
 
-绑定 feature 不是完整的 Python/C++ 部署包。Roplat 集成应在 **`robot_behavior`** 上开启 `roplat` feature。
+绑定 feature 不是完整的 Python/C++ 部署包。Roplat 集成应在 **`roplat_behavior`** 上开启 `roplat` feature。
 
 ## 第一个程序：读取一帧状态
 
@@ -46,7 +48,7 @@ robot_behavior = "0.6.1"
 
 ```rust,no_run
 use franka_rust::FrankaEmika;
-use robot_behavior::{Robot, RobotResult};
+use roplat_behavior::{Robot, RobotResult};
 
 fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.2");
@@ -80,7 +82,7 @@ cargo +nightly check
 
 Flow 回调返回 `ControlFlow<(), (Command, bool)>`：`Continue((command, false))` 发送并继续；`Continue((command, true))` 发送最后一条指令；`Break(())` 不发送本周期算法指令，结束设备会话。清理包含 `StopMove`、空闲状态接收和终态 Move 响应，共享三秒网络期限，不保证物理停止时间。直接丢弃原生 Future 不会执行异步清理；未确认结束的会话需要重新连接后才能再次运动。
 
-使用 Roplat 图时开启 `robot_behavior/roplat`，原生接口配合 `AsyncControlRhythm`，阻塞接口配合 `ControlRhythm`。见[行为库指南](https://github.com/Robot-Exp-Platform/robot_behavior#readme)。
+使用 Roplat 图时开启 `roplat_behavior/roplat`，原生接口配合 `AsyncControlRhythm`，阻塞接口配合 `ControlRhythm`。见[行为库指南](https://github.com/Robot-Exp-Platform/roplat_behavior#readme)。
 
 ## 下一步与限制
 
