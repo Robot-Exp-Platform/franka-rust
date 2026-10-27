@@ -551,29 +551,30 @@ mod tests {
         });
     }
 
-    // Windows loopback can buffer the full request even with small SO_SNDBUF /
-    // SO_RCVBUF, then waits for a response. The bounded duplex test below covers
-    // the same timeout helper without relying on OS-specific socket buffering.
+    // A controller that stops reading leaves the socket buffers full. Fill them
+    // directly, then send a real StopMove request: it must fail at the
+    // configured write deadline instead of waiting for a response. The bounded
+    // duplex test below covers the same timeout helper without relying on
+    // OS-specific socket buffering.
     #[cfg(unix)]
     #[test]
     fn async_write_preserves_the_configured_deadline() {
-        #[derive(Serialize)]
-        struct LargeRequest {
-            id: u32,
-            payload: Vec<u8>,
-        }
-        impl CommandIDConfig<u32> for LargeRequest {
-            fn command_id(&self) -> u32 {
-                self.id
-            }
-            fn set_command_id(&mut self, id: u32) {
-                self.id = id;
-            }
-        }
+        use crate::types::robot_types::StopMoveRequest;
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let mut network = Network::new("127.0.0.1", listener.local_addr().unwrap().port());
         let (_peer, _) = listener.accept().unwrap(); // Intentionally never reads.
-        let request = LargeRequest { id: 1, payload: vec![0; 16 * 1024 * 1024] };
+        let mut stream = network.tcp_stream.as_ref().unwrap();
+        stream.set_nonblocking(true).unwrap();
+        loop {
+            match stream.write(&[0; 64 * 1024]) {
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(error) => panic!("filling the socket buffers failed: {error}"),
+            }
+        }
+        stream.set_nonblocking(false).unwrap();
+        let mut request = StopMoveRequest::from(());
+        request.set_command_id(1);
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -581,7 +582,7 @@ mod tests {
         let start = Instant::now();
         runtime.block_on(async {
             let mut lease = network.async_session().unwrap();
-            let result: RobotResult<MoveResponse> = tokio::time::timeout(
+            let result: RobotResult<StopMoveResponse> = tokio::time::timeout(
                 Duration::from_secs(1),
                 lease.send_and_recv(&request),
             )
