@@ -565,13 +565,27 @@ mod tests {
         let (_peer, _) = listener.accept().unwrap(); // Intentionally never reads.
         let mut stream = network.tcp_stream.as_ref().unwrap();
         stream.set_nonblocking(true).unwrap();
-        loop {
-            match stream.write(&[0; 64 * 1024]) {
-                Ok(_) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
-                Err(error) => panic!("filling the socket buffers failed: {error}"),
+        // Fill until nothing more is accepted, down to single bytes: macOS
+        // reports WouldBlock while up to the low-water mark (2 KiB) is still
+        // free, and keeps moving queued data into the peer for a while, so
+        // refill after short pauses until a round writes nothing.
+        let mut fill = || {
+            let (mut written, mut chunk) = (0, 64 * 1024);
+            while chunk > 0 {
+                match stream.write(&vec![0; chunk]) {
+                    Ok(n) => written += n,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => chunk /= 2,
+                    Err(error) => panic!("filling the socket buffers failed: {error}"),
+                }
             }
-        }
+            written
+        };
+        fill();
+        let settled = (0..500).any(|_| {
+            thread::sleep(Duration::from_millis(20));
+            fill() == 0
+        });
+        assert!(settled, "the socket buffers kept draining");
         stream.set_nonblocking(false).unwrap();
         let mut request = StopMoveRequest::from(());
         request.set_command_id(1);
