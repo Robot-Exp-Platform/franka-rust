@@ -57,7 +57,8 @@ pub struct ConnectData {
 #[derive(Serialize, Deserialize)]
 pub struct ConnectStatus {
     pub status: Status,
-    pub version: u32,
+    /// The server's protocol version; `uint16_t` like the request's.
+    pub version: u16,
 }
 
 // ! Homing Command
@@ -126,13 +127,22 @@ impl<'de, const C: Command> Deserialize<'de> for CommandHeader<C> {
     where
         D: Deserializer<'de>,
     {
+        // The response header starts with the command, as the request's does;
+        // skipping it would read every later field two bytes early.
         #[derive(Deserialize)]
         struct CommandHeaderHelper {
+            command: Command,
             command_id: u32,
             size: u32,
         }
 
         let helper = CommandHeaderHelper::deserialize(deserializer)?;
+        if helper.command != C {
+            return Err(serde::de::Error::custom(format!(
+                "unexpected gripper response command: expected {C:?}, got {:?}",
+                helper.command
+            )));
+        }
         Ok(CommandHeader { command_id: helper.command_id, size: helper.size })
     }
 }
