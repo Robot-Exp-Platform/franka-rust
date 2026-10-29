@@ -1,8 +1,8 @@
-use pyo3::{PyResult, exceptions::PyException, pyclass, pymethods};
-use roplat_behavior::{
-    RobotException, py_arm, py_arm_torque_control, py_cartesian_pose_control,
-    py_cartesian_velocity_control, py_flange_move, py_joint_motion, py_joint_position_control,
-    py_joint_torque_control, py_joint_velocity_control, py_robot,
+use pyo3::{PyResult, pyclass, pymethods};
+use roplat_behavior_ffi::{
+    py_arm, py_arm_torque_control, py_cartesian_pose_control, py_cartesian_velocity_control,
+    py_err, py_flange_move, py_joint_motion, py_joint_position_control, py_joint_torque_control,
+    py_joint_velocity_control, py_robot,
 };
 
 use crate::{
@@ -56,36 +56,36 @@ impl PyFrankaEmika {
             lower_force_thresholds_nominal,
             upper_force_thresholds_nominal,
         };
-        self.0.set_collision_behavior(data).map_err(map_err)
+        self.0.set_collision_behavior(data).map_err(py_err)
     }
 
     fn set_joint_impedance(&mut self, data: [f64; 7]) -> PyResult<()> {
-        self.0.set_joint_impedance(data.into()).map_err(map_err)
+        self.0.set_joint_impedance(data.into()).map_err(py_err)
     }
 
     fn set_cartesian_impedance(&mut self, data: [f64; 6]) -> PyResult<()> {
-        self.0.set_cartesian_impedance(data.into()).map_err(map_err)
+        self.0.set_cartesian_impedance(data.into()).map_err(py_err)
     }
 
     fn set_guiding_mode(&mut self, guiding_mode: [bool; 6], nullspace: bool) -> PyResult<()> {
         let data = SetGuidingModeData { guiding_mode, nullspace };
-        self.0.set_guiding_mode(data).map_err(map_err)
+        self.0.set_guiding_mode(data).map_err(py_err)
     }
 
     fn set_ee_to_k(&mut self, pose: [f64; 16]) -> PyResult<()> {
-        self.0.set_ee_to_k(pose.into()).map_err(map_err)
+        self.0.set_ee_to_k(pose.into()).map_err(py_err)
     }
 
     fn set_ne_to_ee(&mut self, pose: [f64; 16]) -> PyResult<()> {
-        self.0.set_ne_to_ee(pose.into()).map_err(map_err)
+        self.0.set_ne_to_ee(pose.into()).map_err(py_err)
     }
 
     fn set_default_behavior(&mut self) -> PyResult<()> {
-        self.0.set_default_behavior().map_err(map_err)
+        self.0.set_default_behavior().map_err(py_err)
     }
 
     fn model(&mut self) -> PyResult<PyFrankaModel> {
-        Ok(PyFrankaModel(self.0.model().map_err(map_err)?))
+        Ok(PyFrankaModel(self.0.model().map_err(py_err)?))
     }
 }
 
@@ -122,36 +122,36 @@ impl PyFrankaFR3 {
             lower_force_thresholds_nominal,
             upper_force_thresholds_nominal,
         };
-        self.0.set_collision_behavior(data).map_err(map_err)
+        self.0.set_collision_behavior(data).map_err(py_err)
     }
 
     fn set_joint_impedance(&mut self, data: [f64; 7]) -> PyResult<()> {
-        self.0.set_joint_impedance(data.into()).map_err(map_err)
+        self.0.set_joint_impedance(data.into()).map_err(py_err)
     }
 
     fn set_cartesian_impedance(&mut self, data: [f64; 6]) -> PyResult<()> {
-        self.0.set_cartesian_impedance(data.into()).map_err(map_err)
+        self.0.set_cartesian_impedance(data.into()).map_err(py_err)
     }
 
     fn set_guiding_mode(&mut self, guiding_mode: [bool; 6], nullspace: bool) -> PyResult<()> {
         let data = SetGuidingModeData { guiding_mode, nullspace };
-        self.0.set_guiding_mode(data).map_err(map_err)
+        self.0.set_guiding_mode(data).map_err(py_err)
     }
 
     fn set_ee_to_k(&mut self, pose: [f64; 16]) -> PyResult<()> {
-        self.0.set_ee_to_k(pose.into()).map_err(map_err)
+        self.0.set_ee_to_k(pose.into()).map_err(py_err)
     }
 
     fn set_ne_to_ee(&mut self, pose: [f64; 16]) -> PyResult<()> {
-        self.0.set_ne_to_ee(pose.into()).map_err(map_err)
+        self.0.set_ne_to_ee(pose.into()).map_err(py_err)
     }
 
     fn set_default_behavior(&mut self) -> PyResult<()> {
-        self.0.set_default_behavior().map_err(map_err)
+        self.0.set_default_behavior().map_err(py_err)
     }
 
     fn model(&mut self) -> PyResult<PyFrankaModel> {
-        Ok(PyFrankaModel(self.0.model().map_err(map_err)?))
+        Ok(PyFrankaModel(self.0.model().map_err(py_err)?))
     }
 }
 
@@ -189,23 +189,23 @@ impl PyFrankaGripper {
     }
 
     fn homing(&mut self) -> PyResult<bool> {
-        self.0.homing().map_err(map_err)
+        self.0.homing().map_err(py_err)
     }
 
     fn grasp(&mut self, width: f64, speed: f64, force: f64) -> PyResult<bool> {
-        self.0.grasp(width, speed, force).map_err(map_err)
+        self.0.grasp(width, speed, force).map_err(py_err)
     }
 
     fn move_gripper(&mut self, width: f64, speed: f64) -> PyResult<bool> {
-        self.0.move_gripper(width, speed).map_err(map_err)
+        self.0.move_gripper(width, speed).map_err(py_err)
     }
 
     fn stop(&mut self) -> PyResult<bool> {
-        self.0.stop().map_err(map_err)
+        self.0.stop().map_err(py_err)
     }
 
     // fn read_state(&mut self) -> PyResult<GripperState> {
-    //     self.0.read_state().map_err(map_err)
+    //     self.0.read_state().map_err(py_err)
     // }
 }
 
@@ -213,7 +213,7 @@ impl PyFrankaGripper {
 impl PyFrankaModel {
     #[new]
     fn new(path: &str) -> PyResult<Self> {
-        Ok(PyFrankaModel(FrankaModel::new(path).map_err(map_err)?))
+        Ok(PyFrankaModel(FrankaModel::new(path).map_err(py_err)?))
     }
 
     fn __repr__(&self) -> String {
@@ -240,8 +240,4 @@ impl PyFrankaModel {
     ) -> PyResult<[f64; FRANKA_DOF]> {
         Ok(self.0.gravity(&q, m, &x, &gravity))
     }
-}
-
-fn map_err(e: RobotException) -> pyo3::PyErr {
-    PyException::new_err(e.to_string())
 }

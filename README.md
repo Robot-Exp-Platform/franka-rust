@@ -30,7 +30,7 @@ The direct behavior dependency supplies the imported traits. Registry installati
 
 The controller must be reachable with FCI enabled. The default selects **FCI protocol 5** (libfranka 0.9.2 layout); `features = ["fci_v8"]` selects **protocol 8** (libfranka 0.14.0 layout). Choose using the controller's compatibility information, not its Rust model alias. See [protocol constants](src/params.rs) and [response types](src/types/robot_types.rs).
 
-Model loading is separate: `model()` downloads a controller-provided library using Linux/Windows paths; other systems return an unsupported-platform error. Compilation on a host does not establish FCI timing or model-library compatibility.
+Model loading is separate: `model()` downloads a controller-provided library into the system temporary directory (`FrankaModel::cache_path`) on Linux and Windows; other systems return an unsupported-platform error. Compilation on a host does not establish FCI timing or model-library compatibility.
 
 | Feature | Purpose |
 |---|---|

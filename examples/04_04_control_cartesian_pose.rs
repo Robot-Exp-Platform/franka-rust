@@ -18,9 +18,10 @@ fn main() -> RobotResult<()> {
         lower_force_thresholds_nominal: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0],
         upper_force_thresholds_nominal: [20.0, 20.0, 20.0, 25.0, 25.0, 25.0],
     })?;
-    robot
-        .with_scale(0.5)
-        .move_to::<JointSpace<7>>(FrankaEmika::JOINT_DEFAULT)?;
+    let limits = robot.motion_limits().scaled(0.5);
+    robot.with_limits(limits, |robot| {
+        robot.move_to::<JointSpace<7>>(FrankaEmika::JOINT_DEFAULT)
+    })?;
 
     println!("Finished moving to initial joint configuration.");
 

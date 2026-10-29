@@ -9,7 +9,6 @@ pub mod ffi;
 pub mod franka;
 pub mod model;
 mod network;
-pub mod once;
 mod params;
 mod realtime;
 mod robot;
@@ -29,7 +28,7 @@ mod franka_rust {
     #[pymodule_export]
     use super::ffi::to_py::{PyFrankaEmika, PyFrankaFR3, PyFrankaGripper, PyFrankaModel};
     #[pymodule_export]
-    use roplat_behavior::{
+    use roplat_behavior_ffi::{
         PyArmState, PyJointSample, PyJointState, PyLoadState, PyMotionType, PyPose,
         PySpatialSample, PySpatialState,
     };

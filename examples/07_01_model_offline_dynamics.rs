@@ -6,15 +6,8 @@ use roplat_behavior::{RobotResult, behavior::*};
 use strum::IntoEnumIterator;
 
 fn main() -> RobotResult<()> {
-    let path = if cfg!(target_os = "linux") {
-        "/tmp/model.so"
-    } else if cfg!(target_os = "windows") {
-        "C:\\tmp\\model.dll"
-    } else {
-        "/tmp/model.dylib"
-    };
-
-    let model = FrankaModel::new(path)?;
+    // The library `FrankaEmika::model` downloaded from the robot earlier.
+    let model = FrankaModel::new(FrankaModel::cache_path()?)?;
     let q = FrankaEmika::JOINT_DEFAULT;
     let dq = [0.0; 7];
     let mut pose = [0.0; 16];

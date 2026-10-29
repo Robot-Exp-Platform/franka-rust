@@ -7,9 +7,10 @@ fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
 
     robot.set_default_behavior()?;
-    robot
-        .with_scale(0.5)
-        .move_to::<JointSpace<7>>(FrankaEmika::JOINT_DEFAULT)?;
+    let limits = robot.motion_limits().scaled(0.5);
+    robot.with_limits(limits, |robot| {
+        robot.move_to::<JointSpace<7>>(FrankaEmika::JOINT_DEFAULT)
+    })?;
 
     println!("Finished moving to initial joint configuration.");
 

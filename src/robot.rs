@@ -1,10 +1,11 @@
 use roplat_behavior::*;
-use roplat_kinematics::ArmInverseKinematics;
-use roplat_trajectory::path_generate;
+use roplat_kinematics::{ArmForwardKinematics, ArmInverseKinematics};
+use roplat_trajectory::{JointTrajectoryFollower, path_generate, points_from_samples};
 use std::{
     fs::File,
     io::Write,
     marker::PhantomData,
+    ops::ControlFlow,
     path::Path,
     sync::{Arc, Mutex},
     time::Duration,
@@ -13,7 +14,6 @@ use std::{
 use crate::{
     FRANKA_DOF, FrankaRobotImpl, LIBFRANKA_VERSION,
     model::FrankaModel,
-    once::OverrideOnce,
     types::{robot_state::*, robot_types::*},
 };
 
@@ -69,45 +69,30 @@ pub struct FrankaRobot<T: FrankaType> {
     is_moving: bool,
     before_observers: FrankaControlObservers,
     after_observers: FrankaControlObservers,
-    coord: OverrideOnce<Coord>,
-    scale: OverrideOnce<f64>,
-    max_vel: OverrideOnce<[f64; FRANKA_DOF]>,
-    max_acc: OverrideOnce<[f64; FRANKA_DOF]>,
-    max_jerk: OverrideOnce<[f64; FRANKA_DOF]>,
-    max_cartesian_vel: OverrideOnce<f64>,
-    max_cartesian_acc: OverrideOnce<f64>,
-    max_cartesian_jerk: OverrideOnce<f64>,
-    max_rotation_vel: OverrideOnce<f64>,
-    max_rotation_acc: OverrideOnce<f64>,
-    max_rotation_jerk: OverrideOnce<f64>,
+    /// Limits the arm's own motions plan with; `scale` scales their velocity,
+    /// acceleration and jerk.
+    limits: MotionLimits<FRANKA_DOF>,
 }
 
 impl<T: FrankaType> FrankaRobot<T>
 where
     FrankaRobot<T>: Joints<7> + EndPoint,
 {
+    /// Connects to the robot at `ip`. Motions use the declared limits at a
+    /// conservative 10 % speed until [`Arm::set_motion_limits`] changes them.
     pub fn new(ip: &str) -> Self {
-        let mut robot = FrankaRobot {
+        FrankaRobot {
             marker: PhantomData,
             robot_impl: FrankaRobotImpl::new(ip),
             is_moving: false,
             before_observers: control_observers(),
             after_observers: control_observers(),
-            coord: OverrideOnce::new(Coord::OCS),
-            scale: OverrideOnce::new(0.1),
-            max_vel: OverrideOnce::new(Self::JOINT_VEL_BOUND),
-            max_acc: OverrideOnce::new(Self::JOINT_ACC_BOUND),
-            max_jerk: OverrideOnce::new(Self::JOINT_JERK_BOUND),
-            max_cartesian_vel: OverrideOnce::new(Self::CARTESIAN_VEL_BOUND),
-            max_cartesian_acc: OverrideOnce::new(Self::CARTESIAN_ACC_BOUND),
-            max_cartesian_jerk: OverrideOnce::new(Self::CARTESIAN_JERK_BOUND),
-            max_rotation_vel: OverrideOnce::new(Self::ROTATION_VEL_BOUND),
-            max_rotation_acc: OverrideOnce::new(Self::ROTATION_ACC_BOUND),
-            max_rotation_jerk: OverrideOnce::new(Self::ROTATION_JERK_BOUND),
-        };
-        let _ = robot.set_scale(0.1);
+            limits: Self::default_limits(),
+        }
+    }
 
-        robot
+    fn default_limits() -> MotionLimits<FRANKA_DOF> {
+        MotionLimits::envelope::<Self>().scaled(0.1)
     }
 
     #[cfg(test)]
@@ -118,17 +103,7 @@ where
             is_moving: false,
             before_observers: control_observers(),
             after_observers: control_observers(),
-            coord: OverrideOnce::new(Coord::OCS),
-            scale: OverrideOnce::new(0.1),
-            max_vel: OverrideOnce::new(Self::JOINT_VEL_BOUND),
-            max_acc: OverrideOnce::new(Self::JOINT_ACC_BOUND),
-            max_jerk: OverrideOnce::new(Self::JOINT_JERK_BOUND),
-            max_cartesian_vel: OverrideOnce::new(Self::CARTESIAN_VEL_BOUND),
-            max_cartesian_acc: OverrideOnce::new(Self::CARTESIAN_ACC_BOUND),
-            max_cartesian_jerk: OverrideOnce::new(Self::CARTESIAN_JERK_BOUND),
-            max_rotation_vel: OverrideOnce::new(Self::ROTATION_VEL_BOUND),
-            max_rotation_acc: OverrideOnce::new(Self::ROTATION_ACC_BOUND),
-            max_rotation_jerk: OverrideOnce::new(Self::ROTATION_JERK_BOUND),
+            limits: Self::default_limits(),
         }
     }
 
@@ -140,19 +115,7 @@ where
     pub fn connect(&mut self, ip: &str) {
         self.robot_impl = FrankaRobotImpl::new(ip);
         self.is_moving = false;
-        self.coord = OverrideOnce::new(Coord::OCS);
-        self.scale = OverrideOnce::new(0.1);
-        self.max_vel = OverrideOnce::new(Self::JOINT_VEL_BOUND.map(|x| x * 0.1));
-        self.max_acc = OverrideOnce::new(Self::JOINT_ACC_BOUND.map(|x| x * 0.1));
-        self.max_jerk = OverrideOnce::new(Self::JOINT_JERK_BOUND.map(|x| x * 0.1));
-        self.max_cartesian_vel = OverrideOnce::new(Self::CARTESIAN_VEL_BOUND * 0.1);
-        self.max_cartesian_acc = OverrideOnce::new(Self::CARTESIAN_ACC_BOUND * 0.1);
-        self.max_cartesian_jerk = OverrideOnce::new(Self::CARTESIAN_JERK_BOUND * 0.1);
-        self.max_rotation_vel = OverrideOnce::new(Self::ROTATION_VEL_BOUND * 0.1);
-        self.max_rotation_acc = OverrideOnce::new(Self::ROTATION_ACC_BOUND * 0.1);
-        self.max_rotation_jerk = OverrideOnce::new(Self::ROTATION_JERK_BOUND * 0.1);
-
-        let _ = self.set_scale(0.1);
+        self.limits = Self::default_limits();
     }
 
     /// # set_collision_behavior
@@ -251,22 +214,12 @@ where
         Ok(())
     }
 
+    /// Loads the robot's model library from [`FrankaModel::cache_path`],
+    /// downloading it there first if it is missing. The cache is shared by
+    /// every robot; [`model_from_path`](Self::model_from_path) keeps one per
+    /// robot.
     pub fn model(&mut self) -> RobotResult<FrankaModel> {
-        let model_path = if cfg!(target_os = "linux") {
-            "/tmp/model.so"
-        } else if cfg!(target_os = "windows") {
-            "C:\\tmp\\model.dll"
-        } else {
-            return Err(RobotException::ModelException(
-                "Your platform is not yet supported for Downloading models.".to_string(),
-            ));
-        };
-        let model_path = Path::new(model_path);
-        if !model_path.exists() {
-            self.download_library(model_path)?;
-        }
-        let model = FrankaModel::new(model_path)?;
-        Ok(model)
+        self.model_from_path(&FrankaModel::cache_path()?)
     }
 
     pub fn model_from_path(&mut self, model_path: &Path) -> RobotResult<FrankaModel> {
@@ -280,7 +233,7 @@ where
 
 impl<T: FrankaType> Robot for FrankaRobot<T> {
     type State = RobotState;
-    const CONTROL_PERIOD: f64 = 1e-3;
+    const CONTROL_PERIOD: Duration = Duration::from_millis(1);
 
     fn version() -> String {
         format!("FrankaRobot v{LIBFRANKA_VERSION}")
@@ -391,149 +344,34 @@ where
         self.robot_impl.robot_state.read().unwrap().q
     }
 
-    fn get_joint_vel_bound(&self) -> [f64; 7] {
-        std::array::from_fn(|i| self.max_vel.get()[i].min(Self::JOINT_VEL_BOUND[i]))
-    }
-    fn get_joint_acc_bound(&self) -> [f64; 7] {
-        std::array::from_fn(|i| self.max_acc.get()[i].min(Self::JOINT_ACC_BOUND[i]))
-    }
-    fn get_joint_jerk_bound(&self) -> [f64; 7] {
-        std::array::from_fn(|i| self.max_jerk.get()[i].min(Self::JOINT_JERK_BOUND[i]))
-    }
-    fn get_cartesian_vel_bound(&self) -> f64 {
-        self.max_cartesian_vel.get().min(Self::CARTESIAN_VEL_BOUND)
-    }
-    fn get_cartesian_acc_bound(&self) -> f64 {
-        self.max_cartesian_acc.get().min(Self::CARTESIAN_ACC_BOUND)
-    }
-    fn get_cartesian_jerk_bound(&self) -> f64 {
-        self.max_cartesian_jerk
-            .get()
-            .min(Self::CARTESIAN_JERK_BOUND)
-    }
-    fn get_rotation_vel_bound(&self) -> f64 {
-        self.max_rotation_vel.get().min(Self::ROTATION_VEL_BOUND)
-    }
-    fn get_rotation_acc_bound(&self) -> f64 {
-        self.max_rotation_acc.get().min(Self::ROTATION_ACC_BOUND)
-    }
-    fn get_rotation_jerk_bound(&self) -> f64 {
-        self.max_rotation_jerk.get().min(Self::ROTATION_JERK_BOUND)
+    fn motion_limits(&self) -> MotionLimits<FRANKA_DOF> {
+        self.limits
     }
 
-    fn with_joint_vel(mut self, vel_bound: [f64; FRANKA_DOF]) -> Self {
-        self.max_vel.once(vel_bound);
-        self
-    }
-
-    fn with_joint_acc(mut self, acc_bound: [f64; FRANKA_DOF]) -> Self {
-        self.max_acc.once(acc_bound);
-        self
-    }
-
-    fn with_joint_jerk(mut self, jerk_bound: [f64; FRANKA_DOF]) -> Self {
-        self.max_jerk.once(jerk_bound);
-        self
-    }
-
-    fn with_torque(self, _torque_bound: [f64; FRANKA_DOF]) -> Self {
-        self
-    }
-
-    fn with_torque_dot(self, _torque_dot_bound: [f64; FRANKA_DOF]) -> Self {
-        self
-    }
-
-    fn get_endpoint(&self) -> Pose {
-        let state = *self.robot_impl.robot_state.read().unwrap();
-        let ee = Pose::from_homo(state.O_T_EE).quat();
-        Pose::from_isometry(ee * Pose::from_homo(state.F_T_EE).quat().inverse())
-    }
-
-    fn with_cartesian_vel(mut self, vel_bound: f64) -> Self {
-        self.max_cartesian_vel.once(vel_bound);
-        self
-    }
-
-    fn with_cartesian_acc(mut self, acc_bound: f64) -> Self {
-        self.max_cartesian_acc.once(acc_bound);
-        self
-    }
-
-    fn with_cartesian_jerk(mut self, jerk_bound: f64) -> Self {
-        self.max_cartesian_jerk.once(jerk_bound);
-        self
-    }
-
-    fn with_rotation_vel(mut self, vel_bound: f64) -> Self {
-        self.max_rotation_vel.once(vel_bound);
-        self
-    }
-
-    fn with_rotation_acc(mut self, acc_bound: f64) -> Self {
-        self.max_rotation_acc.once(acc_bound);
-        self
-    }
-
-    fn with_rotation_jerk(mut self, jerk_bound: f64) -> Self {
-        self.max_rotation_jerk.once(jerk_bound);
-        self
+    fn set_motion_limits(&mut self, limits: MotionLimits<FRANKA_DOF>) -> RobotResult<()> {
+        limits.within(&MotionLimits::envelope::<Self>())?;
+        self.limits = limits;
+        Ok(())
     }
 }
 
-impl<T: FrankaType> FrankaRobot<T>
-where
-    Self: Joints<7> + EndPoint,
-{
-    pub fn set_coord(&mut self, coord: Coord) -> RobotResult<()> {
-        self.coord.set(coord);
-        Ok(())
+/// The flange pose in a state: the end effector's pose, `O_T_EE`, without
+/// the flange-to-end-effector transform, `F_T_EE`.
+fn flange_pose_of(state: &RobotStateInter) -> Pose {
+    let ee = Pose::from_homo(state.O_T_EE).quat();
+    Pose::from_isometry(ee * Pose::from_homo(state.F_T_EE).quat().inverse())
+}
+
+impl<T: FrankaType> FrankaRobot<T> {
+    /// The flange pose in the last state received.
+    pub(crate) fn flange_pose(&self) -> Pose {
+        flange_pose_of(&self.robot_impl.robot_state.read().unwrap())
     }
 
-    pub fn set_scale(&mut self, scale: f64) -> RobotResult<()> {
-        self.scale.set(scale);
-        self.max_vel.set(Self::JOINT_VEL_BOUND.map(|v| v * scale));
-        self.max_acc.set(Self::JOINT_ACC_BOUND.map(|v| v * scale));
-        self.max_jerk.set(Self::JOINT_JERK_BOUND.map(|v| v * scale));
-        self.max_cartesian_vel
-            .set(Self::CARTESIAN_VEL_BOUND * scale);
-        self.max_cartesian_acc
-            .set(Self::CARTESIAN_ACC_BOUND * scale);
-        self.max_cartesian_jerk
-            .set(Self::CARTESIAN_JERK_BOUND * scale);
-        self.max_rotation_vel.set(Self::ROTATION_VEL_BOUND * scale);
-        self.max_rotation_acc.set(Self::ROTATION_ACC_BOUND * scale);
-        self.max_rotation_jerk
-            .set(Self::ROTATION_JERK_BOUND * scale);
-        Ok(())
-    }
-
-    pub fn get_scale(&self) -> f64 {
-        *self.scale.get()
-    }
-
-    pub fn with_coord(&mut self, coord: Coord) -> &mut Self {
-        self.coord.once(coord);
-        self
-    }
-
-    pub fn with_scale(&mut self, scale: f64) -> &mut Self {
-        self.scale.once(scale);
-        self.max_vel.once(Self::JOINT_VEL_BOUND.map(|v| v * scale));
-        self.max_acc.once(Self::JOINT_ACC_BOUND.map(|v| v * scale));
-        self.max_jerk
-            .once(Self::JOINT_JERK_BOUND.map(|v| v * scale));
-        self.max_cartesian_vel
-            .once(Self::CARTESIAN_VEL_BOUND * scale);
-        self.max_cartesian_acc
-            .once(Self::CARTESIAN_ACC_BOUND * scale);
-        self.max_cartesian_jerk
-            .once(Self::CARTESIAN_JERK_BOUND * scale);
-        self.max_rotation_vel.once(Self::ROTATION_VEL_BOUND * scale);
-        self.max_rotation_acc.once(Self::ROTATION_ACC_BOUND * scale);
-        self.max_rotation_jerk
-            .once(Self::ROTATION_JERK_BOUND * scale);
-        self
+    /// The flange pose in a state read from the robot now.
+    pub(crate) fn read_flange_pose(&mut self) -> RobotResult<Pose> {
+        let (state, _, _) = self.robot_impl.recv_state()?;
+        Ok(flange_pose_of(&state))
     }
 }
 
@@ -560,12 +398,9 @@ where
     Self: Joints<7>,
 {
     fn move_to(&mut self, target: [f64; FRANKA_DOF]) -> RobotResult<()> {
-        let coord = *self.coord.get();
-        let mut path_generate = path_generate::JointSCurve::new(
-            *self.max_vel.get(),
-            *self.max_acc.get(),
-            *self.max_jerk.get(),
-        );
+        let limits = self.limits.scaled_joint();
+        let mut path_generate =
+            path_generate::JointSCurve::new(limits.dq_max, limits.ddq_max, limits.dddq_max);
         let mut planned = false;
         let mut elapsed = Duration::ZERO;
 
@@ -576,16 +411,6 @@ where
                     .q()
                     .or(state.meas.q())
                     .unwrap_or([0.0; FRANKA_DOF]);
-                let target = match coord {
-                    Coord::Relative => {
-                        let mut result = target;
-                        for i in 0..FRANKA_DOF {
-                            result[i] += joint[i];
-                        }
-                        result
-                    }
-                    _ => target,
-                };
                 path_generate.plan(joint, target);
                 planned = true;
             }
@@ -602,21 +427,15 @@ where
         async move {
             let state = crate::realtime::tokio_udp::recv_state(&mut self.robot_impl).await?;
             let joint = state.q_d;
-            let target = match self.coord.get() {
-                Coord::Relative => {
-                    let mut result = [0.0; FRANKA_DOF];
-                    for i in 0..FRANKA_DOF {
-                        result[i] = joint[i] + target[i];
-                    }
-                    result
-                }
-                _ => target,
-            };
 
-            let (v_max, a_max, j_max) =
-                (self.max_vel.get(), self.max_acc.get(), self.max_jerk.get());
-            let (path_generate, t_max) =
-                path_generate::joint_s_curve(&joint, &target, v_max, a_max, j_max);
+            let limits = self.limits.scaled_joint();
+            let (path_generate, t_max) = path_generate::joint_s_curve(
+                &joint,
+                &target,
+                &limits.dq_max,
+                &limits.ddq_max,
+                &limits.dddq_max,
+            );
 
             // Retain this API's existing torque-space realisation: pre-sample
             // the trajectory and run the PID controller per cycle.
@@ -643,73 +462,28 @@ impl<T: FrankaType> FrankaRobot<T>
 where
     Self: Joints<7> + EndPoint + ArmInverseKinematics<7>,
 {
+    /// A straight flange line from the pose at `q_start` to `target`, within
+    /// the motion limits, sampled every control period.
     pub(crate) fn plan_flange_motion(
         &self,
         q_start: [f64; 7],
         target: Pose,
     ) -> RobotResult<Vec<[f64; 7]>> {
-        use roplat_trajectory::CartesianTimeScalingLimits;
-        let limits = CartesianTimeScalingLimits {
-            velocity: self.get_joint_vel_bound(),
-            acceleration: self.get_joint_acc_bound(),
-            jerk: self.get_joint_jerk_bound(),
-            scalar: [f64::INFINITY; 3],
-        };
-        plan_flange_trajectory::<Self>(
-            q_start,
+        roplat_trajectory::plan_cartesian_line_traj_via_time_scaling(
+            Self::fk_end_pose(&q_start),
             target,
-            self.coord.get(),
-            limits,
-            [
-                self.get_cartesian_vel_bound(),
-                self.get_cartesian_acc_bound(),
-                self.get_cartesian_jerk_bound(),
-            ],
-            [
-                self.get_rotation_vel_bound(),
-                self.get_rotation_acc_bound(),
-                self.get_rotation_jerk_bound(),
-            ],
+            q_start,
+            |pose, seed: [f64; 7]| {
+                let seed = JVec::from_row_slice(&seed);
+                Self::ik_solve_converged(&seed, &pose, Default::default()).map(Into::into)
+            },
+            &self.limits.scaled_joint(),
+            &self.limits.scaled_cartesian(),
+            Self::CONTROL_PERIOD,
+            Default::default(),
         )
+        .map_err(RobotException::from_algorithm)
     }
-}
-
-/// Pure planning boundary shared by blocking and native async Cartesian moves.
-pub(crate) fn plan_flange_trajectory<R>(
-    q_start: [f64; 7],
-    target: Pose,
-    coord: &Coord,
-    mut limits: roplat_trajectory::CartesianTimeScalingLimits<7>,
-    linear: [f64; 3],
-    angular: [f64; 3],
-) -> RobotResult<Vec<[f64; 7]>>
-where
-    R: Joints<7> + Robot + ArmInverseKinematics<7>,
-{
-    let start = crate::franka::kinematics::flange_pose::<R>(&q_start);
-    let target = match coord {
-        Coord::Relative => start * target,
-        Coord::Inertial => Pose::from_position(start.position()) * target,
-        _ => target,
-    };
-    let (a, b) = (start.quat(), target.quat());
-    let distance = (b.translation.vector - a.translation.vector).norm();
-    let angle = a.rotation.angle_to(&b.rotation);
-    for order in 0..3 {
-        if distance > 0.0 {
-            limits.scalar[order] = limits.scalar[order].min(linear[order] / distance);
-        }
-        if angle > 0.0 {
-            limits.scalar[order] = limits.scalar[order].min(angular[order] / angle);
-        }
-    }
-    roplat_trajectory::plan_cartesian_path_traj_via_time_scaling_with_limits::<R, _, _, 7>(
-        move |s| Pose::from_isometry(a.lerp_slerp(&b, s)),
-        q_start,
-        |pose, seed| crate::franka::kinematics::solve_flange_ik::<R>(seed, pose),
-        limits,
-        Default::default(),
-    )
 }
 
 impl<T: FrankaType> MoveTo<FlangeSpace> for FrankaRobot<T>
@@ -736,38 +510,50 @@ where
                 return Ok(());
             }
 
-            let mut elapsed = Duration::ZERO;
+            let mut follower = cycle_timed_follower(&traj)?;
+            let mut failure = None;
             self.is_moving = true;
             let _moving = MovingSession(&mut self.is_moving);
-            crate::realtime::tokio_udp::control_async(
+            crate::realtime::tokio_udp::control_flow_async(
                 &mut self.robot_impl,
                 MotionType::<FRANKA_DOF>::Joint(q_start).into(),
-                async move |_, dt| {
-                    elapsed += dt;
-                    let (next, done) = timed_joint_sample(&traj, elapsed);
-                    (MotionType::Joint(next), done).into()
+                async |state, dt| {
+                    let joint = ArmState::<FRANKA_DOF>::from(state).joint;
+                    follow_step(&mut follower, dt, &joint, &mut failure)
+                        .map_continue(|(next, done)| (MotionType::Joint(next), done).into())
                 },
             )
-            .await
+            .await?;
+            failure.map_or(Ok(()), |error| Err(RobotException::from_algorithm(error)))
         }
     }
 }
 
-/// Sample an existing 1 ms dense trajectory using elapsed robot time.
-/// No packet-gap rejection: a late callback selects the current reference.
-fn timed_joint_sample<const N: usize>(path: &[[f64; N]], elapsed: Duration) -> ([f64; N], bool) {
-    const PERIOD_NS: u128 = 1_000_000;
-    let nanos = elapsed.as_nanos();
-    let last = path.len() - 1;
-    let index = ((nanos / PERIOD_NS).min(last as u128)) as usize;
-    if index == last {
-        return (path[last], nanos >= path.len() as u128 * PERIOD_NS);
+/// Follows a dense trajectory sampled every control period, timed by the
+/// cycle durations the control session reports.
+fn cycle_timed_follower(
+    traj: &[[f64; FRANKA_DOF]],
+) -> RobotResult<JointTrajectoryFollower<msgs::ManualClock, FRANKA_DOF>> {
+    let period = Duration::from_millis(1);
+    JointTrajectoryFollower::cycle_timed(points_from_samples(traj, period))
+        .map_err(RobotException::from_algorithm)
+}
+
+/// One cycle of `follower`. A tracking error ends the session; it is kept in
+/// `failure` for the caller to return.
+fn follow_step(
+    follower: &mut JointTrajectoryFollower<msgs::ManualClock, FRANKA_DOF>,
+    dt: Duration,
+    joint: &JointState<FRANKA_DOF>,
+    failure: &mut Option<roplat_trajectory::TrackingError>,
+) -> ControlStep<[f64; FRANKA_DOF]> {
+    match follower.step_by(dt, joint) {
+        Ok(step) => ControlFlow::Continue(step),
+        Err(error) => {
+            *failure = Some(error);
+            ControlFlow::Break(())
+        }
     }
-    let fraction = (nanos % PERIOD_NS) as f64 / PERIOD_NS as f64;
-    (
-        std::array::from_fn(|axis| path[index][axis] + fraction * (path[index + 1][axis] - path[index][axis])),
-        false,
-    )
 }
 
 impl<T: FrankaType> MoveTraj<JointSpace<7>> for FrankaRobot<T>
@@ -779,11 +565,12 @@ where
             return Ok(());
         }
 
-        let mut elapsed = Duration::ZERO;
-        <Self as Control>::control_with::<JointPositionControl<7>, _>(self, move |_, dt| {
-            elapsed += dt;
-            timed_joint_sample(&path, elapsed)
-        })
+        let mut follower = cycle_timed_follower(&path)?;
+        let mut failure = None;
+        <Self as ControlWith<JointPositionControl<7>>>::control_with_flow(self, |joint, dt| {
+            follow_step(&mut follower, dt, &joint, &mut failure)
+        })?;
+        failure.map_or(Ok(()), |error| Err(RobotException::from_algorithm(error)))
     }
 
     fn move_traj_sync(&mut self, path: Vec<[f64; FRANKA_DOF]>) -> RobotResult<()> {
@@ -794,18 +581,20 @@ where
     where
         F: Fn(f64) -> Option<[f64; FRANKA_DOF]>,
     {
-        let traj = roplat_trajectory::plan_path_traj_via_copp::<Self, F, FRANKA_DOF>(
-            &path,
-            self.get_scale(),
-        )?;
+        let limits = self.limits.scaled_joint();
+        let traj = roplat_trajectory::plan_path_traj_via_copp(&path, &limits, Self::CONTROL_PERIOD)
+            .map_err(RobotException::from_algorithm)?;
         <Self as MoveTraj<JointSpace<7>>>::move_traj(self, traj)
     }
 
     fn move_waypoints(&mut self, waypoints: Vec<[f64; FRANKA_DOF]>) -> RobotResult<()> {
-        let traj = roplat_trajectory::plan_waypoints_traj_via_copp::<Self, FRANKA_DOF>(
+        let limits = self.limits.scaled_joint();
+        let traj = roplat_trajectory::plan_waypoints_traj_via_copp(
             &waypoints,
-            self.get_scale(),
-        )?;
+            &limits,
+            Self::CONTROL_PERIOD,
+        )
+        .map_err(RobotException::from_algorithm)?;
         <Self as MoveTraj<JointSpace<7>>>::move_traj(self, traj)
     }
 }

@@ -1,5 +1,6 @@
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
+use roplat_behavior::RobotResult;
 use roplat_behavior::behavior::*;
 use roplat_kinematics::{ArmForwardKinematics, ArmInverseKinematics, DhParam};
 
@@ -59,6 +60,14 @@ impl EndPoint for FrankaFR3 {
     const ROTATION_VEL_BOUND: f64 = 2.5;
     const ROTATION_ACC_BOUND: f64 = 217.0;
     const ROTATION_JERK_BOUND: f64 = 8500.;
+
+    fn get_endpoint(&self) -> Pose {
+        self.flange_pose()
+    }
+
+    fn read_endpoint(&mut self) -> RobotResult<Pose> {
+        self.read_flange_pose()
+    }
 }
 
 impl ArmForwardKinematics<FRANKA_DOF> for FrankaFR3 {
@@ -71,7 +80,9 @@ impl ArmForwardKinematics<FRANKA_DOF> for FrankaFR3 {
         DhParam::MDH { alpha: FRAC_PI_2, a: 0., theta: 0., d: 0. },
         DhParam::MDH { alpha: FRAC_PI_2, a: 0.088, theta: 0., d: 0. },
     ];
+    /// Franka's flange is 107 mm beyond the joint 7 frame.
+    const FLANGE: Pose = Pose::from_position([0.0, 0.0, 0.107]);
 }
-crate::franka::kinematics::franka_flange_kinematics!(FrankaFR3);
+roplat_kinematics::dh_kinematics!(FrankaFR3, 7, inverse);
 
 impl ArmInverseKinematics<FRANKA_DOF> for FrankaFR3 {}
