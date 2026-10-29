@@ -72,6 +72,10 @@ cargo +nightly check
 
 Start with [joint motion](examples/02_00_move_joint_default.rs) or [Cartesian motion](examples/03_01_move_flange_pose.rs) when the controller's operating mode, load, frames, and limits are configured for your setup. Those programs send motion commands. `set_default_behavior()` writes collision and impedance defaults; it is not just connection initialization.
 
+Unified `ArmState` poses (`flange`, `tcp`, `stiffness`) use base axes and refer to the physical flange, configured EE/TCP and stiffness frame respectively. Native `RobotState` fields and low-level `MotionType::Cartesian` retain FCI EE semantics. The unified Cartesian control adapters convert flange commands to that native EE frame. Motor `theta` remains available in the native state; it is not a joint command.
+
+Commands pass through the existing 100 Hz low-pass filter before rate limiting, matching the default libfranka 0.9.2 order. Cartesian moves share the same flange/IK adapter in blocking and native async paths and use per-instance joint and Cartesian/rotation limits.
+
 | Controller entry point | Execution contract |
 |---|---|
 | `control_with` / `control_with_flow` | Blocks for the whole session. |

@@ -66,7 +66,7 @@ impl ArmForwardKinematics<FRANKA_DOF> for FrankaEmika {
         DhParam::MDH { alpha: FRAC_PI_2, a: 0.088, theta: 0., d: 0. },
     ];
 }
-roplat_kinematics::dh_kinematics!(FrankaEmika, FRANKA_DOF, inverse);
+crate::franka::kinematics::franka_flange_kinematics!(FrankaEmika);
 
 // Use the default iterative IK pipeline (DLS / LM / Newton / JT) provided by
 // the trait — no analytic family registered.

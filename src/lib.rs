@@ -34,3 +34,7 @@ mod franka_rust {
         PySpatialSample, PySpatialState,
     };
 }
+
+#[cfg(test)]
+#[path = "tests/initial_fix.rs"]
+mod initial_fix_tests;

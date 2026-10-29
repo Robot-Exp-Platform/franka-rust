@@ -21,6 +21,7 @@ fn main() -> RobotResult<()> {
     pose[0] = 1.0;
     pose[5] = 1.0;
     pose[10] = 1.0;
+    pose[15] = 1.0;
 
     let mass = 0.5;
     let center_of_mass = [0.1; 3];
@@ -48,7 +49,7 @@ fn main() -> RobotResult<()> {
     );
     println!(
         "gravity: {:?}",
-        model.gravity(&q, mass, &center_of_mass, &[0.0, 0.0, -0.98])
+        model.gravity(&q, mass, &center_of_mass, &[0.0, 0.0, -9.81])
     );
     Ok(())
 }

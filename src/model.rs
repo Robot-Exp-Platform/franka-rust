@@ -103,7 +103,11 @@ impl FrankaModel {
     pub fn new<S: AsRef<Path>>(model_filename: S) -> RobotResult<Self> {
         Ok(FrankaModel {
             library: ModelLibrary::new(model_filename.as_ref())?,
-            load: LoadState { mass: 0.0, center_of_mass: [0.0; 3], inertia: [0.0; 9] },
+            load: LoadState {
+                mass: 0.0,
+                center_of_mass: [0.0; 3],
+                inertia: [0.0; 9],
+            },
         })
     }
 
@@ -299,17 +303,19 @@ impl FrankaModel {
         frame: &Frame,
         arm_state: &ArmState<7>,
     ) -> [f64; 42] {
-        let pose_f_to_ee = arm_state
-            .flange
-            .meas
-            .pose()
-            .map_or([0.; 16], |pose| pose.homo());
-
-        let pose_ee_to_k = arm_state
+        let o_t_f = arm_state.flange.meas.pose().unwrap_or_default().quat();
+        let o_t_ee = arm_state
+            .tcp
+            .as_ref()
+            .and_then(|s| s.meas.pose())
+            .map_or(o_t_f, |p| p.quat());
+        let o_t_k = arm_state
             .stiffness
             .as_ref()
-            .and_then(|stiffness| stiffness.meas.pose())
-            .map_or([0.; 16], |pose| pose.homo());
+            .and_then(|s| s.meas.pose())
+            .map_or(o_t_ee, |p| p.quat());
+        let pose_f_to_ee = Pose::from_isometry(o_t_f.inverse() * o_t_ee).homo();
+        let pose_ee_to_k = Pose::from_isometry(o_t_ee.inverse() * o_t_k).homo();
         self.zero_jacobian(
             frame,
             &arm_state.joint.meas.q().unwrap(),
@@ -387,7 +393,7 @@ impl FrankaModel {
         self.coriolis(
             &robot_state.q,
             &robot_state.dq,
-            &robot_state.i_load,
+            &robot_state.i_total,
             robot_state.m_total,
             &robot_state.x_total,
         )
@@ -443,6 +449,8 @@ impl FrankaModel {
         )
     }
 
+    /// ArmState has no native gravity vector; None uses [0, 0, -9.81].
+    /// Pass base-frame gravity explicitly for a tilted mounting.
     pub fn gravity_from_arm_state<'a, Grav: Into<Option<&'a [f64; 3]>>>(
         &self,
         arm_state: &ArmState<7>,
@@ -452,9 +460,7 @@ impl FrankaModel {
             &arm_state.joint.meas.q().unwrap(),
             arm_state.load.as_ref().unwrap().mass,
             &arm_state.load.as_ref().unwrap().center_of_mass,
-            gravity_earth
-                .into()
-                .unwrap_or(&arm_state.load.as_ref().unwrap().center_of_mass),
+            gravity_earth,
         )
     }
 }

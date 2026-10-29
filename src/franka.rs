@@ -1,3 +1,4 @@
+pub(crate) mod kinematics;
 mod franka_emika;
 mod franka_fp3;
 mod franka_fr3;

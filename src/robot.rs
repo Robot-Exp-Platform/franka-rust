@@ -47,6 +47,22 @@ fn notify_control_observers(
     }
 }
 
+pub(crate) fn flange_command_to_ee(pose: Pose, state: &RobotStateInter) -> Pose {
+    let f_t_ee = state.F_T_EE;
+    Pose::from_isometry(pose.quat() * crate::utils::array_to_isometry(&f_t_ee))
+}
+
+pub(crate) fn flange_velocity_to_ee(mut twist: [f64; 6], state: &RobotStateInter) -> [f64; 6] {
+    let (f_t_ee, o_t_ee) = (state.F_T_EE, state.O_T_EE);
+    let tool = crate::utils::array_to_isometry(&f_t_ee);
+    let ee = crate::utils::array_to_isometry(&o_t_ee);
+    let r = (ee.rotation * tool.rotation.inverse()) * tool.translation.vector;
+    let v = nalgebra::Vector3::new(twist[0], twist[1], twist[2])
+        + nalgebra::Vector3::new(twist[3], twist[4], twist[5]).cross(&r);
+    twist[..3].copy_from_slice(v.as_slice());
+    twist
+}
+
 pub struct FrankaRobot<T: FrankaType> {
     marker: PhantomData<T>,
     pub robot_impl: FrankaRobotImpl,
@@ -60,6 +76,10 @@ pub struct FrankaRobot<T: FrankaType> {
     max_jerk: OverrideOnce<[f64; FRANKA_DOF]>,
     max_cartesian_vel: OverrideOnce<f64>,
     max_cartesian_acc: OverrideOnce<f64>,
+    max_cartesian_jerk: OverrideOnce<f64>,
+    max_rotation_vel: OverrideOnce<f64>,
+    max_rotation_acc: OverrideOnce<f64>,
+    max_rotation_jerk: OverrideOnce<f64>,
 }
 
 impl<T: FrankaType> FrankaRobot<T>
@@ -80,6 +100,10 @@ where
             max_jerk: OverrideOnce::new(Self::JOINT_JERK_BOUND),
             max_cartesian_vel: OverrideOnce::new(Self::CARTESIAN_VEL_BOUND),
             max_cartesian_acc: OverrideOnce::new(Self::CARTESIAN_ACC_BOUND),
+            max_cartesian_jerk: OverrideOnce::new(Self::CARTESIAN_JERK_BOUND),
+            max_rotation_vel: OverrideOnce::new(Self::ROTATION_VEL_BOUND),
+            max_rotation_acc: OverrideOnce::new(Self::ROTATION_ACC_BOUND),
+            max_rotation_jerk: OverrideOnce::new(Self::ROTATION_JERK_BOUND),
         };
         let _ = robot.set_scale(0.1);
 
@@ -101,6 +125,10 @@ where
             max_jerk: OverrideOnce::new(Self::JOINT_JERK_BOUND),
             max_cartesian_vel: OverrideOnce::new(Self::CARTESIAN_VEL_BOUND),
             max_cartesian_acc: OverrideOnce::new(Self::CARTESIAN_ACC_BOUND),
+            max_cartesian_jerk: OverrideOnce::new(Self::CARTESIAN_JERK_BOUND),
+            max_rotation_vel: OverrideOnce::new(Self::ROTATION_VEL_BOUND),
+            max_rotation_acc: OverrideOnce::new(Self::ROTATION_ACC_BOUND),
+            max_rotation_jerk: OverrideOnce::new(Self::ROTATION_JERK_BOUND),
         }
     }
 
@@ -119,6 +147,10 @@ where
         self.max_jerk = OverrideOnce::new(Self::JOINT_JERK_BOUND.map(|x| x * 0.1));
         self.max_cartesian_vel = OverrideOnce::new(Self::CARTESIAN_VEL_BOUND * 0.1);
         self.max_cartesian_acc = OverrideOnce::new(Self::CARTESIAN_ACC_BOUND * 0.1);
+        self.max_cartesian_jerk = OverrideOnce::new(Self::CARTESIAN_JERK_BOUND * 0.1);
+        self.max_rotation_vel = OverrideOnce::new(Self::ROTATION_VEL_BOUND * 0.1);
+        self.max_rotation_acc = OverrideOnce::new(Self::ROTATION_ACC_BOUND * 0.1);
+        self.max_rotation_jerk = OverrideOnce::new(Self::ROTATION_JERK_BOUND * 0.1);
 
         let _ = self.set_scale(0.1);
     }
@@ -359,6 +391,36 @@ where
         self.robot_impl.robot_state.read().unwrap().q
     }
 
+    fn get_joint_vel_bound(&self) -> [f64; 7] {
+        std::array::from_fn(|i| self.max_vel.get()[i].min(Self::JOINT_VEL_BOUND[i]))
+    }
+    fn get_joint_acc_bound(&self) -> [f64; 7] {
+        std::array::from_fn(|i| self.max_acc.get()[i].min(Self::JOINT_ACC_BOUND[i]))
+    }
+    fn get_joint_jerk_bound(&self) -> [f64; 7] {
+        std::array::from_fn(|i| self.max_jerk.get()[i].min(Self::JOINT_JERK_BOUND[i]))
+    }
+    fn get_cartesian_vel_bound(&self) -> f64 {
+        self.max_cartesian_vel.get().min(Self::CARTESIAN_VEL_BOUND)
+    }
+    fn get_cartesian_acc_bound(&self) -> f64 {
+        self.max_cartesian_acc.get().min(Self::CARTESIAN_ACC_BOUND)
+    }
+    fn get_cartesian_jerk_bound(&self) -> f64 {
+        self.max_cartesian_jerk
+            .get()
+            .min(Self::CARTESIAN_JERK_BOUND)
+    }
+    fn get_rotation_vel_bound(&self) -> f64 {
+        self.max_rotation_vel.get().min(Self::ROTATION_VEL_BOUND)
+    }
+    fn get_rotation_acc_bound(&self) -> f64 {
+        self.max_rotation_acc.get().min(Self::ROTATION_ACC_BOUND)
+    }
+    fn get_rotation_jerk_bound(&self) -> f64 {
+        self.max_rotation_jerk.get().min(Self::ROTATION_JERK_BOUND)
+    }
+
     fn with_joint_vel(mut self, vel_bound: [f64; FRANKA_DOF]) -> Self {
         self.max_vel.once(vel_bound);
         self
@@ -383,7 +445,9 @@ where
     }
 
     fn get_endpoint(&self) -> Pose {
-        Pose::from_homo(self.robot_impl.robot_state.read().unwrap().O_T_EE)
+        let state = *self.robot_impl.robot_state.read().unwrap();
+        let ee = Pose::from_homo(state.O_T_EE).quat();
+        Pose::from_isometry(ee * Pose::from_homo(state.F_T_EE).quat().inverse())
     }
 
     fn with_cartesian_vel(mut self, vel_bound: f64) -> Self {
@@ -396,21 +460,23 @@ where
         self
     }
 
-    fn with_cartesian_jerk(self, _jerk_bound: f64) -> Self {
+    fn with_cartesian_jerk(mut self, jerk_bound: f64) -> Self {
+        self.max_cartesian_jerk.once(jerk_bound);
         self
     }
 
     fn with_rotation_vel(mut self, vel_bound: f64) -> Self {
-        self.max_cartesian_vel.once(vel_bound);
+        self.max_rotation_vel.once(vel_bound);
         self
     }
 
     fn with_rotation_acc(mut self, acc_bound: f64) -> Self {
-        self.max_cartesian_acc.once(acc_bound);
+        self.max_rotation_acc.once(acc_bound);
         self
     }
 
-    fn with_rotation_jerk(self, _jerk_bound: f64) -> Self {
+    fn with_rotation_jerk(mut self, jerk_bound: f64) -> Self {
+        self.max_rotation_jerk.once(jerk_bound);
         self
     }
 }
@@ -433,6 +499,12 @@ where
             .set(Self::CARTESIAN_VEL_BOUND * scale);
         self.max_cartesian_acc
             .set(Self::CARTESIAN_ACC_BOUND * scale);
+        self.max_cartesian_jerk
+            .set(Self::CARTESIAN_JERK_BOUND * scale);
+        self.max_rotation_vel.set(Self::ROTATION_VEL_BOUND * scale);
+        self.max_rotation_acc.set(Self::ROTATION_ACC_BOUND * scale);
+        self.max_rotation_jerk
+            .set(Self::ROTATION_JERK_BOUND * scale);
         Ok(())
     }
 
@@ -455,6 +527,12 @@ where
             .once(Self::CARTESIAN_VEL_BOUND * scale);
         self.max_cartesian_acc
             .once(Self::CARTESIAN_ACC_BOUND * scale);
+        self.max_cartesian_jerk
+            .once(Self::CARTESIAN_JERK_BOUND * scale);
+        self.max_rotation_vel.once(Self::ROTATION_VEL_BOUND * scale);
+        self.max_rotation_acc.once(Self::ROTATION_ACC_BOUND * scale);
+        self.max_rotation_jerk
+            .once(Self::ROTATION_JERK_BOUND * scale);
         self
     }
 }
@@ -561,32 +639,86 @@ where
     }
 }
 
+impl<T: FrankaType> FrankaRobot<T>
+where
+    Self: Joints<7> + EndPoint + ArmInverseKinematics<7>,
+{
+    pub(crate) fn plan_flange_motion(
+        &self,
+        q_start: [f64; 7],
+        target: Pose,
+    ) -> RobotResult<Vec<[f64; 7]>> {
+        use roplat_trajectory::CartesianTimeScalingLimits;
+        let limits = CartesianTimeScalingLimits {
+            velocity: self.get_joint_vel_bound(),
+            acceleration: self.get_joint_acc_bound(),
+            jerk: self.get_joint_jerk_bound(),
+            scalar: [f64::INFINITY; 3],
+        };
+        plan_flange_trajectory::<Self>(
+            q_start,
+            target,
+            self.coord.get(),
+            limits,
+            [
+                self.get_cartesian_vel_bound(),
+                self.get_cartesian_acc_bound(),
+                self.get_cartesian_jerk_bound(),
+            ],
+            [
+                self.get_rotation_vel_bound(),
+                self.get_rotation_acc_bound(),
+                self.get_rotation_jerk_bound(),
+            ],
+        )
+    }
+}
+
+/// Pure planning boundary shared by blocking and native async Cartesian moves.
+pub(crate) fn plan_flange_trajectory<R>(
+    q_start: [f64; 7],
+    target: Pose,
+    coord: &Coord,
+    mut limits: roplat_trajectory::CartesianTimeScalingLimits<7>,
+    linear: [f64; 3],
+    angular: [f64; 3],
+) -> RobotResult<Vec<[f64; 7]>>
+where
+    R: Joints<7> + Robot + ArmInverseKinematics<7>,
+{
+    let start = crate::franka::kinematics::flange_pose::<R>(&q_start);
+    let target = match coord {
+        Coord::Relative => start * target,
+        Coord::Inertial => Pose::from_position(start.position()) * target,
+        _ => target,
+    };
+    let (a, b) = (start.quat(), target.quat());
+    let distance = (b.translation.vector - a.translation.vector).norm();
+    let angle = a.rotation.angle_to(&b.rotation);
+    for order in 0..3 {
+        if distance > 0.0 {
+            limits.scalar[order] = limits.scalar[order].min(linear[order] / distance);
+        }
+        if angle > 0.0 {
+            limits.scalar[order] = limits.scalar[order].min(angular[order] / angle);
+        }
+    }
+    roplat_trajectory::plan_cartesian_path_traj_via_time_scaling_with_limits::<R, _, _, 7>(
+        move |s| Pose::from_isometry(a.lerp_slerp(&b, s)),
+        q_start,
+        |pose, seed| crate::franka::kinematics::solve_flange_ik::<R>(seed, pose),
+        limits,
+        Default::default(),
+    )
+}
+
 impl<T: FrankaType> MoveTo<FlangeSpace> for FrankaRobot<T>
 where
     Self: EndPoint + ArmInverseKinematics<7>,
 {
     fn move_to(&mut self, target: Pose) -> RobotResult<()> {
         let (state, _, _) = self.robot_impl.recv_state()?;
-        let pose: Pose = state.O_T_EE.into();
-        let q_start = state.q_d;
-
-        let target = match self.coord.get() {
-            Coord::Relative => pose * target,
-            &Coord::Inertial => Pose::from_position(pose.position()) * target,
-            _ => target,
-        };
-
-        let traj = roplat_trajectory::plan_cartesian_line_traj_via_time_scaling::<Self, _, 7>(
-            pose,
-            target,
-            q_start,
-            self.get_scale(),
-            |pose, seed| {
-                let q0 = JVec::<7>::from_row_slice(&seed);
-                let q = <Self as ArmInverseKinematics<7>>::ik_solve(&q0, &pose, Default::default());
-                Ok(q.as_slice().try_into().unwrap())
-            },
-        )?;
+        let traj = self.plan_flange_motion(state.q_d, target)?;
 
         <Self as MoveTraj<JointSpace<7>>>::move_traj(self, traj)
     }
@@ -597,50 +729,45 @@ where
     ) -> impl std::future::Future<Output = RobotResult<()>> {
         async move {
             let state = crate::realtime::tokio_udp::recv_state(&mut self.robot_impl).await?;
-            let pose: Pose = state.O_T_EE.into();
             let q_start = state.q_d;
-
-            let target = match self.coord.get() {
-                Coord::Relative => pose * target,
-                &Coord::Inertial => Pose::from_position(pose.position()) * target,
-                _ => target,
-            };
-
-            let traj = roplat_trajectory::plan_cartesian_line_traj_via_time_scaling::<Self, _, 7>(
-                pose,
-                target,
-                q_start,
-                self.get_scale(),
-                |pose, seed| {
-                    let q0 = JVec::<7>::from_row_slice(&seed);
-                    let q =
-                        <Self as ArmInverseKinematics<7>>::ik_solve(&q0, &pose, Default::default());
-                    Ok(q.as_slice().try_into().unwrap())
-                },
-            )?;
+            let traj = self.plan_flange_motion(q_start, target)?;
 
             if traj.is_empty() {
                 return Ok(());
             }
 
-            let last = *traj.last().unwrap();
-            let mut traj = traj.into_iter();
+            let mut elapsed = Duration::ZERO;
             self.is_moving = true;
             let _moving = MovingSession(&mut self.is_moving);
             crate::realtime::tokio_udp::control_async(
                 &mut self.robot_impl,
                 MotionType::<FRANKA_DOF>::Joint(q_start).into(),
-                async move |_, _| {
-                    if let Some(next) = traj.next() {
-                        (MotionType::Joint(next), false).into()
-                    } else {
-                        (MotionType::Joint(last), true).into()
-                    }
+                async move |_, dt| {
+                    elapsed += dt;
+                    let (next, done) = timed_joint_sample(&traj, elapsed);
+                    (MotionType::Joint(next), done).into()
                 },
             )
             .await
         }
     }
+}
+
+/// Sample an existing 1 ms dense trajectory using elapsed robot time.
+/// No packet-gap rejection: a late callback selects the current reference.
+fn timed_joint_sample<const N: usize>(path: &[[f64; N]], elapsed: Duration) -> ([f64; N], bool) {
+    const PERIOD_NS: u128 = 1_000_000;
+    let nanos = elapsed.as_nanos();
+    let last = path.len() - 1;
+    let index = ((nanos / PERIOD_NS).min(last as u128)) as usize;
+    if index == last {
+        return (path[last], nanos >= path.len() as u128 * PERIOD_NS);
+    }
+    let fraction = (nanos % PERIOD_NS) as f64 / PERIOD_NS as f64;
+    (
+        std::array::from_fn(|axis| path[index][axis] + fraction * (path[index + 1][axis] - path[index][axis])),
+        false,
+    )
 }
 
 impl<T: FrankaType> MoveTraj<JointSpace<7>> for FrankaRobot<T>
@@ -652,15 +779,10 @@ where
             return Ok(());
         }
 
-        let last = *path.last().unwrap();
-        let mut path = path.into_iter();
-
-        <Self as Control>::control_with::<JointPositionControl<7>, _>(self, move |_, _| {
-            if let Some(next) = path.next() {
-                (next, false)
-            } else {
-                (last, true)
-            }
+        let mut elapsed = Duration::ZERO;
+        <Self as Control>::control_with::<JointPositionControl<7>, _>(self, move |_, dt| {
+            elapsed += dt;
+            timed_joint_sample(&path, elapsed)
         })
     }
 
@@ -898,7 +1020,13 @@ impl<T: FrankaType> ControlWith<CartesianVelocityControl<7>> for FrankaRobot<T> 
                     );
                 }
                 step.map_continue(|(command, done)| {
-                    (MotionType::<FRANKA_DOF>::CartesianVel(command), done).into()
+                    (
+                        MotionType::<FRANKA_DOF>::CartesianVel(flange_velocity_to_ee(
+                            command, &state,
+                        )),
+                        done,
+                    )
+                        .into()
                 })
             },
         );
@@ -937,7 +1065,13 @@ impl<T: FrankaType> ControlWith<CartesianVelocityControl<7>> for FrankaRobot<T> 
                     );
                 }
                 step.map_continue(|(command, done)| {
-                    (MotionType::<FRANKA_DOF>::CartesianVel(command), done).into()
+                    (
+                        MotionType::<FRANKA_DOF>::CartesianVel(flange_velocity_to_ee(
+                            command, &state,
+                        )),
+                        done,
+                    )
+                        .into()
                 })
             },
         );
@@ -989,7 +1123,11 @@ impl<T: FrankaType> ControlWith<CartesianPoseControl<7>> for FrankaRobot<T> {
                     );
                 }
                 step.map_continue(|(command, done)| {
-                    (MotionType::<FRANKA_DOF>::Cartesian(command), done).into()
+                    (
+                        MotionType::<FRANKA_DOF>::Cartesian(flange_command_to_ee(command, &state)),
+                        done,
+                    )
+                        .into()
                 })
             },
         );
@@ -1029,7 +1167,11 @@ impl<T: FrankaType> ControlWith<CartesianPoseControl<7>> for FrankaRobot<T> {
                     );
                 }
                 step.map_continue(|(command, done)| {
-                    (MotionType::<FRANKA_DOF>::Cartesian(command), done).into()
+                    (
+                        MotionType::<FRANKA_DOF>::Cartesian(flange_command_to_ee(command, &state)),
+                        done,
+                    )
+                        .into()
                 })
             },
         );
@@ -1231,7 +1373,9 @@ impl<T: FrankaType + Send> FrankaRobot<T> {
         C: AsyncControlCallback<Obs, Command>,
         Obs: From<RobotStateInter> + Send,
         Command: Send,
-        Map: Fn(Command, bool) -> crate::types::robot_command::RobotCommand + Send + Sync,
+        Map: Fn(Command, bool, &RobotStateInter) -> crate::types::robot_command::RobotCommand
+            + Send
+            + Sync,
     {
         self.is_moving = true;
         let _moving = MovingSession(&mut self.is_moving);
@@ -1263,7 +1407,9 @@ impl<T: FrankaType + Send> FrankaRobot<T> {
                 let std::ops::ControlFlow::Continue((command, done)) = step else {
                     return Ok(LoopEnd::Cancelled);
                 };
-                session.send_command(&state, map(command, done)).await?;
+                session
+                    .send_command(&state, map(command, done, &state))
+                    .await?;
             }
             Ok(LoopEnd::Finished)
         }
@@ -1278,7 +1424,7 @@ impl<T: FrankaType + Send> AsyncControlWith<JointPositionControl<7>> for FrankaR
         C: AsyncControlCallback<JointState<FRANKA_DOF>, [f64; FRANKA_DOF]>,
     {
         let mode = MotionType::Joint(self.robot_impl.robot_state.read().unwrap().q_d).into();
-        self.native_session(mode, callback, |command, done| {
+        self.native_session(mode, callback, |command, done, _state| {
             (MotionType::Joint(command), done).into()
         })
         .await
@@ -1291,7 +1437,7 @@ impl<T: FrankaType + Send> AsyncControlWith<JointVelocityControl<7>> for FrankaR
         C: AsyncControlCallback<JointState<FRANKA_DOF>, [f64; FRANKA_DOF]>,
     {
         let mode = MotionType::JointVel([0.0; FRANKA_DOF]).into();
-        self.native_session(mode, callback, |command, done| {
+        self.native_session(mode, callback, |command, done, _state| {
             (MotionType::JointVel(command), done).into()
         })
         .await
@@ -1304,8 +1450,12 @@ impl<T: FrankaType + Send> AsyncControlWith<CartesianVelocityControl<7>> for Fra
         C: AsyncControlCallback<ArmState<FRANKA_DOF>, [f64; 6]>,
     {
         let mode = MotionType::<FRANKA_DOF>::CartesianVel([0.0; 6]).into();
-        self.native_session(mode, callback, |command, done| {
-            (MotionType::<FRANKA_DOF>::CartesianVel(command), done).into()
+        self.native_session(mode, callback, |command, done, _state| {
+            (
+                MotionType::<FRANKA_DOF>::CartesianVel(flange_velocity_to_ee(command, _state)),
+                done,
+            )
+                .into()
         })
         .await
     }
@@ -1320,8 +1470,12 @@ impl<T: FrankaType + Send> AsyncControlWith<CartesianPoseControl<7>> for FrankaR
             self.robot_impl.robot_state.read().unwrap().O_T_EE,
         ))
         .into();
-        self.native_session(mode, callback, |command, done| {
-            (MotionType::<FRANKA_DOF>::Cartesian(command), done).into()
+        self.native_session(mode, callback, |command, done, _state| {
+            (
+                MotionType::<FRANKA_DOF>::Cartesian(flange_command_to_ee(command, _state)),
+                done,
+            )
+                .into()
         })
         .await
     }
@@ -1333,7 +1487,7 @@ impl<T: FrankaType + Send> AsyncControlWith<TorqueControl<7>> for FrankaRobot<T>
         C: AsyncControlCallback<JointState<FRANKA_DOF>, [f64; FRANKA_DOF]>,
     {
         let mode = ControlType::Torque([0.0; FRANKA_DOF]).into();
-        self.native_session(mode, callback, |command, done| {
+        self.native_session(mode, callback, |command, done, _state| {
             (ControlType::Torque(command), done).into()
         })
         .await
@@ -1346,7 +1500,7 @@ impl<T: FrankaType + Send> AsyncControlWith<ArmTorqueControl<7>> for FrankaRobot
         C: AsyncControlCallback<ArmState<FRANKA_DOF>, [f64; FRANKA_DOF]>,
     {
         let mode = ControlType::Torque([0.0; FRANKA_DOF]).into();
-        self.native_session(mode, callback, |command, done| {
+        self.native_session(mode, callback, |command, done, _state| {
             (ControlType::Torque(command), done).into()
         })
         .await

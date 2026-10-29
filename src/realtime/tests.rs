@@ -331,3 +331,7 @@ fn missing_terminal_tcp_returns_error_by_total_deadline() {
 }
 
 mod native;
+
+mod initial_fix_frames;
+
+mod trajectory_clock;

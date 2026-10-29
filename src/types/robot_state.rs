@@ -353,53 +353,50 @@ impl From<RobotStateInter> for ArmState<7> {
             val.F_x_Cload,
             val.I_load,
         );
+        let ee_meas = pose_sample(val.O_T_EE);
+        let mut ee_des = pose_sample(val.O_T_EE_d);
+        ee_des.set_twist(Some(val.O_dP_EE_d.into()));
+        // O_ddP_O is gravity/base acceleration, not desired EE acceleration.
+        let mut ee_cmd = pose_sample(val.O_T_EE_c);
+        ee_cmd.set_twist(Some(val.O_dP_EE_c.into()));
+        ee_cmd.set_accel(Some(val.O_ddP_EE_c.into()));
+        let f_t_ee = valid_homogeneous_pose(val.F_T_EE).map(|p| p.quat());
+        let o_t_k = ee_meas
+            .pose()
+            .zip(valid_homogeneous_pose(val.EE_T_K))
+            .map(|(ee, k)| Pose::from_isometry(ee.quat() * k.quat()));
+        let mut tcp_meas = ee_meas;
+        if let Some((ee, k)) = ee_meas.pose().zip(o_t_k) {
+            let r = ee.quat().translation.vector - k.quat().translation.vector;
+            tcp_meas.set_wrench(Some(shift_wrench(val.O_F_ext_hat_K, r).into()));
+        }
+        let flange_sample = |sample: SpatialSample| match sample.pose().zip(f_t_ee) {
+            Some((ee, tool)) => {
+                shift_spatial_sample(sample, Pose::from_isometry(ee.quat() * tool.inverse()))
+            }
+            None => SpatialSample::EMPTY,
+        };
+        let mut k_meas = SpatialSample::EMPTY;
+        k_meas.set_pose(o_t_k);
+        k_meas.set_wrench(Some(val.O_F_ext_hat_K.into()));
         ArmState {
-            joint: StateView {
-                meas: JointSample::EMPTY
-                    .with_q(val.q)
-                    .with_dq(val.dq)
-                    .with_tau(val.tau_J)
-                    .with_dtau(val.dtau_J),
-                des: JointSample::EMPTY
-                    .with_q(val.q_d)
-                    .with_dq(val.dq_d)
-                    .with_ddq(val.ddq_d)
-                    .with_tau(val.tau_J_d),
-                cmd: JointSample::EMPTY.with_q(val.theta).with_dq(val.dtheta),
-            },
+            joint: val.into(),
             flange: StateView {
-                meas: SpatialSample::EMPTY
-                    .with_pose(Pose::from_homo(val.O_T_EE))
-                    .with_wrench((val.O_F_ext_hat_K).into()),
-                des: SpatialSample::EMPTY
-                    .with_pose(Pose::from_homo(val.O_T_EE_d))
-                    .with_twist((val.O_dP_EE_d).into())
-                    .with_accel(
-                        ([
-                            val.O_ddP_O[0],
-                            val.O_ddP_O[1],
-                            val.O_ddP_O[2],
-                            0.0,
-                            0.0,
-                            0.0,
-                        ])
-                        .into(),
-                    ),
-                cmd: {
-                    let mut sample = SpatialSample::EMPTY;
-                    sample.set_pose(valid_homogeneous_pose(val.O_T_EE_c));
-                    sample.set_twist(Some(val.O_dP_EE_c.into()));
-                    sample.set_accel(Some(val.O_ddP_EE_c.into()));
-                    sample
-                },
+                meas: flange_sample(tcp_meas),
+                des: flange_sample(ee_des),
+                cmd: flange_sample(ee_cmd),
             },
-            tcp: None,
-            stiffness: Some(StateView::from_meas(
-                SpatialSample::EMPTY
-                    .with_pose(Pose::from_homo(val.EE_T_K))
-                    .with_wrench((val.K_F_ext_hat_K).into()),
-            )),
-            load: Some(LoadState { mass: m, center_of_mass: x, inertia: i }),
+            tcp: Some(StateView {
+                meas: tcp_meas,
+                des: ee_des,
+                cmd: ee_cmd,
+            }),
+            stiffness: Some(StateView::from_meas(k_meas)),
+            load: Some(LoadState {
+                mass: m,
+                center_of_mass: x,
+                inertia: i,
+            }),
         }
     }
 }
@@ -417,9 +414,48 @@ impl From<RobotStateInter> for JointState<7> {
                 .with_dq(val.dq_d)
                 .with_ddq(val.ddq_d)
                 .with_tau(val.tau_J_d),
-            cmd: JointSample::EMPTY.with_q(val.theta).with_dq(val.dtheta),
+            // Motor theta/dtheta are not joint position/velocity commands.
+            cmd: JointSample::EMPTY,
         }
     }
+}
+
+fn pose_sample(pose: [f64; 16]) -> SpatialSample {
+    let mut sample = SpatialSample::EMPTY;
+    sample.set_pose(valid_homogeneous_pose(pose));
+    sample
+}
+
+fn shift_wrench(wrench: [f64; 6], r: na::Vector3<f64>) -> [f64; 6] {
+    let f = na::Vector3::from_column_slice(&wrench[..3]);
+    let torque = na::Vector3::from_column_slice(&wrench[3..]) - r.cross(&f);
+    [f[0], f[1], f[2], torque[0], torque[1], torque[2]]
+}
+
+// Both poses and spatial vectors use base axes; r moves the reference origin.
+fn shift_spatial_sample(sample: SpatialSample, pose: Pose) -> SpatialSample {
+    let r = pose.quat().translation.vector - sample.pose().unwrap().quat().translation.vector;
+    let mut out = SpatialSample::EMPTY.with_pose(pose);
+    if let Some(twist) = sample.twist() {
+        let twist: [f64; 6] = twist.into();
+        let w = na::Vector3::from_column_slice(&twist[3..]);
+        let v = na::Vector3::from_column_slice(&twist[..3]) + w.cross(&r);
+        out.set_twist(Some([v[0], v[1], v[2], w[0], w[1], w[2]].into()));
+        if let Some(accel) = sample.accel() {
+            let accel: [f64; 6] = accel.into();
+            let alpha = na::Vector3::from_column_slice(&accel[3..]);
+            let a = na::Vector3::from_column_slice(&accel[..3])
+                + alpha.cross(&r)
+                + w.cross(&w.cross(&r));
+            out.set_accel(Some(
+                [a[0], a[1], a[2], alpha[0], alpha[1], alpha[2]].into(),
+            ));
+        }
+    }
+    if let Some(wrench) = sample.wrench() {
+        out.set_wrench(Some(shift_wrench(wrench.into(), r).into()));
+    }
+    out
 }
 
 // Input inertias are about each body's center of mass; positions are expressed

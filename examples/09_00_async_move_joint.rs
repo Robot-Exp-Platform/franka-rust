@@ -5,6 +5,7 @@ fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_io()
+        .enable_time()
         .build()?;
 
     robot.set_default_behavior()?;
