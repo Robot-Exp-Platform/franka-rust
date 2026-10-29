@@ -330,7 +330,8 @@ impl<T: FrankaType> ControlObservation for FrankaRobot<T> {
 
 impl<T: FrankaType> Arm<7> for FrankaRobot<T>
 where
-    FrankaRobot<T>: Joints<7> + EndPoint + MoveTo<JointSpace<7>> + MoveTo<FlangeSpace>,
+    FrankaRobot<T>:
+        Joints<7> + EndPoint + EndPointPose + MoveTo<JointSpace<7>> + MoveTo<FlangeSpace>,
 {
     fn state(&mut self) -> RobotResult<ArmState<FRANKA_DOF>> {
         let (state, _, _) = self.robot_impl.recv_state()?;

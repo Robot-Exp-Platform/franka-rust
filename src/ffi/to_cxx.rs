@@ -1,5 +1,5 @@
 use roplat_behavior::{
-    Arm, EndPoint, FlangeSpace, JointSpace, LoadState, MoveTo, Pose, Robot, RobotResult,
+    Arm, EndPointPose, FlangeSpace, JointSpace, LoadState, MoveTo, Pose, Robot, RobotResult,
 };
 
 struct FrankaEmika(crate::FrankaEmika);
@@ -138,7 +138,7 @@ macro_rules! impl_franka_cxx_robot {
             }
 
             fn get_endpoint(&self) -> CxxPoseData {
-                pose_to_cxx(<$inner as EndPoint>::get_endpoint(&self.0))
+                pose_to_cxx(<$inner as EndPointPose>::get_endpoint(&self.0))
             }
 
             fn move_joint(&mut self, target: [f64; 7]) -> RobotResult<()> {

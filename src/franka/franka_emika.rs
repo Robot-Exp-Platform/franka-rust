@@ -54,7 +54,9 @@ impl EndPoint for FrankaEmika {
     const ROTATION_VEL_BOUND: f64 = 2.5;
     const ROTATION_ACC_BOUND: f64 = 25.0;
     const ROTATION_JERK_BOUND: f64 = 12500.;
+}
 
+impl EndPointPose for FrankaEmika {
     fn get_endpoint(&self) -> Pose {
         self.flange_pose()
     }

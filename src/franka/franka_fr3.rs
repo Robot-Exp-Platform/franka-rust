@@ -60,7 +60,9 @@ impl EndPoint for FrankaFR3 {
     const ROTATION_VEL_BOUND: f64 = 2.5;
     const ROTATION_ACC_BOUND: f64 = 217.0;
     const ROTATION_JERK_BOUND: f64 = 8500.;
+}
 
+impl EndPointPose for FrankaFR3 {
     fn get_endpoint(&self) -> Pose {
         self.flange_pose()
     }
