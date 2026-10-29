@@ -63,3 +63,4 @@ to_cxx = ["cxx", "ffi", "dep:cxx-build"]
 [dev-dependencies]
 roplat_behavior = { version = "0.9.0", features = ["roplat"] }
 roplat = "0.6.0-rc.1"
+roplat_world = "0.9.0"

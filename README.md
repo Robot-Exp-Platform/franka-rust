@@ -112,6 +112,6 @@ If you use this project in your research, please cite it using the following Bib
 
 ## Source builds, assets, and license
 
-Checkout manifests, including the development dependencies for System tests, use the same crates.io sources as the registry installation. `ROPLAT_SKIP_ASSET_EXPORT=1` skips optional build-time copying of example assets to the user data directory, useful for checks and CI.
+Checkout manifests, including the development dependencies for System tests, use the same crates.io sources as the registry installation. The build writes nothing outside its output directory. Simulators and viewers find the Panda model assets in the shared asset directory, `roplat_world::assets_dir()`; [`00_02_install_assets`](examples/00_02_install_assets.rs) copies them there from a checkout. Driving a real robot needs none of them.
 
 The driver is maintained by Robot-Exp-Platform under [Apache-2.0](LICENSE). Franka is the manufacturer's name. Panda model assets retain [their notice](assets/franka_panda/LICENSE.txt); controller firmware and downloaded model libraries are separate vendor components with their own terms.
