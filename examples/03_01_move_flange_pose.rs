@@ -5,9 +5,9 @@ fn main() -> RobotResult<()> {
     let mut robot = FrankaEmika::new("172.16.0.3");
 
     robot.set_default_behavior()?;
-    robot
-        .with_scale(0.2)
-        .move_to::<FlangeSpace>(Pose::from_homo([
+    let limits = robot.motion_limits().scaled(0.2);
+    robot.with_limits(limits, |robot| {
+        robot.move_to::<FlangeSpace>(Pose::from_homo([
             0.999_988_717_111_279,
             -0.001_715_819_976_483_054_3,
             0.000_607_052_843_200_716_5,
@@ -25,4 +25,5 @@ fn main() -> RobotResult<()> {
             0.487_083_226_932_408_46,
             1.0,
         ]))
+    })
 }

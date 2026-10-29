@@ -30,7 +30,7 @@ The direct behavior dependency supplies the imported traits. Registry installati
 
 The controller must be reachable with FCI enabled. The default selects **FCI protocol 5** (libfranka 0.9.2 layout); `features = ["fci_v8"]` selects **protocol 8** (libfranka 0.14.0 layout). Choose using the controller's compatibility information, not its Rust model alias. See [protocol constants](src/params.rs) and [response types](src/types/robot_types.rs).
 
-Model loading is separate: `model()` downloads a controller-provided library using Linux/Windows paths; other systems return an unsupported-platform error. Compilation on a host does not establish FCI timing or model-library compatibility.
+Model loading is separate: `model()` downloads a controller-provided library into the system temporary directory (`FrankaModel::cache_path`) on Linux and Windows; other systems return an unsupported-platform error. Compilation on a host does not establish FCI timing or model-library compatibility.
 
 | Feature | Purpose |
 |---|---|
@@ -112,6 +112,6 @@ If you use this project in your research, please cite it using the following Bib
 
 ## Source builds, assets, and license
 
-Checkout manifests, including the development dependencies for System tests, use the same crates.io sources as the registry installation. `ROPLAT_SKIP_ASSET_EXPORT=1` skips optional build-time copying of example assets to the user data directory, useful for checks and CI.
+Checkout manifests, including the development dependencies for System tests, use the same crates.io sources as the registry installation. The build writes nothing outside its output directory. Simulators and viewers find the Panda model assets in the shared asset directory, `roplat_world::assets_dir()`; [`00_02_install_assets`](examples/00_02_install_assets.rs) copies them there from a checkout. Driving a real robot needs none of them.
 
 The driver is maintained by Robot-Exp-Platform under [Apache-2.0](LICENSE). Franka is the manufacturer's name. Panda model assets retain [their notice](assets/franka_panda/LICENSE.txt); controller firmware and downloaded model libraries are separate vendor components with their own terms.

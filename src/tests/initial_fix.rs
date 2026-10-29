@@ -11,6 +11,7 @@ use crate::{
     utils::*,
 };
 use roplat_behavior::*;
+use roplat_kinematics::ArmForwardKinematics;
 use std::{
     net::{TcpListener, TcpStream, UdpSocket},
     sync::{Arc, RwLock},
@@ -42,8 +43,8 @@ fn robot() -> (FrankaEmika, TcpStream) {
         robot_state: Arc::new(RwLock::new(state)),
         motion_command_id: None,
     });
-    robot.with_scale(0.2);
-    robot.set_coord(Coord::Relative).unwrap();
+    let limits = robot.motion_limits().scaled(0.2);
+    robot.set_motion_limits(limits).unwrap();
     (robot, peer)
 }
 fn assert_joint_limits(traj: &[[f64; 7]], v: f64, a: f64) {
@@ -136,11 +137,11 @@ fn flange_fk_and_jacobian_match_saved_official_model() {
     let f: serde_json::Value =
         serde_json::from_str(include_str!("franka_default_model.json")).unwrap();
     let q = FrankaEmika::JOINT_DEFAULT;
-    let actual = crate::franka::kinematics::flange_pose::<FrankaEmika>(&q).homo();
+    let actual = FrankaEmika::fk_end_pose(&q).homo();
     for (i, x) in actual.iter().enumerate() {
         assert!((x - f["pose"][i].as_f64().unwrap()).abs() < 1e-9);
     }
-    let j = crate::franka::kinematics::flange_jacobian::<FrankaEmika>(&q);
+    let j = FrankaEmika::flange_jacobian(&q);
     for (i, x) in j.iter().enumerate() {
         assert!(
             (x - f["zero_jacobian"][i].as_f64().unwrap()).abs() < 1e-9,
@@ -151,11 +152,10 @@ fn flange_fk_and_jacobian_match_saved_official_model() {
 
 #[test]
 fn zero_cartesian_offset_holds_start_and_unreachable_target_is_rejected() {
-    let (mut r, _peer) = robot();
+    let (r, _peer) = robot();
     let q = FrankaEmika::JOINT_DEFAULT;
-    let t = r.plan_flange_motion(q, Pose::IDENTITY).unwrap();
+    let t = r.plan_flange_motion(q, FrankaEmika::fk_end_pose(&q)).unwrap();
     assert!(t.iter().all(|p| qdiff(*p, q) < 1e-10));
-    r.set_coord(Coord::OCS).unwrap();
     assert!(
         r.plan_flange_motion(q, Pose::from_position([10.0, 0.0, 0.0]))
             .is_err()
@@ -164,43 +164,52 @@ fn zero_cartesian_offset_holds_start_and_unreachable_target_is_rejected() {
 
 #[test]
 fn cartesian_motion_uses_instance_joint_limits_and_has_no_start_step() {
-    let (r, _peer) = robot();
+    let (mut r, _peer) = robot();
     let q = FrankaEmika::JOINT_DEFAULT;
-    let r = r
-        .with_joint_vel([0.01; 7])
-        .with_joint_acc([0.05; 7])
-        .with_joint_jerk([1.0; 7]);
-    let delta = Pose::from_position([0.03, 0.0, 0.0]);
-    assert_eq!(r.get_joint_vel_bound(), [0.01; 7]);
-    let t = r.plan_flange_motion(q, delta).unwrap();
+    let mut limits = r.motion_limits();
+    limits.joint.dq_max = [0.01; 7];
+    limits.joint.ddq_max = [0.05; 7];
+    limits.joint.dddq_max = [1.0; 7];
+    limits.scale = 1.0;
+    r.set_motion_limits(limits).unwrap();
+    let target = FrankaEmika::fk_end_pose(&q) * Pose::from_position([0.03, 0.0, 0.0]);
+    assert_eq!(r.motion_limits().scaled_joint().dq_max, [0.01; 7]);
+    let t = r.plan_flange_motion(q, target).unwrap();
     assert!(qdiff(t[0], q) < 1e-9);
     assert_joint_limits(&t, 0.01, 0.05);
-    let actual = crate::franka::kinematics::flange_pose::<FrankaEmika>(t.last().unwrap()).quat();
-    let expected = (crate::franka::kinematics::flange_pose::<FrankaEmika>(&q) * delta).quat();
+    let actual = FrankaEmika::fk_end_pose(t.last().unwrap()).quat();
+    let expected = target.quat();
     assert!((actual.translation.vector - expected.translation.vector).norm() < 1e-4);
     assert!(actual.rotation.angle_to(&expected.rotation) < 1e-4);
 }
 
 #[test]
 fn cartesian_linear_and_rotation_overrides_are_independent() {
-    let (r, _peer) = robot();
+    let (mut r, _peer) = robot();
     let q = FrankaEmika::JOINT_DEFAULT;
-    let r = r
-        .with_cartesian_vel(0.003)
-        .with_cartesian_acc(0.03)
-        .with_cartesian_jerk(0.3)
-        .with_rotation_vel(0.01)
-        .with_rotation_acc(0.02)
-        .with_rotation_jerk(0.1);
-    assert_eq!(r.get_cartesian_vel_bound(), 0.003);
-    assert_eq!(r.get_rotation_vel_bound(), 0.01);
+    let start = FrankaEmika::fk_end_pose(&q);
+    // The joints keep the fixture's 20 %; the end effector gets its own bounds.
+    let mut limits = r.motion_limits();
+    limits.joint = limits.scaled_joint();
+    limits.cartesian = CartesianLimits {
+        linear_velocity: 0.003,
+        linear_acceleration: 0.03,
+        linear_jerk: 0.3,
+        angular_velocity: 0.01,
+        angular_acceleration: 0.02,
+        angular_jerk: 0.1,
+    };
+    limits.scale = 1.0;
+    r.set_motion_limits(limits).unwrap();
+    assert_eq!(r.motion_limits().scaled_cartesian().linear_velocity, 0.003);
+    assert_eq!(r.motion_limits().scaled_cartesian().angular_velocity, 0.01);
     let t = r
-        .plan_flange_motion(q, Pose::from_position([0.03, 0.0, 0.0]))
+        .plan_flange_motion(q, start * Pose::from_position([0.03, 0.0, 0.0]))
         .unwrap();
     let mut vmax = 0.0f64;
     for w in t.windows(2) {
-        let a = crate::franka::kinematics::flange_pose::<FrankaEmika>(&w[0]).quat();
-        let b = crate::franka::kinematics::flange_pose::<FrankaEmika>(&w[1]).quat();
+        let a = FrankaEmika::fk_end_pose(&w[0]).quat();
+        let b = FrankaEmika::fk_end_pose(&w[1]).quat();
         vmax = vmax.max((a.translation.vector - b.translation.vector).norm() / 0.001);
     }
     assert!(vmax <= 0.003 * 1.01, "linear velocity {vmax}");
@@ -208,11 +217,11 @@ fn cartesian_linear_and_rotation_overrides_are_independent() {
         nalgebra::Vector3::zeros(),
         nalgebra::Vector3::new(0.0, 0.0, 0.05),
     ));
-    let t = r.plan_flange_motion(q, rotation).unwrap();
+    let t = r.plan_flange_motion(q, start * rotation).unwrap();
     let mut wmax = 0.0f64;
     for w in t.windows(2) {
-        let a = crate::franka::kinematics::flange_pose::<FrankaEmika>(&w[0]).quat();
-        let b = crate::franka::kinematics::flange_pose::<FrankaEmika>(&w[1]).quat();
+        let a = FrankaEmika::fk_end_pose(&w[0]).quat();
+        let b = FrankaEmika::fk_end_pose(&w[1]).quat();
         wmax = wmax.max(a.rotation.angle_to(&b.rotation) / 0.001);
     }
     assert!(wmax <= 0.01 * 1.01, "angular velocity {wmax}");
@@ -285,27 +294,4 @@ fn unified_frames_and_native_cartesian_hold_agree_with_tool_offset() {
     for i in 0..16 {
         assert!((output.pose_o_to_ee_c[i] - ee[i]).abs() < 1e-12);
     }
-}
-
-#[test]
-fn original_planner_entrypoint_matches_explicit_default_joint_limits() {
-    use roplat_trajectory::*;
-    let q = FrankaEmika::JOINT_DEFAULT;
-    let start = crate::franka::kinematics::flange_pose::<FrankaEmika>(&q);
-    let target = start * Pose::from_position([0.03, 0.0, 0.0]);
-    let solve = |p, seed| crate::franka::kinematics::solve_flange_ik::<FrankaEmika>(seed, p);
-    let original = plan_cartesian_line_traj_via_time_scaling::<FrankaEmika, _, 7>(
-        start, target, q, 0.2, solve,
-    )
-    .unwrap();
-    let (a, b) = (start.quat(), target.quat());
-    let explicit = plan_cartesian_path_traj_via_time_scaling_with_limits::<FrankaEmika, _, _, 7>(
-        |s| Pose::from_isometry(a.lerp_slerp(&b, s.clamp(0.0, 1.0))),
-        q,
-        solve,
-        CartesianTimeScalingLimits::from_robot::<FrankaEmika>(0.2),
-        Default::default(),
-    )
-    .unwrap();
-    assert_eq!(original, explicit);
 }

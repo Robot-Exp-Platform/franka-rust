@@ -19,6 +19,7 @@ roplat_behavior = "0.9.0"
 roplat_kinematics = "0.9.0"
 roplat_control = "0.9.0"
 roplat_trajectory = "0.9.0"
+roplat_behavior_ffi = { version = "0.9.0", optional = true }
 pyo3 = { version = "0.28.3", optional = true, features = [
     "extension-module",
     "multiple-pymethods",
@@ -34,8 +35,6 @@ num-traits = "0.2"
 num-derive = "0.4"
 thiserror = "2.0"
 bincode = { version = "1.3" }
-crossbeam-channel = "0.5"
-crossbeam = "0.8"
 libloading = "0.8"
 libc = "0.2"
 strum = "0.27"
@@ -44,7 +43,7 @@ tokio = { version = "1.48.0", features = ["net", "rt", "time", "io-util"] }
 anyhow = "1.0.100"
 
 [build-dependencies]
-cxx-build = "1.0"
+cxx-build = { version = "1.0", optional = true }
 
 
 [features]
@@ -57,10 +56,11 @@ conservative_constraint = []
 # On (`fci_v8`): protocol version 8 (libfranka 0.14.0), which inserts two
 # safety-function variants at indices 3-4, giving a 12-variant `MoveStatus`.
 fci_v8 = []
-to_py = ["pyo3", "ffi", "roplat_behavior/to_py"]
-to_cxx = ["cxx", "ffi", "roplat_behavior/to_cxx"]
+to_py = ["pyo3", "ffi", "dep:roplat_behavior_ffi", "roplat_behavior_ffi/py"]
+to_cxx = ["cxx", "ffi", "dep:cxx-build"]
 
 # Integration tests exercise the optional System adapter; ordinary builds stay native.
 [dev-dependencies]
 roplat_behavior = { version = "0.9.0", features = ["roplat"] }
 roplat = "0.6.0-rc.1"
+roplat_world = "0.9.0"

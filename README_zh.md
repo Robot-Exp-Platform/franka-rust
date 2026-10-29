@@ -30,7 +30,7 @@ roplat_behavior = "0.9.0"
 
 设备必须可达并已启用 FCI。默认选择 **FCI 协议 5**（libfranka 0.9.2 布局）；`features = ["fci_v8"]` 选择 **协议 8**（libfranka 0.14.0 布局）。应依据控制器兼容性信息选择，而不是 Rust 机型别名。见[协议常量](src/params.rs)与[响应类型](src/types/robot_types.rs)。
 
-模型加载另行处理：`model()` 使用 Linux/Windows 路径下载控制器提供的模型库，其他系统返回平台不支持错误。主机编译通过不等于已验证 FCI 时序或模型库兼容性。
+模型加载另行处理：`model()` 在 Linux 与 Windows 上把控制器提供的模型库下载到系统临时目录（`FrankaModel::cache_path`），其他系统返回平台不支持错误。主机编译通过不等于已验证 FCI 时序或模型库兼容性。
 
 | Feature | 用途 |
 |---|---|
@@ -112,6 +112,6 @@ Flow 回调返回 `ControlFlow<(), (Command, bool)>`：`Continue((command, false
 
 ## 源码、资源与许可
 
-checkout manifest（包括 System 测试使用的开发依赖）与 registry 安装使用相同的 crates.io 来源。设置 `ROPLAT_SKIP_ASSET_EXPORT=1` 可跳过构建时向用户数据目录复制示例资源，适用于检查与 CI。
+checkout manifest（包括 System 测试使用的开发依赖）与 registry 安装使用相同的 crates.io 来源。构建不会向输出目录之外写文件。仿真器与可视化工具从共享资源目录 `roplat_world::assets_dir()` 读取 Panda 模型资源；[`00_02_install_assets`](examples/00_02_install_assets.rs) 可从源码 checkout 复制过去。驱动真机不需要这些资源。
 
 驱动由 Robot-Exp-Platform 维护，使用 [Apache-2.0](LICENSE)。Franka 是设备厂商名称。Panda 模型资源保留[自己的声明](assets/franka_panda/LICENSE.txt)；控制器固件和下载的模型库是厂商组件，适用各自条款。

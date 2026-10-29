@@ -2,10 +2,10 @@ use nalgebra::{Matrix4, SMatrix};
 use roplat_behavior::{
     ArmState, CoriolisInput, CoriolisInputSpace, FlangeSpace, GravityInput, GravityInputSpace,
     JMat, Jaco, JacobianSpace, JointSpace, JointTorqueSpace, LoadState, MassMatrixSpace, Pose,
-    RobotResult, SpaceMap,
+    RobotException, RobotResult, SpaceMap,
 };
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use strum_macros::EnumIter;
 
 use crate::types::model_library::ModelLibrary;
@@ -109,6 +109,21 @@ impl FrankaModel {
                 inertia: [0.0; 9],
             },
         })
+    }
+
+    /// Where [`FrankaRobot::model`](crate::FrankaRobot::model) keeps the model
+    /// library it downloads: a file in the system temporary directory.
+    pub fn cache_path() -> RobotResult<PathBuf> {
+        let file = if cfg!(target_os = "linux") {
+            "franka_rust_model.so"
+        } else if cfg!(target_os = "windows") {
+            "franka_rust_model.dll"
+        } else {
+            return Err(RobotException::ModelException(
+                "Your platform is not yet supported for Downloading models.".to_string(),
+            ));
+        };
+        Ok(std::env::temp_dir().join(file))
     }
 
     /// Configure the payload used by the generic [`DynamicsModel`](roplat_behavior::DynamicsModel)

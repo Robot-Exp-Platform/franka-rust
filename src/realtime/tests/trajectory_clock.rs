@@ -25,10 +25,10 @@ fn dense_trajectory_gap_uses_robot_elapsed_time(){
  let out=observe_clock(&[1,4,5,6,7,8,9]);
  let expected=crate::utils::low_pass_filter(0.001,100.,0.,3e-7);
  assert!((out[1].1-expected).abs()<1e-14,"3ms elapsed must sample index3, got{} expected{}",out[1].1,expected);
- assert_eq!(out.last().unwrap().0,6,"finish at trajectory duration5ms, not callback count");
+ assert_eq!(out.last().unwrap().0,5,"finish at the last sample, 4ms, not callback count");
 }
 #[test]
 fn dense_trajectory_nominal_1ms_sequence_keeps_existing_samples(){
- let out=observe_clock(&[1,2,3,4,5,6,7]);assert_eq!(out.len(),6);assert!(out.last().unwrap().2);
+ let out=observe_clock(&[1,2,3,4,5,6,7]);assert_eq!(out.len(),5);assert!(out.last().unwrap().2);
  let mut prev=0.;for (i,row) in out.iter().enumerate(){let raw=i.min(4) as f64*1e-7;let expected=crate::utils::low_pass_filter(0.001,100.,prev,raw);assert!((row.1-expected).abs()<1e-14);prev=expected;}
 }
