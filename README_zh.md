@@ -72,6 +72,10 @@ cargo +nightly check
 
 实际设备的工作模式、负载、坐标系和限制明确之后，可从[关节运动](examples/02_00_move_joint_default.rs)或[笛卡尔运动](examples/03_01_move_flange_pose.rs)开始。这些程序会发送运动指令。`set_default_behavior()` 写入碰撞与阻抗默认值，不只是连接初始化。
 
+统一 `ArmState` 中的 `flange`、`tcp`、`stiffness` 位姿分别表示真实法兰、配置的 EE/TCP 和刚度帧，空间向量使用基座轴。原生 `RobotState` 字段和低层 `MotionType::Cartesian` 保留 FCI 的 EE 语义；统一 Cartesian 控制入口负责法兰到 EE 的转换。电机 `theta` 保留在原生状态，不作为关节命令。
+
+发送命令先经过现有的 100 Hz 低通再限幅，顺序与 libfranka 0.9.2 默认一致。阻塞及原生异步 Cartesian 运动共用法兰/IK适配，并使用实例设置的关节和 Cartesian/旋转约束。
+
 | 控制器入口 | 执行契约 |
 |---|---|
 | `control_with` / `control_with_flow` | 阻塞整次会话。 |

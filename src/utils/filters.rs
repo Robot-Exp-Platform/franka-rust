@@ -2,6 +2,9 @@ use std::f64::consts::PI;
 
 use crate::utils::array_to_isometry;
 
+/// Same command low-pass cutoff as libfranka 0.9.2.
+pub const DEFAULT_CUTOFF_FREQUENCY: f64 = 100.0;
+
 // pub fn low_pass_filter(sample_time: f64, cutoff_frequency: f64, y_last: f64, y: f64) -> f64 {
 //     let alpha = 1.0 / (1.0 + (2.0 * PI * cutoff_frequency * sample_time).exp());
 //     y_last + alpha * (y - y_last)
@@ -12,19 +15,19 @@ pub fn low_pass_filter(sample_time: f64, cutoff_frequency: f64, y_last: f64, y: 
     gain * y + (1. - gain) * y_last
 }
 
-pub fn joint_low_pass_filter(
+pub fn joint_low_pass_filter<const N: usize>(
     sample_time: f64,
-    y: &[f64; 6],
-    y_last: &[f64; 6],
+    y: &[f64; N],
+    y_last: &[f64; N],
     cutoff_frequency: f64,
-) -> [f64; 6] {
+) -> [f64; N] {
     assert!(sample_time.is_sign_positive() && sample_time.is_finite());
     assert!(cutoff_frequency.is_sign_positive() && cutoff_frequency.is_finite());
     y.iter()
         .zip(y_last.iter())
         .for_each(|(i, j)| assert!(i.is_finite() && j.is_finite()));
-    let mut out = [0.; 6];
-    for i in 0..6 {
+    let mut out = [0.; N];
+    for i in 0..N {
         out[i] = low_pass_filter(sample_time, cutoff_frequency, y_last[i], y[i]);
     }
     out

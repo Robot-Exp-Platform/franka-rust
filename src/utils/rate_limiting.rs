@@ -18,7 +18,7 @@ pub static LIMIT_EPS: f64 = 1e-3;
 pub static NORM_EPS: f64 = f64::EPSILON;
 /// Number of packets lost considered for the definition of velocity limits.
 /// When a packet is lost, FCI assumes a constant acceleration model
-pub static TOL_NUMBER_PACKETS_LOST: f64 = 1e-3;
+pub static TOL_NUMBER_PACKETS_LOST: f64 = 3.0;
 /// Factor for the definition of rotational limits using the Cartesian Pose interface
 pub static FACTOR_CARTESIAN_ROTATION_POSE_INTERFACE: f64 = 0.99;
 /// Maximum torque rate
@@ -123,9 +123,6 @@ pub fn franka_limit_rate_joint_positions(
     last_commanded_velocities: &[f64; 7],
     last_commanded_accelerations: &[f64; 7],
 ) -> [f64; 7] {
-    if commanded_positions.iter().sum::<f64>() == 0.0 {
-        return *commanded_positions;
-    }
     limit_rate_joint_positions(
         &MAX_JOINT_VELOCITY,
         &MAX_JOINT_ACCELERATION,
@@ -298,9 +295,6 @@ pub fn franka_limit_rate_joint_velocities(
     last_commanded_velocities: &[f64; 7],
     last_commanded_accelerations: &[f64; 7],
 ) -> [f64; 7] {
-    if commanded_velocities.iter().sum::<f64>() == 0.0 {
-        return *commanded_velocities;
-    }
     limit_rate_joint_velocities(
         &MAX_JOINT_VELOCITY,
         &MAX_JOINT_ACCELERATION,
@@ -411,9 +405,6 @@ pub fn franka_limit_rate_cartesian_pose(
     last_dpose_o_to_ee_c: &[f64; 6],
     last_ddpose_o_to_ee_c: &[f64; 6],
 ) -> [f64; 16] {
-    if pose_o_to_ee_c.iter().sum::<f64>() == 0.0 {
-        return *pose_o_to_ee_c;
-    }
     limit_rate_cartesian_pose(
         MAX_TRANSLATIONAL_VELOCITY,
         MAX_TRANSLATIONAL_ACCELERATION,
@@ -495,9 +486,6 @@ pub fn franka_limit_rate_cartesian_velocity(
     last_dpose_o_to_ee_c: &[f64; 6],
     last_ddpose_o_to_ee_c: &[f64; 6],
 ) -> [f64; 6] {
-    if dpose_o_to_ee_c.iter().sum::<f64>() == 0.0 {
-        return *dpose_o_to_ee_c;
-    }
     limit_rate_cartesian_velocity(
         MAX_TRANSLATIONAL_VELOCITY,
         MAX_TRANSLATIONAL_ACCELERATION,

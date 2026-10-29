@@ -3,9 +3,10 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 
 use crate::utils::{
-    canonicalize_homogeneous_from_slice, franka_limit_rate_cartesian_pose,
+    DEFAULT_CUTOFF_FREQUENCY, DELTA_T, canonicalize_homogeneous_from_slice,
+    cartesian_low_pass_filter, franka_limit_rate_cartesian_pose,
     franka_limit_rate_cartesian_velocity, franka_limit_rate_joint_positions,
-    franka_limit_rate_joint_velocities, franka_limit_rate_torques,
+    franka_limit_rate_joint_velocities, franka_limit_rate_torques, joint_low_pass_filter,
 };
 
 use super::{
@@ -89,6 +90,7 @@ impl MotionGeneratorCommand {
                 let q_d = state.q_d;
                 let dq_d = state.dq_d;
                 let ddq_d = state.ddq_d;
+                let q_c = joint_low_pass_filter(DELTA_T, &q_c, &q_d, DEFAULT_CUTOFF_FREQUENCY);
                 let q_c = franka_limit_rate_joint_positions(&q_c, &q_d, &dq_d, &ddq_d);
                 MotionGeneratorCommand { q_c, ..self }
             }
@@ -96,6 +98,7 @@ impl MotionGeneratorCommand {
                 let dq_c = self.dq_c;
                 let dq_d = state.dq_d;
                 let ddq_d = state.ddq_d;
+                let dq_c = joint_low_pass_filter(DELTA_T, &dq_c, &dq_d, DEFAULT_CUTOFF_FREQUENCY);
                 let dq_c = franka_limit_rate_joint_velocities(&dq_c, &dq_d, &ddq_d);
                 MotionGeneratorCommand { dq_c, ..self }
             }
@@ -109,6 +112,12 @@ impl MotionGeneratorCommand {
                 ]);
                 let last_dpose_o_to_ee_c = state.O_dP_EE_c;
                 let last_ddpose_o_to_ee_c = state.O_ddP_EE_c;
+                let pose_o_to_ee_c = cartesian_low_pass_filter(
+                    DELTA_T,
+                    &pose_o_to_ee_c,
+                    &last_pose_o_to_ee_c,
+                    DEFAULT_CUTOFF_FREQUENCY,
+                );
                 let pose_o_to_ee_c = franka_limit_rate_cartesian_pose(
                     &pose_o_to_ee_c,
                     &last_pose_o_to_ee_c,
@@ -121,6 +130,12 @@ impl MotionGeneratorCommand {
                 let dpose_o_to_ee_c = self.dpose_o_to_ee_c;
                 let last_dpose_o_to_ee_c = state.O_dP_EE_c;
                 let last_ddpose_o_to_ee_c = state.O_ddP_EE_c;
+                let dpose_o_to_ee_c = joint_low_pass_filter(
+                    DELTA_T,
+                    &dpose_o_to_ee_c,
+                    &last_dpose_o_to_ee_c,
+                    DEFAULT_CUTOFF_FREQUENCY,
+                );
                 let dpose_o_to_ee_c = franka_limit_rate_cartesian_velocity(
                     &dpose_o_to_ee_c,
                     &last_dpose_o_to_ee_c,
@@ -138,6 +153,8 @@ impl ControllerCommand {
             MoveControllerMode::ExternalController => {
                 let tau_j_d = self.tau_j_d;
                 let tau_j = state.tau_J_d;
+                let tau_j_d =
+                    joint_low_pass_filter(DELTA_T, &tau_j_d, &tau_j, DEFAULT_CUTOFF_FREQUENCY);
                 let tau_j_d = franka_limit_rate_torques(&tau_j_d, &tau_j);
                 ControllerCommand { tau_j_d }
             }
@@ -292,7 +309,9 @@ mod test {
                 valid_elbow: true,
                 motion_generation_finished: true,
             },
-            control: ControllerCommandPacked { tau_J_d: [6.6666; 7] },
+            control: ControllerCommandPacked {
+                tau_J_d: [6.6666; 7],
+            },
         };
         let robot_command = RobotCommand {
             message_id: 1,
@@ -305,7 +324,9 @@ mod test {
                 valid_elbow: true,
                 motion_generation_finished: true,
             },
-            control: ControllerCommand { tau_j_d: [6.6666; 7] },
+            control: ControllerCommand {
+                tau_j_d: [6.6666; 7],
+            },
         };
 
         assert_eq!(
@@ -443,7 +464,9 @@ mod test {
                 valid_elbow: false,
                 motion_generation_finished: false,
             },
-            control: ControllerCommand { tau_j_d: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
+            control: ControllerCommand {
+                tau_j_d: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            },
         };
 
         println!(
