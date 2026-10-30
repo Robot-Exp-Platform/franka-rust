@@ -233,7 +233,7 @@ where
 
 impl<T: FrankaType> Robot for FrankaRobot<T> {
     type State = RobotState;
-    const CONTROL_PERIOD: Duration = Duration::from_millis(1);
+    const CONTROL_PERIOD: Duration = crate::realtime::NOMINAL_PERIOD;
 
     fn version() -> String {
         format!("FrankaRobot v{LIBFRANKA_VERSION}")
