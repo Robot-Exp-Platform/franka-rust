@@ -54,6 +54,19 @@ fn finish_session(
 
 pub(crate) const CLEANUP_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// FCI's nominal control period: one state packet per millisecond.
+pub(crate) const NOMINAL_PERIOD: Duration = Duration::from_millis(1);
+
+/// The `Duration` handed to the control callback for this cycle.
+///
+/// It is the motion-time step since the previous state packet: the nominal
+/// 1 ms when none was lost, `(k + 1)` ms after `k` lost packets. The first
+/// cycle has no previous packet and reports the nominal period, so summing
+/// the periods gives the time since the session began.
+pub(crate) fn cycle_period(previous: Option<Duration>, motion_time: Duration) -> Duration {
+    previous.map_or(NOMINAL_PERIOD, |previous| motion_time.saturating_sub(previous))
+}
+
 pub(crate) fn cleanup_timeout() -> RobotException {
     RobotException::NetworkError(
         "control-session cleanup deadline expired; physical stop is not confirmed".into(),

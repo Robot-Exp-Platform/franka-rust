@@ -57,11 +57,7 @@ where
         let motion_time = state
             .time()
             .unwrap_or_else(|| Duration::from_millis(state.command_id()));
-        let period = previous_motion_time
-            .replace(motion_time)
-            .map_or(Duration::ZERO, |previous| {
-                motion_time.saturating_sub(previous)
-            });
+        let period = super::cycle_period(previous_motion_time.replace(motion_time), motion_time);
 
         let ControlFlow::Continue(next) = command(state, period) else {
             break Ok(super::SessionEnd::Cancelled);

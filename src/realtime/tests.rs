@@ -335,3 +335,14 @@ mod native;
 mod initial_fix_frames;
 
 mod trajectory_clock;
+
+#[test]
+fn cycle_period_is_nominal_first_and_counts_lost_packets() {
+    let ms = Duration::from_millis;
+    // First cycle: no previous packet, nominal period.
+    assert_eq!(cycle_period(None, ms(4_000)), NOMINAL_PERIOD);
+    // No packet lost: one motion-time step.
+    assert_eq!(cycle_period(Some(ms(4_000)), ms(4_001)), ms(1));
+    // Two packets lost before this one: (2 + 1) ms.
+    assert_eq!(cycle_period(Some(ms(4_001)), ms(4_004)), ms(3));
+}
