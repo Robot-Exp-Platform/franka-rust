@@ -430,28 +430,25 @@ where
             let joint = state.q_d;
 
             let limits = self.limits.scaled_joint();
-            let (path_generate, t_max) = path_generate::joint_s_curve(
-                &joint,
-                &target,
-                &limits.dq_max,
-                &limits.ddq_max,
-                &limits.dddq_max,
-            );
+            let mut curve =
+                path_generate::JointSCurve::new(limits.dq_max, limits.ddq_max, limits.dddq_max);
+            let t_max = curve.plan(joint, target);
 
             // Retain this API's existing torque-space realisation: pre-sample
             // the trajectory and run the PID controller per cycle.
-            let traj = sample_joint_trajectory(path_generate.as_ref(), t_max);
-            let mut controller = roplat_control::joint_traj_pid_control(traj, PID_K, PID_I, PID_D);
+            let traj = sample_joint_trajectory(|t| curve.apply(t).0, t_max);
+            let mut controller = roplat_control::joint_traj_pid_control(traj, PID_K, PID_I, PID_D)
+                .map_err(RobotException::from_algorithm)?;
 
             self.is_moving = true;
             let _moving = MovingSession(&mut self.is_moving);
-            crate::realtime::tokio_udp::control_async(
+            crate::realtime::tokio_udp::control_flow_async(
                 &mut self.robot_impl,
                 ControlType::Torque([0.0; FRANKA_DOF]).into(),
                 async move |state, d| {
                     let arm: ArmState<FRANKA_DOF> = state.into();
-                    let (torque, done) = controller(arm.joint, d);
-                    (ControlType::Torque(torque), done).into()
+                    controller(arm.joint, d)
+                        .map_continue(|(torque, done)| (ControlType::Torque(torque), done).into())
                 },
             )
             .await
@@ -512,7 +509,6 @@ where
             }
 
             let mut follower = cycle_timed_follower(&traj)?;
-            let mut failure = None;
             self.is_moving = true;
             let _moving = MovingSession(&mut self.is_moving);
             crate::realtime::tokio_udp::control_flow_async(
@@ -520,12 +516,11 @@ where
                 MotionType::<FRANKA_DOF>::Joint(q_start).into(),
                 async |state, dt| {
                     let joint = ArmState::<FRANKA_DOF>::from(state).joint;
-                    follow_step(&mut follower, dt, &joint, &mut failure)
+                    follow_step(&mut follower, dt, &joint)
                         .map_continue(|(next, done)| (MotionType::Joint(next), done).into())
                 },
             )
-            .await?;
-            failure.map_or(Ok(()), |error| Err(RobotException::from_algorithm(error)))
+            .await
         }
     }
 }
@@ -540,19 +535,17 @@ fn cycle_timed_follower(
         .map_err(RobotException::from_algorithm)
 }
 
-/// One cycle of `follower`. A tracking error ends the session; it is kept in
-/// `failure` for the caller to return.
+/// One cycle of `follower`. A tracking error ends the session and is returned
+/// from it.
 fn follow_step(
     follower: &mut JointTrajectoryFollower<msgs::ManualClock, FRANKA_DOF>,
     dt: Duration,
     joint: &JointState<FRANKA_DOF>,
-    failure: &mut Option<roplat_trajectory::TrackingError>,
 ) -> ControlStep<[f64; FRANKA_DOF]> {
     match follower.step_by(dt, joint) {
         Ok(step) => ControlFlow::Continue(step),
         Err(error) => {
-            *failure = Some(error);
-            ControlFlow::Break(())
+            ControlFlow::Break(ControlExit::Failed(RobotException::from_algorithm(error)))
         }
     }
 }
@@ -567,11 +560,9 @@ where
         }
 
         let mut follower = cycle_timed_follower(&path)?;
-        let mut failure = None;
         <Self as ControlWith<JointPositionControl<7>>>::control_with_flow(self, |joint, dt| {
-            follow_step(&mut follower, dt, &joint, &mut failure)
-        })?;
-        failure.map_or(Ok(()), |error| Err(RobotException::from_algorithm(error)))
+            follow_step(&mut follower, dt, &joint)
+        })
     }
 
     fn move_traj_sync(&mut self, path: Vec<[f64; FRANKA_DOF]>) -> RobotResult<()> {

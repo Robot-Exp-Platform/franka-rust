@@ -3,8 +3,7 @@ use std::path::Path;
 use super::Pose;
 use nalgebra as na;
 
-/// Determines whether the given elbow configuration is valid or not.  
-/// 判断给定的手肘配置是否有效。
+/// Determines whether the given elbow configuration is valid or not.
 pub fn is_valid_elbow(elbow: &[f64; 2]) -> bool {
     elbow[1] == -1.0 || elbow[1] == 1.0
 }

@@ -16,9 +16,8 @@ fn main() -> RobotResult<()> {
         [50.0, 50.0, 50.0, 50.0, 30.0, 25.0, 15.0],
     );
     let mut elapsed = Duration::ZERO;
-    robot.control_with::<TorqueControl<7>, _>(move |state, dt| {
+    robot.control_with_flow::<TorqueControl<7>, _>(move |state, dt| {
         elapsed += dt;
-        let (tau, _) = controller(state, dt);
-        (tau, elapsed >= Duration::from_secs(5))
+        controller(state, dt).map_continue(|(tau, _)| (tau, elapsed >= Duration::from_secs(5)))
     })
 }

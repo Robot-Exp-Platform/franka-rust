@@ -596,12 +596,10 @@ mod tests {
         let start = Instant::now();
         runtime.block_on(async {
             let mut lease = network.async_session().unwrap();
-            let result: RobotResult<StopMoveResponse> = tokio::time::timeout(
-                Duration::from_secs(1),
-                lease.send_and_recv(&request),
-            )
-            .await
-            .expect("write deadline must fire before waiting for a response");
+            let result: RobotResult<StopMoveResponse> =
+                tokio::time::timeout(Duration::from_secs(1), lease.send_and_recv(&request))
+                    .await
+                    .expect("write deadline must fire before waiting for a response");
             assert!(matches!(result, Err(error) if error.to_string().contains("write timed out")));
         });
         assert!(start.elapsed() < Duration::from_secs(2));
@@ -627,10 +625,13 @@ mod tests {
             assert!(matches!(result, Err(error) if error.to_string().contains("write timed out")));
             use tokio::io::AsyncReadExt;
             let mut received = [1; 1024];
-            tokio::time::timeout(Duration::from_secs(1), unread_peer.read_exact(&mut received))
-                .await
-                .expect("the first partial write must already be buffered")
-                .unwrap();
+            tokio::time::timeout(
+                Duration::from_secs(1),
+                unread_peer.read_exact(&mut received),
+            )
+            .await
+            .expect("the first partial write must already be buffered")
+            .unwrap();
             assert_eq!(received, [0; 1024]);
         });
     }

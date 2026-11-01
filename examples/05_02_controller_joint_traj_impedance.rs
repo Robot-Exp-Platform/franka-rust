@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 
 use franka_rust::FrankaEmika;
-use roplat_behavior::{RobotResult, behavior::*};
+use roplat_behavior::{RobotException, RobotResult, behavior::*};
 use roplat_control::joint_traj_impedance_control;
 
 fn main() -> RobotResult<()> {
@@ -21,9 +21,11 @@ fn main() -> RobotResult<()> {
         })
         .collect();
 
-    robot.control_with::<TorqueControl<7>, _>(joint_traj_impedance_control(
+    let controller = joint_traj_impedance_control(
         traj,
         [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0],
         [50.0, 50.0, 50.0, 50.0, 30.0, 25.0, 15.0],
-    ))
+    )
+    .map_err(RobotException::from_algorithm)?;
+    robot.control_with_flow::<TorqueControl<7>, _>(controller)
 }

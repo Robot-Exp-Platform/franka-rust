@@ -68,7 +68,10 @@ impl PyFrankaEmika {
     }
 
     fn set_guiding_mode(&mut self, guiding_mode: [bool; 6], nullspace: bool) -> PyResult<()> {
-        let data = SetGuidingModeData { guiding_mode, nullspace };
+        let data = SetGuidingModeData {
+            guiding_mode,
+            nullspace,
+        };
         self.0.set_guiding_mode(data).map_err(py_err)
     }
 
@@ -134,7 +137,10 @@ impl PyFrankaFR3 {
     }
 
     fn set_guiding_mode(&mut self, guiding_mode: [bool; 6], nullspace: bool) -> PyResult<()> {
-        let data = SetGuidingModeData { guiding_mode, nullspace };
+        let data = SetGuidingModeData {
+            guiding_mode,
+            nullspace,
+        };
         self.0.set_guiding_mode(data).map_err(py_err)
     }
 

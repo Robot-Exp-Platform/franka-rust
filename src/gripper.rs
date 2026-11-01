@@ -58,7 +58,10 @@ impl FrankaGripper {
     }
 
     fn connect_with_udp_port(&mut self, udp_port: u16) -> RobotResult<()> {
-        let result = self._connect(ConnectData { version: FRANKA_GRIPPER_VERSION, udp_port })?;
+        let result = self._connect(ConnectData {
+            version: FRANKA_GRIPPER_VERSION,
+            udp_port,
+        })?;
         if let Status::Success = result.status {
             Ok(())
         } else {
@@ -74,7 +77,12 @@ impl FrankaGripper {
     }
 
     pub fn grasp(&mut self, width: f64, speed: f64, force: f64) -> RobotResult<bool> {
-        let data = GraspData { width, epsilon: (0.01, 0.01), speed, force };
+        let data = GraspData {
+            width,
+            epsilon: (0.01, 0.01),
+            speed,
+            force,
+        };
         self._grasp(data)?.into()
     }
 
@@ -227,13 +235,22 @@ mod tests {
         let state = gripper.read_gripper().unwrap();
         assert_eq!(
             state,
-            msgs::GripperState { width: 0.042, max_width: 0.08, grasped: 1, reserved: 0 }
+            msgs::GripperState {
+                width: 0.042,
+                max_width: 0.08,
+                grasped: 1,
+                reserved: 0
+            }
         );
 
         gripper.home_gripper().unwrap();
         assert_eq!(requests.recv().unwrap(), (Command::Homing as u16, vec![]));
 
-        let open = msgs::GripperCommand { width: 0.07, speed: 0.1, force: 0.0 };
+        let open = msgs::GripperCommand {
+            width: 0.07,
+            speed: 0.1,
+            force: 0.0,
+        };
         Gripper::move_gripper(&mut gripper, open).unwrap();
         let (command, payload) = requests.recv().unwrap();
         assert_eq!(
@@ -242,7 +259,11 @@ mod tests {
         );
 
         // An unsuccessful grasp is an outcome, not an error.
-        let grasp = msgs::GripperCommand { width: 0.02, speed: 0.05, force: 40.0 };
+        let grasp = msgs::GripperCommand {
+            width: 0.02,
+            speed: 0.05,
+            force: 40.0,
+        };
         Gripper::move_gripper(&mut gripper, grasp).unwrap();
         let (command, payload) = requests.recv().unwrap();
         assert_eq!(command, Command::Grasp as u16);

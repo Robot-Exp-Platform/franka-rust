@@ -154,7 +154,9 @@ fn flange_fk_and_jacobian_match_saved_official_model() {
 fn zero_cartesian_offset_holds_start_and_unreachable_target_is_rejected() {
     let (r, _peer) = robot();
     let q = FrankaEmika::JOINT_DEFAULT;
-    let t = r.plan_flange_motion(q, FrankaEmika::fk_end_pose(&q)).unwrap();
+    let t = r
+        .plan_flange_motion(q, FrankaEmika::fk_end_pose(&q))
+        .unwrap();
     assert!(t.iter().all(|p| qdiff(*p, q) < 1e-10));
     assert!(
         r.plan_flange_motion(q, Pose::from_position([10.0, 0.0, 0.0]))
@@ -192,17 +194,23 @@ fn cartesian_linear_and_rotation_overrides_are_independent() {
     let mut limits = r.motion_limits();
     limits.joint = limits.scaled_joint();
     limits.cartesian = CartesianLimits {
-        linear_velocity: 0.003,
-        linear_acceleration: 0.03,
-        linear_jerk: 0.3,
-        angular_velocity: 0.01,
-        angular_acceleration: 0.02,
-        angular_jerk: 0.1,
+        linear_velocity_max: 0.003,
+        linear_acceleration_max: 0.03,
+        linear_jerk_max: 0.3,
+        angular_velocity_max: 0.01,
+        angular_acceleration_max: 0.02,
+        angular_jerk_max: 0.1,
     };
     limits.scale = 1.0;
     r.set_motion_limits(limits).unwrap();
-    assert_eq!(r.motion_limits().scaled_cartesian().linear_velocity, 0.003);
-    assert_eq!(r.motion_limits().scaled_cartesian().angular_velocity, 0.01);
+    assert_eq!(
+        r.motion_limits().scaled_cartesian().linear_velocity_max,
+        0.003
+    );
+    assert_eq!(
+        r.motion_limits().scaled_cartesian().angular_velocity_max,
+        0.01
+    );
     let t = r
         .plan_flange_motion(q, start * Pose::from_position([0.03, 0.0, 0.0]))
         .unwrap();

@@ -20,21 +20,16 @@ use super::{
 /// This struct is a command of the motion generator, including joint angle generator,
 /// joint velocity generator, Cartesian space generator, and Cartesian space velocity generator
 ///
-/// 运动生成器指令结构体，包含 关节角度生成器、关节速度生成器、笛卡尔空间生成器、笛卡尔空间速度生成器的指令
 #[derive(Default, Serialize, Deserialize, Debug, Copy, Clone)]
 #[repr(C, packed)]
 pub struct MotionGeneratorCommand {
     /// joint angle command
-    /// 关节角度指令
     pub q_c: [f64; 7],
     /// joint velocity command
-    /// 关节速度指令
     pub dq_c: [f64; 7],
     /// Measured end effector pose in base frame.
-    /// 末端执行器在基坐标系下的位姿
     pub pose_o_to_ee_c: [f64; 16],
     /// Measured end effector velocity in base frame.
-    /// 末端执行器在基坐标系下的速度
     pub dpose_o_to_ee_c: [f64; 6],
     /// elbow configuration.
     pub elbow_c: [f64; 2],
@@ -42,7 +37,6 @@ pub struct MotionGeneratorCommand {
     pub motion_generation_finished: bool,
 }
 /// This struct is a command of the controller, including joint torque command
-/// 控制器指令结构体，包含关节力矩指令
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy)]
 #[repr(C, packed)]
 pub struct ControllerCommand {
@@ -55,10 +49,8 @@ pub struct ControllerCommand {
 pub struct RobotCommand {
     pub message_id: u64,
     /// Motion generator command
-    /// 运动生成指令，用于控制关节角度生成器、关节速度生成器、笛卡尔空间生成器、笛卡尔空间速度生成器
     pub motion: MotionGeneratorCommand,
     /// Controller command
-    /// 控制器指令，用于控制关节力矩
     pub control: ControllerCommand,
 }
 
@@ -124,7 +116,10 @@ impl MotionGeneratorCommand {
                     &last_dpose_o_to_ee_c,
                     &last_ddpose_o_to_ee_c,
                 );
-                MotionGeneratorCommand { pose_o_to_ee_c, ..self }
+                MotionGeneratorCommand {
+                    pose_o_to_ee_c,
+                    ..self
+                }
             }
             MoveMotionGeneratorMode::CartesianVelocity => {
                 let dpose_o_to_ee_c = self.dpose_o_to_ee_c;
@@ -141,7 +136,10 @@ impl MotionGeneratorCommand {
                     &last_dpose_o_to_ee_c,
                     &last_ddpose_o_to_ee_c,
                 );
-                MotionGeneratorCommand { dpose_o_to_ee_c, ..self }
+                MotionGeneratorCommand {
+                    dpose_o_to_ee_c,
+                    ..self
+                }
             }
         }
     }

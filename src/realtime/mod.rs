@@ -64,7 +64,9 @@ pub(crate) const NOMINAL_PERIOD: Duration = Duration::from_millis(1);
 /// cycle has no previous packet and reports the nominal period, so summing
 /// the periods gives the time since the session began.
 pub(crate) fn cycle_period(previous: Option<Duration>, motion_time: Duration) -> Duration {
-    previous.map_or(NOMINAL_PERIOD, |previous| motion_time.saturating_sub(previous))
+    previous.map_or(NOMINAL_PERIOD, |previous| {
+        motion_time.saturating_sub(previous)
+    })
 }
 
 pub(crate) fn cleanup_timeout() -> RobotException {

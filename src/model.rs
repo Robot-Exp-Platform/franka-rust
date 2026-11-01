@@ -490,10 +490,7 @@ fn identity_transform() -> [f64; 16] {
 }
 
 impl SpaceMap<JointSpace<7>, FlangeSpace> for FrankaModel {
-    type Input = [f64; 7];
-    type Output = Pose;
-
-    fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
+    fn map(&self, input: [f64; 7]) -> RobotResult<Pose> {
         let identity = identity_transform();
         Ok(Pose::from_homo(self.pose(
             &Frame::Flange,
@@ -505,10 +502,7 @@ impl SpaceMap<JointSpace<7>, FlangeSpace> for FrankaModel {
 }
 
 impl SpaceMap<JointSpace<7>, JacobianSpace<7>> for FrankaModel {
-    type Input = [f64; 7];
-    type Output = Jaco<7>;
-
-    fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
+    fn map(&self, input: [f64; 7]) -> RobotResult<Jaco<7>> {
         let identity = identity_transform();
         Ok(SMatrix::<f64, 6, 7>::from_column_slice(
             &self.zero_jacobian(&Frame::Flange, &input, &identity, &identity),
@@ -517,10 +511,7 @@ impl SpaceMap<JointSpace<7>, JacobianSpace<7>> for FrankaModel {
 }
 
 impl SpaceMap<JointSpace<7>, MassMatrixSpace<7>> for FrankaModel {
-    type Input = [f64; 7];
-    type Output = JMat<7>;
-
-    fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
+    fn map(&self, input: [f64; 7]) -> RobotResult<JMat<7>> {
         Ok(SMatrix::<f64, 7, 7>::from_column_slice(&self.mass(
             &input,
             &self.load.inertia,
@@ -531,10 +522,7 @@ impl SpaceMap<JointSpace<7>, MassMatrixSpace<7>> for FrankaModel {
 }
 
 impl SpaceMap<CoriolisInputSpace<7>, JointTorqueSpace<7>> for FrankaModel {
-    type Input = CoriolisInput<7>;
-    type Output = [f64; 7];
-
-    fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
+    fn map(&self, input: CoriolisInput<7>) -> RobotResult<[f64; 7]> {
         Ok(self.coriolis(
             &input.q,
             &input.dq,
@@ -546,10 +534,7 @@ impl SpaceMap<CoriolisInputSpace<7>, JointTorqueSpace<7>> for FrankaModel {
 }
 
 impl SpaceMap<GravityInputSpace<7>, JointTorqueSpace<7>> for FrankaModel {
-    type Input = GravityInput<7>;
-    type Output = [f64; 7];
-
-    fn map(&self, input: Self::Input) -> RobotResult<Self::Output> {
+    fn map(&self, input: GravityInput<7>) -> RobotResult<[f64; 7]> {
         Ok(self.gravity(
             &input.q,
             self.load.mass,
