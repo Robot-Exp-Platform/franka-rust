@@ -8,6 +8,7 @@ use crate::{
         robot_types::{Command, CommandIDConfig},
     },
 };
+use roplat_behavior::ControlExit;
 use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream, UdpSocket},
@@ -169,7 +170,7 @@ fn sync_break_sends_stop_without_command_and_drains_move() {
         let mut calls = 0;
         std_udp::control_flow(&mut robot, MoveData::default(), |_, _| {
             calls += 1;
-            ControlFlow::Break(())
+            ControlFlow::Break(ControlExit::Stopped)
         })
         .unwrap();
         assert_eq!(calls, 1);
@@ -184,7 +185,7 @@ fn async_break_sends_stop_without_command_and_drains_move() {
         let mut calls = 0;
         tokio_udp::block_on_control_flow_async(&mut robot, MoveData::default(), async |_, _| {
             calls += 1;
-            ControlFlow::Break(())
+            ControlFlow::Break(ControlExit::Stopped)
         })
         .unwrap();
         assert_eq!(calls, 1);
@@ -231,7 +232,7 @@ fn stop_rejection_is_an_error_without_a_business_command() {
     run_bounded(|| {
         let (mut robot, server) = fixture(true, 1);
         let result = std_udp::control_flow(&mut robot, MoveData::default(), |_, _| {
-            ControlFlow::Break(())
+            ControlFlow::Break(ControlExit::Stopped)
         });
         assert!(matches!(result, Err(RobotException::CommandException(_))));
         let retry = std_udp::control_flow(&mut robot, MoveData::default(), |_, _| {
@@ -261,12 +262,12 @@ fn two_cancelled_sessions_consume_their_own_move_responses() {
     run_bounded(|| {
         let (mut robot, server) = fixture_sessions(true, 0, 2, Omit::Nothing);
         std_udp::control_flow(&mut robot, MoveData::default(), |_, _| {
-            ControlFlow::Break(())
+            ControlFlow::Break(ControlExit::Stopped)
         })
         .unwrap();
         assert!(robot.motion_command_id.is_none());
         tokio_udp::block_on_control_flow_async(&mut robot, MoveData::default(), async |_, _| {
-            ControlFlow::Break(())
+            ControlFlow::Break(ControlExit::Stopped)
         })
         .unwrap();
         assert!(robot.motion_command_id.is_none());
@@ -296,11 +297,11 @@ fn assert_deadline(omit: Omit, use_async: bool) {
     let start = Instant::now();
     let result = if use_async {
         tokio_udp::block_on_control_flow_async(&mut robot, MoveData::default(), async |_, _| {
-            ControlFlow::Break(())
+            ControlFlow::Break(ControlExit::Stopped)
         })
     } else {
         std_udp::control_flow(&mut robot, MoveData::default(), |_, _| {
-            ControlFlow::Break(())
+            ControlFlow::Break(ControlExit::Stopped)
         })
     };
     let elapsed = start.elapsed();

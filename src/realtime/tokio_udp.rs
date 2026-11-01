@@ -1,3 +1,4 @@
+use roplat_behavior::ControlExit;
 use roplat_behavior::{RobotException, RobotResult};
 use std::{
     ops::{ControlFlow, Deref},
@@ -30,13 +31,15 @@ pub(crate) async fn control_flow_async<F>(
     mut command: F,
 ) -> RobotResult<()>
 where
-    F: async FnMut(RobotStateInter, Duration) -> ControlFlow<(), RobotCommand>,
+    F: async FnMut(RobotStateInter, Duration) -> ControlFlow<ControlExit, RobotCommand>,
 {
     let mut session = AsyncSession::start(robot, mode).await?;
     let result = async {
         while let Some((state, duration)) = session.next_state().await? {
-            let ControlFlow::Continue(command) = command(state, duration).await else {
-                return Ok(LoopEnd::Cancelled);
+            let command = match command(state, duration).await {
+                ControlFlow::Continue(command) => command,
+                ControlFlow::Break(ControlExit::Stopped) => return Ok(LoopEnd::Cancelled),
+                ControlFlow::Break(ControlExit::Failed(error)) => return Err(error),
             };
             session.send_command(&state, command).await?;
         }
@@ -46,29 +49,13 @@ where
     session.finish(result).await
 }
 
-// Existing trajectory helpers always produce a valid command. Keep this
-// convenience path over the same canonical, flow-aware session loop.
-pub(crate) async fn control_async<F>(
-    robot: &mut FrankaRobotImpl,
-    mode: MoveData,
-    mut command: F,
-) -> RobotResult<()>
-where
-    F: async FnMut(RobotStateInter, Duration) -> RobotCommand,
-{
-    control_flow_async(robot, mode, async |state, duration| {
-        ControlFlow::Continue(command(state, duration).await)
-    })
-    .await
-}
-
 pub(crate) fn block_on_control_flow_async<F>(
     robot: &mut FrankaRobotImpl,
     mode: MoveData,
     command: F,
 ) -> RobotResult<()>
 where
-    F: async FnMut(RobotStateInter, Duration) -> ControlFlow<(), RobotCommand>,
+    F: async FnMut(RobotStateInter, Duration) -> ControlFlow<ControlExit, RobotCommand>,
 {
     let runtime = Builder::new_current_thread().enable_all().build()?;
     runtime.block_on(control_flow_async(robot, mode, command))
@@ -340,7 +327,11 @@ impl<'a> AsyncUdp<'a> {
         let cloned = owner.try_clone()?;
         cloned.set_nonblocking(true)?;
         match UdpSocket::from_std(cloned) {
-            Ok(socket) => Ok(Self { socket, owner, restored: false }),
+            Ok(socket) => Ok(Self {
+                socket,
+                owner,
+                restored: false,
+            }),
             Err(error) => {
                 owner.set_nonblocking(false)?;
                 Err(error.into())

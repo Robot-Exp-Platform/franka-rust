@@ -1,3 +1,4 @@
+use roplat_behavior::{CartesianLimits, JointLimits};
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
 use roplat_behavior::RobotResult;
@@ -34,32 +35,36 @@ impl Joints<FRANKA_DOF> for FrankaFR3 {
         FRAC_PI_4,
     ];
     #[cfg(not(feature = "conservative_constraint"))]
-    const JOINT_MIN: [f64; FRANKA_DOF] =
-        [-2.7437, -1.7837, -2.9007, -3.0421, -2.8065, 0.5445, -3.0159];
+    const JOINT_LIMITS: JointLimits<FRANKA_DOF> = JointLimits {
+        q_min: [-2.7437, -1.7837, -2.9007, -3.0421, -2.8065, 0.5445, -3.0159],
+        q_max: [2.7437, 1.7837, 2.9007, -0.1518, 2.8065, 4.5169, 3.0159],
+        dq_max: [2.62, 2.62, 2.62, 2.62, 5.26, 4.18, 5.26],
+        ddq_max: [10.; FRANKA_DOF],
+        dddq_max: [5000.; FRANKA_DOF],
+        tau_max: [87., 87., 87., 87., 12., 12., 12.],
+        dtau_max: [1000.; FRANKA_DOF],
+    };
     #[cfg(feature = "conservative_constraint")]
-    const JOINT_MIN: [f64; FRANKA_DOF] =
-        [-2.3093, -1.5133, -2.4937, -2.7478, -2.4800, 0.8521, -2.6895];
-    #[cfg(not(feature = "conservative_constraint"))]
-    const JOINT_MAX: [f64; FRANKA_DOF] = [2.7437, 1.7837, 2.9007, -0.1518, 2.8065, 4.5169, 3.0159];
-    #[cfg(feature = "conservative_constraint")]
-    const JOINT_MAX: [f64; FRANKA_DOF] = [2.3093, 1.5133, 2.4937, -0.4461, 2.4800, 4.2094, 2.6895];
-    #[cfg(not(feature = "conservative_constraint"))]
-    const JOINT_VEL_BOUND: [f64; FRANKA_DOF] = [2.62, 2.62, 2.62, 2.62, 5.26, 4.18, 5.26];
-    #[cfg(feature = "conservative_constraint")]
-    const JOINT_VEL_BOUND: [f64; FRANKA_DOF] = [2., 1., 1.5, 1.25, 3., 1.5, 3.];
-    const JOINT_ACC_BOUND: [f64; FRANKA_DOF] = [10.; FRANKA_DOF];
-    const JOINT_JERK_BOUND: [f64; FRANKA_DOF] = [5000.; FRANKA_DOF];
-    const TORQUE_BOUND: [f64; FRANKA_DOF] = [87., 87., 87., 87., 12., 12., 12.];
-    const TORQUE_DOT_BOUND: [f64; FRANKA_DOF] = [1000., 1000., 1000., 1000., 1000., 1000., 1000.];
+    const JOINT_LIMITS: JointLimits<FRANKA_DOF> = JointLimits {
+        q_min: [-2.3093, -1.5133, -2.4937, -2.7478, -2.4800, 0.8521, -2.6895],
+        q_max: [2.3093, 1.5133, 2.4937, -0.4461, 2.4800, 4.2094, 2.6895],
+        dq_max: [2., 1., 1.5, 1.25, 3., 1.5, 3.],
+        ddq_max: [10.; FRANKA_DOF],
+        dddq_max: [5000.; FRANKA_DOF],
+        tau_max: [87., 87., 87., 87., 12., 12., 12.],
+        dtau_max: [1000.; FRANKA_DOF],
+    };
 }
 
 impl EndPoint for FrankaFR3 {
-    const CARTESIAN_VEL_BOUND: f64 = 3.0;
-    const CARTESIAN_ACC_BOUND: f64 = 9.0;
-    const CARTESIAN_JERK_BOUND: f64 = 4500.0;
-    const ROTATION_VEL_BOUND: f64 = 2.5;
-    const ROTATION_ACC_BOUND: f64 = 217.0;
-    const ROTATION_JERK_BOUND: f64 = 8500.;
+    const CARTESIAN_LIMITS: CartesianLimits = CartesianLimits {
+        linear_velocity_max: 3.0,
+        linear_acceleration_max: 9.0,
+        linear_jerk_max: 4500.0,
+        angular_velocity_max: 2.5,
+        angular_acceleration_max: 217.0,
+        angular_jerk_max: 8500.,
+    };
 }
 
 impl EndPointPose for FrankaFR3 {
@@ -74,13 +79,48 @@ impl EndPointPose for FrankaFR3 {
 
 impl ArmForwardKinematics<FRANKA_DOF> for FrankaFR3 {
     const DH: [DhParam; FRANKA_DOF] = [
-        DhParam::MDH { alpha: 0., a: 0., theta: 0., d: 0.333 },
-        DhParam::MDH { alpha: -FRAC_PI_2, a: 0., theta: 0., d: 0. },
-        DhParam::MDH { alpha: FRAC_PI_2, a: 0., theta: 0., d: 0.316 },
-        DhParam::MDH { alpha: FRAC_PI_2, a: 0.0825, theta: 0., d: 0. },
-        DhParam::MDH { alpha: -FRAC_PI_2, a: -0.0825, theta: 0., d: 0.384 },
-        DhParam::MDH { alpha: FRAC_PI_2, a: 0., theta: 0., d: 0. },
-        DhParam::MDH { alpha: FRAC_PI_2, a: 0.088, theta: 0., d: 0. },
+        DhParam::MDH {
+            alpha: 0.,
+            a: 0.,
+            theta: 0.,
+            d: 0.333,
+        },
+        DhParam::MDH {
+            alpha: -FRAC_PI_2,
+            a: 0.,
+            theta: 0.,
+            d: 0.,
+        },
+        DhParam::MDH {
+            alpha: FRAC_PI_2,
+            a: 0.,
+            theta: 0.,
+            d: 0.316,
+        },
+        DhParam::MDH {
+            alpha: FRAC_PI_2,
+            a: 0.0825,
+            theta: 0.,
+            d: 0.,
+        },
+        DhParam::MDH {
+            alpha: -FRAC_PI_2,
+            a: -0.0825,
+            theta: 0.,
+            d: 0.384,
+        },
+        DhParam::MDH {
+            alpha: FRAC_PI_2,
+            a: 0.,
+            theta: 0.,
+            d: 0.,
+        },
+        DhParam::MDH {
+            alpha: FRAC_PI_2,
+            a: 0.088,
+            theta: 0.,
+            d: 0.,
+        },
     ];
     /// Franka's flange is 107 mm beyond the joint 7 frame.
     const FLANGE: Pose = Pose::from_position([0.0, 0.0, 0.107]);

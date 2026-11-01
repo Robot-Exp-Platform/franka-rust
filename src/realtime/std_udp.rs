@@ -1,6 +1,8 @@
 use roplat_behavior::RobotResult;
 use std::{ops::ControlFlow, time::Duration};
 
+use roplat_behavior::ControlExit;
+
 use crate::{
     robot_impl::FrankaRobotImpl,
     types::{
@@ -21,7 +23,7 @@ pub(crate) fn control_flow<F>(
     mut command: F,
 ) -> RobotResult<()>
 where
-    F: FnMut(RobotStateInter, Duration) -> ControlFlow<(), RobotCommand>,
+    F: FnMut(RobotStateInter, Duration) -> ControlFlow<ControlExit, RobotCommand>,
 {
     super::start_session(robot, mode)?;
     let mut started = false;
@@ -59,8 +61,10 @@ where
             .unwrap_or_else(|| Duration::from_millis(state.command_id()));
         let period = super::cycle_period(previous_motion_time.replace(motion_time), motion_time);
 
-        let ControlFlow::Continue(next) = command(state, period) else {
-            break Ok(super::SessionEnd::Cancelled);
+        let next = match command(state, period) {
+            ControlFlow::Continue(next) => next,
+            ControlFlow::Break(ControlExit::Stopped) => break Ok(super::SessionEnd::Cancelled),
+            ControlFlow::Break(ControlExit::Failed(error)) => break Err(error),
         };
         let next = FrankaRobotImpl::prepare_command(&state, next, &mode);
         let done = next.motion.motion_generation_finished;
