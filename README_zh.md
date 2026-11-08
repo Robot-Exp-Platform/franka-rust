@@ -94,6 +94,8 @@ Flow 回调返回 `ControlFlow<(), (Command, bool)>`：`Continue((command, false
 - [机器人实现](src/robot.rs)、[模型模块](src/model.rs)与[已发布 API](https://docs.rs/franka_rust/0.2.0/franka_rust/)。
 - [Loopback 测试](src/realtime/tests.rs)不连接机器人，验证网络会话。忽略执行的 `native_loopback_performance` 比较本机会话路径，不是真机时序测量。
 
+`emergency_stop` 先停下运动，再返回 `RobotException::NoEmergencyStop`：FCI 没有能让控制器锁存停止的指令，急停是外部启用装置上的用户停止按钮。`clear_emergency_stop` 执行 FCI 的自动错误恢复，松开该按钮后机械臂需要它。`pause` 与 `resume` 返回 `RobotException::NotSupported`。
+
 本库仍是实验性驱动。API 存在不代表固件覆盖、实时性能或物理停止行为已经验证。具体主机、控制器组合及模型库都需要各自验证。
 
 ## 引用

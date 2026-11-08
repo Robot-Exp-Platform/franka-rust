@@ -94,6 +94,8 @@ For Roplat graphs, use `AsyncControlRhythm` with the native interface or `Contro
 - [Robot implementation](src/robot.rs), [model module](src/model.rs), and [published API](https://docs.rs/franka_rust/0.2.0/franka_rust/).
 - [Loopback tests](src/realtime/tests.rs) exercise network sessions without a robot. The ignored `native_loopback_performance` test compares local session paths; its results are not hardware timing measurements.
 
+`emergency_stop` stops the motion and then returns `RobotException::NoEmergencyStop`: FCI has no command that makes the controller hold a stop, so the emergency stop is the user stop on the external activation device. `clear_emergency_stop` runs FCI's automatic error recovery, which the arm needs after that stop is released. `pause` and `resume` return `RobotException::NotSupported`.
+
 This remains an experimental driver. API availability does not prove firmware coverage, real-time performance, or physical stop behavior. Each host/controller combination and model library requires its own validation.
 
 ## Citation

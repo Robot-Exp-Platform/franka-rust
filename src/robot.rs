@@ -278,22 +278,27 @@ impl<T: FrankaType> Robot for FrankaRobot<T> {
         result
     }
 
+    /// FCI has no pause; [`stop`](Robot::stop) ends the motion instead.
     fn pause(&mut self) -> RobotResult<()> {
-        Err(RobotException::UnprocessableInstructionError(
-            "Franka FCI does not expose a generic pause operation; use stop()".to_string(),
-        ))
+        Err(RobotException::NotSupported { operation: "pause" })
     }
 
+    /// FCI has no resume.
     fn resume(&mut self) -> RobotResult<()> {
-        Err(RobotException::UnprocessableInstructionError(
-            "Franka FCI does not expose a generic resume operation".to_string(),
-        ))
+        Err(RobotException::NotSupported { operation: "resume" })
     }
 
+    /// Stops the motion like [`stop`](Robot::stop), then reports
+    /// [`RobotException::NoEmergencyStop`]: FCI has no command that makes the
+    /// controller hold a stop. The emergency stop of a Franka arm is the user
+    /// stop on its external activation device, which this driver cannot press.
     fn emergency_stop(&mut self) -> RobotResult<()> {
-        self.stop()
+        self.stop()?;
+        Err(RobotException::NoEmergencyStop)
     }
 
+    /// Runs FCI's automatic error recovery, which a Franka arm needs after its
+    /// user stop is released or a reflex stops it.
     fn clear_emergency_stop(&mut self) -> RobotResult<()> {
         self.robot_impl._automatic_error_recovery(())?.into()
     }
