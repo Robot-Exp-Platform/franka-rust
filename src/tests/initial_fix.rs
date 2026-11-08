@@ -84,24 +84,15 @@ fn lowpass_is_applied_before_rate_limiting_in_all_five_modes() {
     for (mode, command) in [
         (
             MoveMotionGeneratorMode::JointPosition,
-            MotionGeneratorCommand {
-                q_c: [small; 7],
-                ..Default::default()
-            },
+            MotionGeneratorCommand { q_c: [small; 7], ..Default::default() },
         ),
         (
             MoveMotionGeneratorMode::JointVelocity,
-            MotionGeneratorCommand {
-                dq_c: [small; 7],
-                ..Default::default()
-            },
+            MotionGeneratorCommand { dq_c: [small; 7], ..Default::default() },
         ),
         (
             MoveMotionGeneratorMode::CartesianVelocity,
-            MotionGeneratorCommand {
-                dpose_o_to_ee_c: [small; 6],
-                ..Default::default()
-            },
+            MotionGeneratorCommand { dpose_o_to_ee_c: [small; 6], ..Default::default() },
         ),
     ] {
         let out = command.filter_for_mode(&state, mode);
@@ -114,16 +105,11 @@ fn lowpass_is_applied_before_rate_limiting_in_all_five_modes() {
     }
     let mut pose = eye();
     pose[12] = 1e-9;
-    let out = MotionGeneratorCommand {
-        pose_o_to_ee_c: pose,
-        ..Default::default()
-    }
-    .filter_for_mode(&state, MoveMotionGeneratorMode::CartesianPosition);
+    let out = MotionGeneratorCommand { pose_o_to_ee_c: pose, ..Default::default() }
+        .filter_for_mode(&state, MoveMotionGeneratorMode::CartesianPosition);
     assert!((out.pose_o_to_ee_c[12] - low_pass_filter(0.001, 100.0, 0.0, 1e-9)).abs() < 1e-13);
-    let out = ControllerCommand {
-        tau_j_d: [small; 7],
-    }
-    .filter_for_mode(&state, MoveControllerMode::ExternalController);
+    let out = ControllerCommand { tau_j_d: [small; 7] }
+        .filter_for_mode(&state, MoveControllerMode::ExternalController);
     assert!((out.tau_j_d[0] - expected).abs() < 1e-13);
     // The same vector helper also supports Panda's seven joints.
     assert_eq!(
@@ -294,11 +280,8 @@ fn unified_frames_and_native_cartesian_hold_agree_with_tool_offset() {
     }
     let velocity = flange_velocity_to_ee([0.0, 0.0, 0.0, 0.0, 1.0, 0.0], &state);
     assert!((velocity[0] - 0.1).abs() < 1e-12);
-    let output = MotionGeneratorCommand {
-        pose_o_to_ee_c: native,
-        ..Default::default()
-    }
-    .filter_for_mode(&state, MoveMotionGeneratorMode::CartesianPosition);
+    let output = MotionGeneratorCommand { pose_o_to_ee_c: native, ..Default::default() }
+        .filter_for_mode(&state, MoveMotionGeneratorMode::CartesianPosition);
     for i in 0..16 {
         assert!((output.pose_o_to_ee_c[i] - ee[i]).abs() < 1e-12);
     }

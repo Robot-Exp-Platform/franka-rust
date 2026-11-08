@@ -86,10 +86,7 @@ impl FrankaRobotImpl {
     }
 
     fn connect_(&mut self, udp_port: u16) -> RobotResult<()> {
-        let result = self._connect(ConnectData {
-            version: FRANKA_ROBOT_VERSION,
-            udp_port,
-        })?;
+        let result = self._connect(ConnectData { version: FRANKA_ROBOT_VERSION, udp_port })?;
         if let ConnectStatusEnum::Success = result.status {
             Ok(())
         } else {

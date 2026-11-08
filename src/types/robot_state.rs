@@ -386,17 +386,9 @@ impl From<RobotStateInter> for ArmState<7> {
                 des: flange_sample(ee_des),
                 cmd: flange_sample(ee_cmd),
             },
-            tcp: Some(StateView {
-                meas: tcp_meas,
-                des: ee_des,
-                cmd: ee_cmd,
-            }),
+            tcp: Some(StateView { meas: tcp_meas, des: ee_des, cmd: ee_cmd }),
             stiffness: Some(StateView::from_meas(k_meas)),
-            load: Some(LoadState {
-                mass: m,
-                center_of_mass: x,
-                inertia: i,
-            }),
+            load: Some(LoadState { mass: m, center_of_mass: x, inertia: i }),
         }
     }
 }
