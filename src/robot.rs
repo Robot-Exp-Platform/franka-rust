@@ -421,38 +421,33 @@ where
         })
     }
 
-    fn move_to_async(
-        &mut self,
-        target: [f64; FRANKA_DOF],
-    ) -> impl std::future::Future<Output = RobotResult<()>> {
-        async move {
-            let state = crate::realtime::tokio_udp::recv_state(&mut self.robot_impl).await?;
-            let joint = state.q_d;
+    async fn move_to_async(&mut self, target: [f64; FRANKA_DOF]) -> RobotResult<()> {
+        let state = crate::realtime::tokio_udp::recv_state(&mut self.robot_impl).await?;
+        let joint = state.q_d;
 
-            let limits = self.limits.scaled_joint();
-            let mut curve =
-                path_generate::JointSCurve::new(limits.dq_max, limits.ddq_max, limits.dddq_max);
-            let t_max = curve.plan(joint, target);
+        let limits = self.limits.scaled_joint();
+        let mut curve =
+            path_generate::JointSCurve::new(limits.dq_max, limits.ddq_max, limits.dddq_max);
+        let t_max = curve.plan(joint, target);
 
-            // Retain this API's existing torque-space realisation: pre-sample
-            // the trajectory and run the PID controller per cycle.
-            let traj = sample_joint_trajectory(|t| curve.apply(t).0, t_max);
-            let mut controller = roplat_control::joint_traj_pid_control(traj, PID_K, PID_I, PID_D)
-                .map_err(RobotException::from_algorithm)?;
+        // Retain this API's existing torque-space realisation: pre-sample
+        // the trajectory and run the PID controller per cycle.
+        let traj = sample_joint_trajectory(|t| curve.apply(t).0, t_max);
+        let mut controller = roplat_control::joint_traj_pid_control(traj, PID_K, PID_I, PID_D)
+            .map_err(RobotException::from_algorithm)?;
 
-            self.is_moving = true;
-            let _moving = MovingSession(&mut self.is_moving);
-            crate::realtime::tokio_udp::control_flow_async(
-                &mut self.robot_impl,
-                ControlType::Torque([0.0; FRANKA_DOF]).into(),
-                async move |state, d| {
-                    let arm: ArmState<FRANKA_DOF> = state.into();
-                    controller(arm.joint, d)
-                        .map_continue(|(torque, done)| (ControlType::Torque(torque), done).into())
-                },
-            )
-            .await
-        }
+        self.is_moving = true;
+        let _moving = MovingSession(&mut self.is_moving);
+        crate::realtime::tokio_udp::control_flow_async(
+            &mut self.robot_impl,
+            ControlType::Torque([0.0; FRANKA_DOF]).into(),
+            async move |state, d| {
+                let arm: ArmState<FRANKA_DOF> = state.into();
+                controller(arm.joint, d)
+                    .map_continue(|(torque, done)| (ControlType::Torque(torque), done).into())
+            },
+        )
+        .await
     }
 }
 
@@ -495,33 +490,28 @@ where
         <Self as MoveTraj<JointSpace<7>>>::move_traj(self, traj)
     }
 
-    fn move_to_async(
-        &mut self,
-        target: Pose,
-    ) -> impl std::future::Future<Output = RobotResult<()>> {
-        async move {
-            let state = crate::realtime::tokio_udp::recv_state(&mut self.robot_impl).await?;
-            let q_start = state.q_d;
-            let traj = self.plan_flange_motion(q_start, target)?;
+    async fn move_to_async(&mut self, target: Pose) -> RobotResult<()> {
+        let state = crate::realtime::tokio_udp::recv_state(&mut self.robot_impl).await?;
+        let q_start = state.q_d;
+        let traj = self.plan_flange_motion(q_start, target)?;
 
-            if traj.is_empty() {
-                return Ok(());
-            }
-
-            let mut follower = cycle_timed_follower(&traj)?;
-            self.is_moving = true;
-            let _moving = MovingSession(&mut self.is_moving);
-            crate::realtime::tokio_udp::control_flow_async(
-                &mut self.robot_impl,
-                MotionType::<FRANKA_DOF>::Joint(q_start).into(),
-                async |state, dt| {
-                    let joint = ArmState::<FRANKA_DOF>::from(state).joint;
-                    follow_step(&mut follower, dt, &joint)
-                        .map_continue(|(next, done)| (MotionType::Joint(next), done).into())
-                },
-            )
-            .await
+        if traj.is_empty() {
+            return Ok(());
         }
+
+        let mut follower = cycle_timed_follower(&traj)?;
+        self.is_moving = true;
+        let _moving = MovingSession(&mut self.is_moving);
+        crate::realtime::tokio_udp::control_flow_async(
+            &mut self.robot_impl,
+            MotionType::<FRANKA_DOF>::Joint(q_start).into(),
+            async |state, dt| {
+                let joint = ArmState::<FRANKA_DOF>::from(state).joint;
+                follow_step(&mut follower, dt, &joint)
+                    .map_continue(|(next, done)| (MotionType::Joint(next), done).into())
+            },
+        )
+        .await
     }
 }
 
