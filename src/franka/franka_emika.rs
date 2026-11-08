@@ -72,48 +72,13 @@ impl EndPointPose for FrankaEmika {
 
 impl ArmForwardKinematics<FRANKA_DOF> for FrankaEmika {
     const DH: [DhParam; FRANKA_DOF] = [
-        DhParam::MDH {
-            alpha: 0.,
-            a: 0.,
-            theta: 0.,
-            d: 0.333,
-        },
-        DhParam::MDH {
-            alpha: -FRAC_PI_2,
-            a: 0.,
-            theta: 0.,
-            d: 0.,
-        },
-        DhParam::MDH {
-            alpha: FRAC_PI_2,
-            a: 0.,
-            theta: 0.,
-            d: 0.316,
-        },
-        DhParam::MDH {
-            alpha: FRAC_PI_2,
-            a: 0.0825,
-            theta: 0.,
-            d: 0.,
-        },
-        DhParam::MDH {
-            alpha: -FRAC_PI_2,
-            a: -0.0825,
-            theta: 0.,
-            d: 0.384,
-        },
-        DhParam::MDH {
-            alpha: FRAC_PI_2,
-            a: 0.,
-            theta: 0.,
-            d: 0.,
-        },
-        DhParam::MDH {
-            alpha: FRAC_PI_2,
-            a: 0.088,
-            theta: 0.,
-            d: 0.,
-        },
+        DhParam::MDH { alpha: 0., a: 0., theta: 0., d: 0.333 },
+        DhParam::MDH { alpha: -FRAC_PI_2, a: 0., theta: 0., d: 0. },
+        DhParam::MDH { alpha: FRAC_PI_2, a: 0., theta: 0., d: 0.316 },
+        DhParam::MDH { alpha: FRAC_PI_2, a: 0.0825, theta: 0., d: 0. },
+        DhParam::MDH { alpha: -FRAC_PI_2, a: -0.0825, theta: 0., d: 0.384 },
+        DhParam::MDH { alpha: FRAC_PI_2, a: 0., theta: 0., d: 0. },
+        DhParam::MDH { alpha: FRAC_PI_2, a: 0.088, theta: 0., d: 0. },
     ];
     /// Franka's flange is 107 mm beyond the joint 7 frame.
     const FLANGE: Pose = Pose::from_position([0.0, 0.0, 0.107]);

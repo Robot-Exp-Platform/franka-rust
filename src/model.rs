@@ -103,11 +103,7 @@ impl FrankaModel {
     pub fn new<S: AsRef<Path>>(model_filename: S) -> RobotResult<Self> {
         Ok(FrankaModel {
             library: ModelLibrary::new(model_filename.as_ref())?,
-            load: LoadState {
-                mass: 0.0,
-                center_of_mass: [0.0; 3],
-                inertia: [0.0; 9],
-            },
+            load: LoadState { mass: 0.0, center_of_mass: [0.0; 3], inertia: [0.0; 9] },
         })
     }
 

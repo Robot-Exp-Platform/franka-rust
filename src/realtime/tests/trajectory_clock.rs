@@ -13,11 +13,7 @@ fn observe_clock(ids: &[u64]) -> Vec<(u64, f64, bool)> {
     let peer = UdpSocket::bind("127.0.0.1:0").unwrap();
     peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
     let q = FrankaEmika::JOINT_DEFAULT;
-    let cached = RobotStateInter {
-        q_d: q,
-        q,
-        ..Default::default()
-    };
+    let cached = RobotStateInter { q_d: q, q, ..Default::default() };
     let ids = ids.to_vec();
     let server = thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();

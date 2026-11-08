@@ -68,10 +68,8 @@ fn native_franka_system_is_send_returns_nodes_and_keeps_creator_lifecycle() {
         let (robot, server, stage, release) = gated_fixture(false);
         let robot = public_robot(robot);
         let events = Events::default();
-        let mut controller = Controller {
-            state: Box::new(State { calls: 0 }),
-            events: events.clone(),
-        };
+        let mut controller =
+            Controller { state: Box::new(State { calls: 0 }), events: events.clone() };
         let state_address = (&*controller.state) as *const State as usize;
 
         runtime().block_on(async {

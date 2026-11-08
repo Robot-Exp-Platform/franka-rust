@@ -327,11 +327,7 @@ impl<'a> AsyncUdp<'a> {
         let cloned = owner.try_clone()?;
         cloned.set_nonblocking(true)?;
         match UdpSocket::from_std(cloned) {
-            Ok(socket) => Ok(Self {
-                socket,
-                owner,
-                restored: false,
-            }),
+            Ok(socket) => Ok(Self { socket, owner, restored: false }),
             Err(error) => {
                 owner.set_nonblocking(false)?;
                 Err(error.into())

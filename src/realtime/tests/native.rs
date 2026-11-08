@@ -42,10 +42,7 @@ fn public_native_session_borrows_callback_and_restores_sockets() {
     run_bounded(|| {
         let (robot, server) = fixture(false, 0);
         let mut robot = public_robot(robot);
-        let mut callback = Callback {
-            calls: 0,
-            cancel: false,
-        };
+        let mut callback = Callback { calls: 0, cancel: false };
         runtime().block_on(async {
             let future = <_ as AsyncControlWith<JointPositionControl<7>>>::control_native_async(
                 &mut robot,
@@ -71,10 +68,7 @@ fn sync_native_blocking_async_and_sync_share_one_connection() {
             ControlFlow::Break(ControlExit::Stopped)
         })
         .unwrap();
-        let mut callback = Callback {
-            calls: 0,
-            cancel: true,
-        };
+        let mut callback = Callback { calls: 0, cancel: true };
         runtime()
             .block_on(
                 <_ as AsyncControlWith<JointPositionControl<7>>>::control_native_async(
@@ -103,10 +97,7 @@ fn native_terminal_error_is_consumed_without_an_extra_stop() {
     run_bounded(|| {
         let (robot, server) = fixture(false, 2);
         let mut robot = public_robot(robot);
-        let mut callback = Callback {
-            calls: 0,
-            cancel: false,
-        };
+        let mut callback = Callback { calls: 0, cancel: false };
         let result = runtime().block_on(
             <_ as AsyncControlWith<JointPositionControl<7>>>::control_native_async(
                 &mut robot,
@@ -280,10 +271,7 @@ fn dropped_partial_start_restores_mode_and_forbids_reuse() {
             wait.recv_timeout(Duration::from_secs(2)).unwrap();
         });
         let mut robot = public_robot(robot);
-        let mut callback = Callback {
-            calls: 0,
-            cancel: false,
-        };
+        let mut callback = Callback { calls: 0, cancel: false };
         runtime().block_on(async {
             let result = tokio::time::timeout(
                 Duration::from_millis(30),
@@ -326,10 +314,7 @@ fn rejected_start_clears_session_without_running_callback() {
             }
         });
         let mut robot = public_robot(robot);
-        let mut callback = Callback {
-            calls: 0,
-            cancel: false,
-        };
+        let mut callback = Callback { calls: 0, cancel: false };
         let runtime = runtime();
         for _ in 0..2 {
             let error = runtime
@@ -356,10 +341,7 @@ fn startup_eof_leaves_uncertain_session_unreusable() {
             read_request(&mut stream);
         });
         let mut robot = public_robot(robot);
-        let mut callback = Callback {
-            calls: 0,
-            cancel: false,
-        };
+        let mut callback = Callback { calls: 0, cancel: false };
         assert!(
             runtime()
                 .block_on(
@@ -395,10 +377,7 @@ fn malformed_udp_and_failed_cleanup_retain_both_errors() {
                 .unwrap();
         });
         let mut robot = public_robot(robot);
-        let mut callback = Callback {
-            calls: 0,
-            cancel: false,
-        };
+        let mut callback = Callback { calls: 0, cancel: false };
         let error = runtime()
             .block_on(
                 <_ as AsyncControlWith<JointPositionControl<7>>>::control_native_async(
@@ -426,10 +405,7 @@ fn native_cleanup_deadline_keeps_sibling_running_and_requires_reconnect() {
         let (robot, server) = fixture_sessions(true, 0, 1, Omit::IdleState);
         let mut robot = public_robot(robot);
         robot.robot_impl.udp_socket.set_read_timeout(None).unwrap();
-        let mut callback = Callback {
-            calls: 0,
-            cancel: true,
-        };
+        let mut callback = Callback { calls: 0, cancel: true };
         let start = Instant::now();
         runtime().block_on(async {
             let sibling = tokio::spawn(async {
@@ -491,10 +467,7 @@ fn existing_move_to_async_awaits_state_start_and_finish_on_callers_runtime() {
             let udp = UdpSocket::bind("127.0.0.1:0").unwrap();
             udp.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
             gate(1);
-            let mut state = RobotStateInter {
-                message_id: 1,
-                ..Default::default()
-            };
+            let mut state = RobotStateInter { message_id: 1, ..Default::default() };
             udp.send_to(&bincode::serialize(&state).unwrap(), local_addr)
                 .unwrap();
             let (command, id) = read_request(&mut tcp);
