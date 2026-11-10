@@ -165,7 +165,7 @@ impl FrankaRobotImpl {
 
     pub(crate) fn recv_state_into(
         &mut self,
-        mut buffer: &mut [u8],
+        buffer: &mut [u8],
     ) -> RobotResult<(RobotStateInter, SocketAddr, Duration)> {
         let start = Instant::now();
         let last_id = self.robot_state.read().unwrap().command_id();
@@ -173,13 +173,13 @@ impl FrankaRobotImpl {
 
         self.udp_socket.set_nonblocking(true)?;
         let drain_result: RobotResult<()> = loop {
-            match self.udp_socket.recv_from(&mut buffer) {
+            match self.udp_socket.recv_from(buffer) {
                 Ok((size, addr)) => {
                     let candidate = Self::decode_state(&buffer[..size])?;
                     if candidate.command_id() > last_id
-                        && latest.as_ref().map_or(true, |(state, _)| {
-                            candidate.command_id() > state.command_id()
-                        })
+                        && latest
+                            .as_ref()
+                            .is_none_or(|(state, _)| candidate.command_id() > state.command_id())
                     {
                         latest = Some((candidate, addr));
                     }
@@ -192,7 +192,7 @@ impl FrankaRobotImpl {
         drain_result?;
 
         while latest.is_none() {
-            let (size, addr) = self.udp_socket.recv_from(&mut buffer)?;
+            let (size, addr) = self.udp_socket.recv_from(buffer)?;
             let candidate = Self::decode_state(&buffer[..size])?;
             if candidate.command_id() > last_id {
                 latest = Some((candidate, addr));
